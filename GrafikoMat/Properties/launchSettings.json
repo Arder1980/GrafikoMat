@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "GrafikoMat (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "GrafikoMat (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
