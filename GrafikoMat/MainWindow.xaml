@@ -4,101 +4,101 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="Auto,*" Padding="12">
-        <!-- Zasoby lokalne muszą być na elemencie wizualnym (np. Grid), nie na Window -->
-        <Grid.Resources>
-            <!-- Delikatna szarość do obramowań -->
-            <SolidColorBrush x:Key="BorderBrushNeutral" Color="#33000000"/>
-        </Grid.Resources>
+    <!-- 6 wierszy: 1) Topbar  2) Jednostka  3) Rok/Miesiąc  4) Treść  5) Przyciski  6) Stopka -->
+    <Grid x:Name="RootGrid"
+          RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
+          Background="Transparent">
 
-        <!-- Pasek górny: jednostka + rok/miesiąc -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" VerticalAlignment="Center">
-            <TextBlock Text="Jednostka: (ustaw w Ustawieniach)"
-                       FontSize="18" VerticalAlignment="Center"/>
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <TextBlock Text="Rok:" VerticalAlignment="Center"/>
-                <ComboBox Width="100" SelectedIndex="0">
-                    <ComboBoxItem Content="2025"/>
-                    <ComboBoxItem Content="2026"/>
-                </ComboBox>
-            </StackPanel>
-
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <TextBlock Text="Miesiąc:" VerticalAlignment="Center"/>
-                <ComboBox Width="160" SelectedIndex="0">
-                    <ComboBoxItem Content="Styczeń"/>
-                    <ComboBoxItem Content="Luty"/>
-                    <ComboBoxItem Content="Marzec"/>
-                    <ComboBoxItem Content="Kwiecień"/>
-                    <ComboBoxItem Content="Maj"/>
-                    <ComboBoxItem Content="Czerwiec"/>
-                    <ComboBoxItem Content="Lipiec"/>
-                    <ComboBoxItem Content="Sierpień"/>
-                    <ComboBoxItem Content="Wrzesień"/>
-                    <ComboBoxItem Content="Październik"/>
-                    <ComboBoxItem Content="Listopad"/>
-                    <ComboBoxItem Content="Grudzień"/>
-                </ComboBox>
-            </StackPanel>
+        <!-- ===== 1) TOPBAR (custom drag area, systemowe przyciski zostają) ===== -->
+        <!-- Margines po prawej, by nie nachodzić na systemowe przyciski -->
+        <Grid Grid.Row="0" x:Name="TopBarRow" ColumnDefinitions="*" Padding="12,6" Margin="0,0,140,0">
+            <Grid x:Name="DragBar" VerticalAlignment="Center">
+                <TextBlock Text="GrafikoMat Dyżurowy"
+                           FontSize="16" FontWeight="SemiBold" Opacity="0.92"/>
+            </Grid>
         </Grid>
 
-        <!-- Główna część: lewy panel 3/4, prawy 1/4 -->
-        <Grid Grid.Row="1" ColumnDefinitions="3*,*" ColumnSpacing="12">
-            <!-- LEWY panel: pasywna tabela deklaracji + przyciski -->
-            <Grid RowDefinitions="Auto,*,Auto">
-                <TextBlock Text="Deklaracje dyżurowe (pasywna tabela)"
-                           FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+        <!-- ===== 2) DANE JEDNOSTKI ===== -->
+        <Grid Grid.Row="1" Padding="12,10" MinHeight="100">
+            <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}"
+                       FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
+        </Grid>
 
-                <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushNeutral}" BorderThickness="1" CornerRadius="6">
-                    <ScrollViewer>
-                        <Grid x:Name="LeftMatrixHost" Padding="12">
-                            <TextBlock Text="Tutaj pojawi się tabela: wiersze = dyżurni, kolumny = dni miesiąca (święta wyszarzone, symbole jednoliterowe)."
-                                       TextWrapping="Wrap" Opacity="0.75"/>
-                        </Grid>
-                    </ScrollViewer>
+        <!-- ===== 3) ROK / MIESIĄC ===== -->
+        <!-- Układ: Rok: < [YYYY] >    Miesiąc: < [MMMM] > -->
+        <Grid Grid.Row="2"
+              Padding="12,6,12,8"
+              ColumnSpacing="8"
+              ColumnDefinitions="Auto,Auto,Auto,Auto, 24, Auto,Auto,Auto,Auto"
+              VerticalAlignment="Center">
+            <!-- Rok -->
+            <TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnYearPrev"/>
+            <ComboBox Grid.Column="2" Width="110"
+                      ItemsSource="{x:Bind ViewModel.Years}"
+                      SelectedItem="{x:Bind ViewModel.SelectedYear, Mode=TwoWay}"/>
+            <Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnYearNext"/>
+
+            <!-- odstęp elastyczny ~24px (w kolumnach) -->
+
+            <!-- Miesiąc -->
+            <TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="6" Content="⟨" Width="32" Height="32" Click="OnMonthPrev"/>
+            <ComboBox Grid.Column="7" Width="180"
+                      ItemsSource="{x:Bind ViewModel.Months}"
+                      SelectedIndex="{x:Bind ViewModel.SelectedMonthIndex, Mode=TwoWay}"/>
+            <Button   Grid.Column="8" Content="⟩" Width="32" Height="32" Click="OnMonthNext"/>
+        </Grid>
+
+        <!-- ===== 4) TREŚĆ: lewa 3/4 (tabela deklaracji), prawa 1/4 (wygenerowany grafik) ===== -->
+        <Grid Grid.Row="3" ColumnDefinitions="3*,*" ColumnSpacing="12" Padding="12,8,12,8">
+            <!-- LEWA -->
+            <Grid RowDefinitions="Auto,*">
+                <TextBlock Text="Deklaracje dyżurowe" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                    <Grid x:Name="LeftTableHost"/>
                 </Border>
-
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,6,0,0" HorizontalAlignment="Left">
-                    <Button Content="Dodaj deklaracje dyżurowe" />
-                    <Button Content="Zarządzanie dyżurnymi" />
-                    <Button Content="Generuj grafik" />
-                    <Button Content="Eksportuj..." />
-                </StackPanel>
             </Grid>
 
-            <!-- PRAWY panel: tabela „Data / Ustalony dyżurny” -->
+            <!-- PRAWA -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
                 <TextBlock Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-
-                <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushNeutral}" BorderThickness="1" CornerRadius="6">
+                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
                     <ScrollViewer>
-                        <StackPanel Padding="12" Spacing="4">
-                            <!-- Nagłówek kolumn -->
-                            <Grid ColumnDefinitions="2*,3*" Padding="0,0,0,6">
-                                <TextBlock Text="Data" FontWeight="SemiBold"/>
-                                <TextBlock Grid.Column="1" Text="Ustalony dyżurny" FontWeight="SemiBold"/>
-                            </Grid>
-
-                            <!-- Martwe wiersze przykładowe -->
-                            <Grid ColumnDefinitions="2*,3*">
-                                <TextBlock Text="01 (Pon)"/>
-                                <TextBlock Grid.Column="1" Text="—"/>
-                            </Grid>
-                            <Grid ColumnDefinitions="2*,3*">
-                                <TextBlock Text="02 (Wto)"/>
-                                <TextBlock Grid.Column="1" Text="—"/>
-                            </Grid>
-                            <Grid ColumnDefinitions="2*,3*">
-                                <TextBlock Text="03 (Śro) [Święto]" Opacity="0.75"/>
-                                <TextBlock Grid.Column="1" Text="—" Opacity="0.75"/>
-                            </Grid>
-                        </StackPanel>
+                        <ListView ItemsSource="{x:Bind ViewModel.RosterRows}" SelectionMode="None" Padding="4">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:RosterRow">
+                                    <Grid ColumnDefinitions="2*,3*" Padding="4,2">
+                                        <TextBlock Text="{x:Bind DateLabel}"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
                     </ScrollViewer>
                 </Border>
             </Grid>
+        </Grid>
+
+        <!-- ===== 5) PRZYCISKI STEROWANIA ===== -->
+        <Grid Grid.Row="4" Padding="12,8" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+            <Grid/>
+            <!-- elastyczny odstęp -->
+            <Button Grid.Column="1" Content="Ustawienia"/>
+            <Button Grid.Column="2" Content="Dodaj deklaracje dyżurowe"/>
+            <Button Grid.Column="3" Content="Zarządzanie dyżurnymi"/>
+            <Button Grid.Column="4" Content="Generuj grafik"/>
+            <Button Grid.Column="5" Content="Eksportuj..."/>
+        </Grid>
+
+        <!-- ===== 6) STOPKA ===== -->
+        <Grid Grid.Row="5" Padding="12,6" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
+            <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8"/>
+            <Border Grid.Column="1" Width="1" Background="#22000000"/>
+            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8"/>
         </Grid>
     </Grid>
 </Window>
