@@ -1,68 +1,65 @@
-﻿using GrafikoMat.ViewModels;
+﻿using GrafikoMat.Common;
+using GrafikoMat.Models;
+using GrafikoMat.ViewModels;
+using GrafikoMat.Views;
 using Microsoft.UI;
-using Microsoft.UI.Composition.SystemBackdrops;              // DesktopAcrylicBackdrop
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;                         // Win32 P/Invoke
-using Windows.Foundation;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using System.Windows.Input;
 using Windows.Graphics;
-using Windows.UI;                                           // Colors
+using Windows.UI;
 using WinRT.Interop;
 
 namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window
     {
-        // Minimalny rozmiar
         private const int MIN_W = 1280;
         private const int MIN_H = 720;
 
-        // Parametry tabeli (skalowanie)
-        private const int NameColWidth = 220;
-        private const int DayColWidth = 40;
-        private const int RowHeight = 32;
-
         private AppWindow? _appWindow;
-        private Grid? _leftGrid;
 
         public MainViewModel ViewModel { get; }
+        public ObservableCollection<UiAction> Actions { get; } = new();
+
+        private readonly DashboardView _dashboardView = new();
+        private readonly DeclarationsView _declarationsView = new();
 
         public MainWindow()
         {
             ViewModel = new MainViewModel();
-            this.InitializeComponent();
+            InitializeComponent();
 
-            // Własny topbar jako obszar przeciągania; systemowe przyciski zostają
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(TopBarRow);
 
             InitAppWindow();
-            SetupBackdrop();                 // „oszronione szkło”
+            SetupBackdrop();
             EnforceMinSize();
 
-            BuildLeftTable();
-            ViewModel.PropertyChanged += ViewModelOnPropertyChanged;
+            // start: dashboard w Viewporcie
+            _dashboardView.Attach(ViewModel);
+            ViewportPresenter.Content = _dashboardView;
+            BuildActionsForDashboard();
 
-            // Reakcje
-            this.SizeChanged += (_, __) => { SetupBackdrop(); EnforceMinSize(); ApplyLeftTableScale(); };
+            // hooki z edytora deklaracji
+            _declarationsView.SaveRequested += OnDeclSave;
+            _declarationsView.SaveAndCloseRequested += OnDeclSaveAndClose;
+            _declarationsView.CloseRequested += OnDeclCloseOnly;
+
+            this.SizeChanged += (_, __) => { SetupBackdrop(); EnforceMinSize(); };
             this.Activated += (_, __) => SetupBackdrop();
-
-            LeftTableHost.SizeChanged += (_, __) => ApplyLeftTableScale();
         }
 
-        private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(MainViewModel.SelectedYear) ||
-                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex))
-            {
-                BuildLeftTable();
-            }
-        }
-
+        // ==== Backdrop/AppWindow ====
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
@@ -71,30 +68,19 @@ namespace GrafikoMat
 
             if (_appWindow is not null)
             {
-                _appWindow.Title = string.Empty; // chowamy tytuł – zostawiamy systemowe przyciski
+                _appWindow.Title = string.Empty;
                 _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-
-                // Nie ukrywamy przycisków systemowych ani nie modyfikujemy ich kolorów.
-                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { /* starsze SDK */ }
+                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
             }
         }
 
-        /// Desktop Acrylic (bardziej przejrzysty niż Mica) gdy okno NIE jest zmaksymalizowane.
         private void SetupBackdrop()
         {
             bool isMaximized = IsWindowMaximized();
-
             if (!isMaximized)
             {
-                try
-                {
-                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
-                    SystemBackdrop = new DesktopAcrylicBackdrop();
-                }
-                catch
-                {
-                    SystemBackdrop = new MicaBackdrop(); // fallback
-                }
+                try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); }
+                catch { SystemBackdrop = new MicaBackdrop(); }
             }
             else
             {
@@ -107,22 +93,9 @@ namespace GrafikoMat
         {
             if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b)
                 return b;
-            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7)); // jaśniejsze (subtelnie)
+            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
         }
 
-        // Minimalny rozmiar
-        private void EnforceMinSize()
-        {
-            if (_appWindow is null) return;
-            var size = _appWindow.Size;
-            int w = size.Width, h = size.Height;
-            int nw = w < MIN_W ? MIN_W : w;
-            int nh = h < MIN_H ? MIN_H : h;
-            if (nw != w || nh != h)
-                _appWindow.Resize(new SizeInt32(nw, nh));
-        }
-
-        // Maksymalizacja – detekcja
         [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hWnd);
         private bool IsWindowMaximized()
         {
@@ -130,136 +103,122 @@ namespace GrafikoMat
             return IsZoomed(hwnd);
         }
 
-        // Skalowanie tabeli (bez przewijania poziomego)
-        private void ApplyLeftTableScale()
+        private void EnforceMinSize()
         {
-            if (_leftGrid is null) return;
-
-            int year = ViewModel.SelectedYear;
-            int month = ViewModel.SelectedMonthIndex + 1;
-            int days = DateTime.DaysInMonth(year, month);
-            int rowsCount = ViewModel.DoctorRows.Count + 1;
-
-            double requiredW = NameColWidth + days * DayColWidth;
-            double requiredH = rowsCount * RowHeight;
-
-            double availW = Math.Max(0, LeftTableHost.ActualWidth);
-            double availH = Math.Max(0, LeftTableHost.ActualHeight);
-
-            double scaleX = availW > 0 ? Math.Min(1.0, availW / requiredW) : 1.0;
-            double scaleY = availH > 0 ? Math.Min(1.0, availH / requiredH) : 1.0;
-            double scale = Math.Min(scaleX, scaleY);
-
-            _leftGrid.RenderTransform = new ScaleTransform { ScaleX = scale, ScaleY = scale };
-            _leftGrid.RenderTransformOrigin = new Point(0, 0);
+            if (_appWindow is null) return;
+            var size = _appWindow.Size;
+            int nw = size.Width < MIN_W ? MIN_W : size.Width;
+            int nh = size.Height < MIN_H ? MIN_H : size.Height;
+            if (nw != size.Width || nh != size.Height)
+                _appWindow.Resize(new SizeInt32(nw, nh));
         }
 
-        // Budowa tabeli (nagłówek z dniami, wiersze lekarzy)
-        private void BuildLeftTable()
+        // ==== Pasek akcji ====
+        private void BuildActionsForDashboard()
         {
-            LeftTableHost.Children.Clear();
-
-            int year = ViewModel.SelectedYear;
-            int month = ViewModel.SelectedMonthIndex + 1;
-            int daysInMonth = DateTime.DaysInMonth(year, month);
-            int rowsCount = ViewModel.DoctorRows.Count + 1;
-
-            var grid = new Grid();
-            _leftGrid = grid;
-
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NameColWidth) });
-            for (int d = 1; d <= daysInMonth; d++)
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DayColWidth) });
-
-            for (int r = 0; r < rowsCount; r++)
-                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
-
-            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x00, 0x00)); // subtelniejsze (25% mniej krycia)
-            var weekendFill = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00)); // delikatniejsze tło weekendów
-
-            // nagłówek
-            var hdrName = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
-            Grid.SetRow(hdrName, 0); Grid.SetColumn(hdrName, 0);
-            hdrName.Child = new TextBlock { Text = "Dyżurny", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
-            grid.Children.Add(hdrName);
-
-            for (int d = 1; d <= daysInMonth; d++)
-            {
-                var date = new DateTime(year, month, d);
-                bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-
-                var cell = new Border
-                {
-                    BorderBrush = borderBrush,
-                    BorderThickness = new Thickness(0, 0, 1, 1),
-                    Background = weekend ? weekendFill : null
-                };
-                Grid.SetRow(cell, 0); Grid.SetColumn(cell, d);
-                cell.Child = new TextBlock
-                {
-                    Text = $"{d:00}\n{DowPl(date.DayOfWeek)}",
-                    TextAlignment = TextAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    LineHeight = 14,
-                    Padding = new Thickness(0, 4, 0, 0)
-                };
-                grid.Children.Add(cell);
-            }
-
-            // wiersze lekarzy
-            for (int r = 0; r < ViewModel.DoctorRows.Count; r++)
-            {
-                var doctor = ViewModel.DoctorRows[r];
-                int row = r + 1;
-
-                var nameCell = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
-                Grid.SetRow(nameCell, row); Grid.SetColumn(nameCell, 0);
-                nameCell.Child = new TextBlock
-                {
-                    Text = doctor.Name,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(8, 0, 8, 0),
-                    Opacity = doctor.HasDeclarations ? 1.0 : 0.6
-                };
-                grid.Children.Add(nameCell);
-
-                for (int d = 1; d <= daysInMonth; d++)
-                {
-                    var date = new DateTime(year, month, d);
-                    bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-
-                    var cell = new Border
-                    {
-                        BorderBrush = borderBrush,
-                        BorderThickness = new Thickness(0, 0, 1, 1),
-                        Background = weekend ? weekendFill : null
-                    };
-                    Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
-                    cell.Child = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                    grid.Children.Add(cell);
-                }
-            }
-
-            LeftTableHost.Children.Add(grid);
-            ApplyLeftTableScale();
+            Actions.Clear();
+            Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings())));
+            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations())));
+            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManage())));
+            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder())));
+            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder())));
         }
 
-        private static string DowPl(DayOfWeek dow) => dow switch
+        private void BuildActionsForDeclarations()
         {
-            DayOfWeek.Monday => "Pon",
-            DayOfWeek.Tuesday => "Wto",
-            DayOfWeek.Wednesday => "Śro",
-            DayOfWeek.Thursday => "Czw",
-            DayOfWeek.Friday => "Pią",
-            DayOfWeek.Saturday => "Sob",
-            DayOfWeek.Sunday => "Nie",
-            _ => ""
-        };
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave())));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose())));
+        }
 
-        // ======== Nawigacja rok/miesiąc ========
-        private void OnYearPrev(object sender, RoutedEventArgs e) => ViewModel.PrevYear();
-        private void OnYearNext(object sender, RoutedEventArgs e) => ViewModel.NextYear();
-        private void OnMonthPrev(object sender, RoutedEventArgs e) => ViewModel.PrevMonth();
-        private void OnMonthNext(object sender, RoutedEventArgs e) => ViewModel.NextMonth();
+        private void BuildActionsForSettings()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Zapisz ustawienia", new RelayCommand(_ => SaveSettingsPlaceholder())));
+        }
+
+        private void BuildActionsForManage()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => AddDoctorPlaceholder())));
+        }
+
+        // ==== Przełączanie widoków ====
+        private void SwitchToDashboard()
+        {
+            _dashboardView.Attach(ViewModel);
+            ViewportPresenter.Content = _dashboardView;
+            BuildActionsForDashboard();
+        }
+
+        private void SwitchToDeclarations()
+        {
+            var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
+            _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, selectedDoctorIndex: 0);
+            ViewportPresenter.Content = _declarationsView;
+            BuildActionsForDeclarations();
+        }
+
+        private void SwitchToSettings()
+        {
+            ViewportPresenter.Content = new TextBlock { Text = "Ustawienia (w przygotowaniu)", Margin = new Thickness(12) };
+            BuildActionsForSettings();
+        }
+
+        private void SwitchToManage()
+        {
+            ViewportPresenter.Content = new TextBlock { Text = "Zarządzanie dyżurnymi (w przygotowaniu)", Margin = new Thickness(12) };
+            BuildActionsForManage();
+        }
+
+        // ==== Callbacks z DeclarationsView ====
+        private void OnDeclSave(DoctorMonthDeclaration dm)
+        {
+            if (!string.IsNullOrWhiteSpace(dm.Doctor))
+                ViewModel.ApplyDoctorMonth(dm);
+        }
+
+        private void OnDeclSaveAndClose(DoctorMonthDeclaration dm)
+        {
+            OnDeclSave(dm);
+            SwitchToDashboard();
+        }
+
+        private void OnDeclCloseOnly() => SwitchToDashboard();
+
+        // ==== Placeholdery brakujących metod ====
+        private async void GenerateRosterPlaceholder()
+            => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
+
+        private async void ExportPlaceholder()
+            => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
+
+        private async void SaveSettingsPlaceholder()
+            => await ShowInfo("Ustawienia", "Zapis ustawień (tryb 12h/24h, motyw, itp.) – w przygotowaniu.");
+
+        private async void AddDoctorPlaceholder()
+            => await ShowInfo("Dodaj dyżurnego", "Formularz dodania/edycji dyżurnego – w przygotowaniu.");
+
+        private async Task ShowInfo(string title, string message)
+        {
+            var dlg = new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                PrimaryButtonText = "OK",
+                XamlRoot = RootGrid.XamlRoot
+            };
+            await dlg.ShowAsync();
+        }
+    }
+
+    public sealed class UiAction
+    {
+        public string Label { get; }
+        public ICommand Command { get; }
+        public UiAction(string label, ICommand command) { Label = label; Command = command; }
     }
 }

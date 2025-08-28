@@ -1,0 +1,104 @@
+﻿<UserControl
+    x:Class="GrafikoMat.Views.DeclarationsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="12">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="Deklaracje dyżurowe" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="✕" Width="36" Height="32" Click="OnCloseRequested"/>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="0,8,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Lekarz:" VerticalAlignment="Center"/>
+                <Button Content="⟨" Width="32" Height="32" Click="OnPrevDoctor"/>
+                <ComboBox Width="280"
+                          ItemsSource="{Binding Doctors}"
+                          SelectedItem="{Binding SelectedDoctor, Mode=TwoWay}"
+                          DisplayMemberPath="Name"/>
+                <Button Content="⟩" Width="32" Height="32" Click="OnNextDoctor"/>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="{Binding MonthHeader}" VerticalAlignment="Center" Opacity="0.8"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Limit:" VerticalAlignment="Center"/>
+                <NumberBox Width="90" Minimum="0" Maximum="60" Value="{Binding DutyLimit, Mode=TwoWay}"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" Padding="2,6">
+                <TextBlock Text="Pn" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="Wt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="Śr" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="Cz" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="Pt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="So" HorizontalAlignment="Center" Opacity="0.7"/>
+                <TextBlock Grid.Column="6" Text="Nd" HorizontalAlignment="Center" Opacity="0.7"/>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding DayCells}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="6"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="150" Height="90" Margin="3" CornerRadius="6"
+                                    BorderThickness="{Binding BorderThickness}"
+                                    BorderBrush="{Binding BorderBrush}"
+                                    Background="{Binding Background}">
+                                <Grid RightTapped="OnCellRightTapped"
+                                      Tapped="OnCellTapped"
+                                      PointerPressed="OnCellPointerPressed"
+                                      PointerReleased="OnCellPointerReleased">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="{Binding DayNumber}"
+                                               Margin="8,6,8,4"
+                                               Opacity="{Binding HeaderOpacity}"
+                                               FontWeight="SemiBold"/>
+
+                                    <Grid Grid.Row="1">
+                                        <Grid Visibility="{Binding Full24Visibility}">
+                                            <TextBlock Text="{Binding SymbolFull}" FontSize="22"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <Grid Visibility="{Binding Split12Visibility}" RowDefinitions="*,*">
+                                            <Border BorderBrush="{Binding SplitDividerBrush}" BorderThickness="0,0,0,1" Opacity="0.5"/>
+                                            <TextBlock Grid.Row="0" Text="{Binding SymbolDay}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding SymbolNight}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Wyczyść zaznaczenie" Click="OnClearSelection"/>
+            <Button Content="Zapisz" Click="OnSave"/>
+            <Button Content="Zapisz i zamknij" Click="OnSaveAndClose"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

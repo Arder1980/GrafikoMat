@@ -4,98 +4,49 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:vm="using:GrafikoMat.ViewModels"
     mc:Ignorable="d">
 
-    <!-- 6 wierszy: 1) Topbar  2) Jednostka  3) Rok/Miesiąc  4) Treść  5) Przyciski  6) Stopka -->
-    <Grid x:Name="RootGrid"
-          RowDefinitions="Auto,Auto,Auto,*,Auto,Auto"
-          Background="Transparent">
-
-        <!-- ===== 1) TOPBAR (custom drag area, systemowe przyciski zostają) ===== -->
-        <!-- Margines po prawej, by nie nachodzić na systemowe przyciski -->
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,Auto,*,Auto,Auto" Background="Transparent">
+        <!-- 1) TOPBAR -->
         <Grid Grid.Row="0" x:Name="TopBarRow" ColumnDefinitions="*" Padding="12,6" Margin="0,0,140,0">
             <Grid x:Name="DragBar" VerticalAlignment="Center">
-                <TextBlock Text="GrafikoMat Dyżurowy"
-                           FontSize="16" FontWeight="SemiBold" Opacity="0.92"/>
+                <TextBlock Text="GrafikoMat Dyżurowy" FontSize="16" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
         </Grid>
 
-        <!-- ===== 2) DANE JEDNOSTKI ===== -->
+        <!-- 2) DANE JEDNOSTKI -->
         <Grid Grid.Row="1" Padding="12,10" MinHeight="100">
-            <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}"
-                       FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
+            <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}" FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
         </Grid>
 
-        <!-- ===== 3) ROK / MIESIĄC ===== -->
-        <!-- Układ: Rok: < [YYYY] >    Miesiąc: < [MMMM] > -->
-        <Grid Grid.Row="2"
-              Padding="12,6,12,8"
-              ColumnSpacing="8"
-              ColumnDefinitions="Auto,Auto,Auto,Auto, 24, Auto,Auto,Auto,Auto"
-              VerticalAlignment="Center">
-            <!-- Rok -->
-            <TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
-            <Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnYearPrev"/>
-            <ComboBox Grid.Column="2" Width="110"
-                      ItemsSource="{x:Bind ViewModel.Years}"
-                      SelectedItem="{x:Bind ViewModel.SelectedYear, Mode=TwoWay}"/>
-            <Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnYearNext"/>
-
-            <!-- odstęp elastyczny ~24px (w kolumnach) -->
-
-            <!-- Miesiąc -->
-            <TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
-            <Button   Grid.Column="6" Content="⟨" Width="32" Height="32" Click="OnMonthPrev"/>
-            <ComboBox Grid.Column="7" Width="180"
-                      ItemsSource="{x:Bind ViewModel.Months}"
-                      SelectedIndex="{x:Bind ViewModel.SelectedMonthIndex, Mode=TwoWay}"/>
-            <Button   Grid.Column="8" Content="⟩" Width="32" Height="32" Click="OnMonthNext"/>
+        <!-- 3) VIEWPORT -->
+        <Grid Grid.Row="2" Padding="12,8,12,8">
+            <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+                <ContentPresenter x:Name="ViewportPresenter"/>
+            </Border>
         </Grid>
 
-        <!-- ===== 4) TREŚĆ: lewa 3/4 (tabela deklaracji), prawa 1/4 (wygenerowany grafik) ===== -->
-        <Grid Grid.Row="3" ColumnDefinitions="3*,*" ColumnSpacing="12" Padding="12,8,12,8">
-            <!-- LEWA -->
-            <Grid RowDefinitions="Auto,*">
-                <TextBlock Text="Deklaracje dyżurowe" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-                    <Grid x:Name="LeftTableHost"/>
-                </Border>
-            </Grid>
-
-            <!-- PRAWA -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,*">
-                <TextBlock Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-                    <ScrollViewer>
-                        <ListView ItemsSource="{x:Bind ViewModel.RosterRows}" SelectionMode="None" Padding="4">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="vm:RosterRow">
-                                    <Grid ColumnDefinitions="2*,3*" Padding="4,2">
-                                        <TextBlock Text="{x:Bind DateLabel}"/>
-                                        <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                    </ScrollViewer>
-                </Border>
-            </Grid>
+        <!-- 4) PASEK AKCJI (ItemsControl z ItemsSource) -->
+        <Grid Grid.Row="3" Padding="12,8">
+            <ItemsControl ItemsSource="{x:Bind Actions}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Label}"
+                                Command="{Binding Command}"
+                                Margin="8,0,0,0"
+                                MinWidth="140"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </Grid>
 
-        <!-- ===== 5) PRZYCISKI STEROWANIA ===== -->
-        <Grid Grid.Row="4" Padding="12,8" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
-            <Grid/>
-            <!-- elastyczny odstęp -->
-            <Button Grid.Column="1" Content="Ustawienia"/>
-            <Button Grid.Column="2" Content="Dodaj deklaracje dyżurowe"/>
-            <Button Grid.Column="3" Content="Zarządzanie dyżurnymi"/>
-            <Button Grid.Column="4" Content="Generuj grafik"/>
-            <Button Grid.Column="5" Content="Eksportuj..."/>
-        </Grid>
-
-        <!-- ===== 6) STOPKA ===== -->
-        <Grid Grid.Row="5" Padding="12,6" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
+        <!-- 5) STOPKA -->
+        <Grid Grid.Row="4" Padding="12,6" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
             <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8"/>
             <Border Grid.Column="1" Width="1" Background="#22000000"/>
             <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8"/>

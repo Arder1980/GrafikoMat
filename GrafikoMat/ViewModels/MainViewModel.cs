@@ -1,6 +1,9 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using GrafikoMat.Models;
 
 namespace GrafikoMat.ViewModels
 {
@@ -10,7 +13,7 @@ namespace GrafikoMat.ViewModels
         private void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        // Jednostka (placeholder – podłączymy do ustawień)
+        // Jednostka
         private string _unitName = "Jednostka: (ustaw w Ustawieniach)";
         public string UnitName
         {
@@ -60,6 +63,11 @@ namespace GrafikoMat.ViewModels
             set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } }
         }
 
+        // Deklaracje (tymczasowy magazyn UI)
+        private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
+        private static string Key(string doctor, int year, int monthIndex)
+            => $"{doctor}|{year:D4}-{monthIndex:D2}";
+
         public MainViewModel()
         {
             // Demo – kilka wierszy
@@ -92,19 +100,46 @@ namespace GrafikoMat.ViewModels
         {
             if (!Years.Contains(year))
             {
-                // Wstaw w porządku rosnącym
-                int i = 0;
-                while (i < Years.Count && Years[i] < year) i++;
+                int i = 0; while (i < Years.Count && Years[i] < year) i++;
                 Years.Insert(i, year);
             }
         }
+
+        // Zastosuj wynik z okna „Deklaracje…”
+        public void ApplyDoctorMonth(DoctorMonthDeclaration dm)
+        {
+            _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm;
+
+            var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor);
+            if (row != null) row.HasDeclarations = true;
+
+            OnPropertyChanged(nameof(_declByKey)); // sygnał do rebuildu
+        }
+
+        // Pobierz wpis do renderu
+        public (bool has, DayMode mode, string? full, string? day, string? night)
+            TryGetEntry(string doctor, int year, int monthIndex, int dayIndex)
+        {
+            if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) &&
+                dayIndex >= 0 && dayIndex < dm.Days.Length)
+            {
+                var d = dm.Days[dayIndex];
+                return (true, d.Mode, d.Full, d.Day, d.Night);
+            }
+            return (false, DayMode.Full24, null, null, null);
+        }
     }
 
-    public class DoctorRow
+    public class DoctorRow : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
         public string Name { get; }
-        public bool HasDeclarations { get; }
-        public DoctorRow(string name, bool hasDeclarations) { Name = name; HasDeclarations = hasDeclarations; }
+        private bool _has;
+        public bool HasDeclarations { get => _has; set { if (_has != value) { _has = value; Raise(nameof(HasDeclarations)); } } }
+
+        public DoctorRow(string name, bool hasDeclarations) { Name = name; _has = hasDeclarations; }
     }
 
     public class RosterRow
