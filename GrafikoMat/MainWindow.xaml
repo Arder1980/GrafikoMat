@@ -6,50 +6,65 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,Auto,*,Auto,Auto" Background="Transparent">
-        <!-- 1) TOPBAR -->
-        <Grid Grid.Row="0" x:Name="TopBarRow" ColumnDefinitions="*" Padding="12,6" Margin="0,0,140,0">
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,100,*,Auto,Auto" Background="Transparent">
+        <!-- Topbar — niższy (32 px) -->
+        <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              Padding="10,0" Margin="0,0,140,0">
             <Grid x:Name="DragBar" VerticalAlignment="Center">
-                <TextBlock Text="GrafikoMat Dyżurowy" FontSize="16" FontWeight="SemiBold" Opacity="0.92"/>
+                <TextBlock Text="GrafikoMat Dyżurowy" FontSize="14" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
         </Grid>
 
-        <!-- 2) DANE JEDNOSTKI -->
-        <Grid Grid.Row="1" Padding="12,10" MinHeight="100">
+        <!-- Dane jednostki (jak było) -->
+        <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
             <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}" FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
         </Grid>
 
-        <!-- 3) VIEWPORT -->
+        <!-- Viewport: dwa hosty animacji -->
         <Grid Grid.Row="2" Padding="12,8,12,8">
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-                <ContentPresenter x:Name="ViewportPresenter"/>
+                <Grid x:Name="ViewportGrid">
+                    <ContentControl x:Name="ViewportCurrent" Opacity="1"/>
+                    <ContentControl x:Name="ViewportNext" Opacity="0"/>
+                </Grid>
             </Border>
         </Grid>
 
-        <!-- 4) PASEK AKCJI (ItemsControl z ItemsSource) -->
-        <Grid Grid.Row="3" Padding="12,8">
+        <!-- Pasek akcji – mniejszy (mniej paddingu, mniejsze buttony) -->
+        <Grid Grid.Row="3" Padding="12,4">
             <ItemsControl ItemsSource="{x:Bind Actions}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <StackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition/>
+                                    <RepositionThemeTransition/>
+                                </TransitionCollection>
+                            </StackPanel.ChildrenTransitions>
+                        </StackPanel>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <Button Content="{Binding Label}"
                                 Command="{Binding Command}"
-                                Margin="8,0,0,0"
-                                MinWidth="140"/>
+                                Margin="6,0,0,0"
+                                MinHeight="28"
+                                MinWidth="128"
+                                Padding="12,6"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Grid>
 
-        <!-- 5) STOPKA -->
-        <Grid Grid.Row="4" Padding="12,6" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
-            <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8"/>
+        <!-- Stopka — niższa -->
+        <Grid Grid.Row="4" Padding="10,4" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16"
+              Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
             <Border Grid.Column="1" Width="1" Background="#22000000"/>
-            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8"/>
+            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
         </Grid>
     </Grid>
 </Window>

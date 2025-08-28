@@ -1,0 +1,1 @@
+[OK] Zapisano snapshot: ProjektSnapshot_utf8.txt

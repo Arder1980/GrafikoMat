@@ -1,0 +1,1999 @@
+﻿# SNAPSHOT
+# Data:       2025-08-28 10:03:42
+# Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
+# Maszyna:    FRACTAL
+# Użytkownik: adaml
+# Kodowanie snapshotu: UTF-8 (z BOM)
+
+## TREE (foldery)
+DIR  GrafikoMat
+DIR  GrafikoMat.Core
+DIR  GrafikoMat\Common
+DIR  GrafikoMat\Models
+DIR  GrafikoMat\Properties
+DIR  GrafikoMat\ViewModels
+DIR  GrafikoMat\Views
+
+## FILES (liczba): 19
+FILE GrafikoMat.Core\Declarations.Models.cs
+FILE GrafikoMat.Core\GrafikoMat.Core.csproj
+FILE GrafikoMat.Core\Roster.Models.cs
+FILE GrafikoMat.Core\Scheduling.Abstractions.cs
+FILE GrafikoMat.sln
+FILE GrafikoMat\App.xaml
+FILE GrafikoMat\App.xaml.cs
+FILE GrafikoMat\Common\RelayCommand.cs
+FILE GrafikoMat\GrafikoMat.WinUI.csproj
+FILE GrafikoMat\MainWindow.xaml
+FILE GrafikoMat\MainWindow.xaml.cs
+FILE GrafikoMat\Models\DeclarationsDto.cs
+FILE GrafikoMat\Properties\launchSettings.json
+FILE GrafikoMat\ViewModels\DeclarationsViewModel.cs
+FILE GrafikoMat\ViewModels\MainViewModel.cs
+FILE GrafikoMat\Views\DashboardView.xaml
+FILE GrafikoMat\Views\DashboardView.xaml.cs
+FILE GrafikoMat\Views\DeclarationsView.xaml
+FILE GrafikoMat\Views\DeclarationsView.xaml.cs
+
+===== FILE: GrafikoMat.Core\Declarations.Models.cs (2177 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+using GrafikoMat.Core.Scheduling;
+
+namespace GrafikoMat.Core.Declarations
+{
+    /// <summary>
+    /// Deklaracje dyżurowe lekarza dla jednego miesiąca (wejście do generatora).
+    /// </summary>
+    public sealed class DoctorDeclarationMonth
+    {
+        /// <summary>Id lekarza (np. GUID lub skrót – format po Twojej stronie).</summary>
+        public string DoctorId { get; init; } = string.Empty;
+
+        /// <summary>Rok/miesiąc, którego dotyczą deklaracje.</summary>
+        public int Year { get; init; }
+        public int Month { get; init; }
+
+        /// <summary>Limit dyżurów dla tego lekarza w tym miesiącu.</summary>
+        public int DutyLimit { get; set; }
+
+        /// <summary>Lista wpisów dziennych/slotowych z symbolami deklaracji.</summary>
+        public List<DeclarationEntry> Entries { get; } = new();
+
+        public DoctorDeclarationMonth(string doctorId, int year, int month, int dutyLimit = 0)
+        {
+            DoctorId = doctorId;
+            Year = year;
+            Month = month;
+            DutyLimit = dutyLimit;
+        }
+    }
+
+    /// <summary>
+    /// Pojedyncza deklaracja na slot: symbol jednoliterowy + opcjonalny preferowany współdyżurny.
+    /// </summary>
+    public sealed class DeclarationEntry
+    {
+        /// <summary>Slot (dzień + część doby).</summary>
+        public DutySlot Slot { get; init; }
+
+        /// <summary>
+        /// Jednoliterowy symbol deklaracji (np. 'D', 'N', 'X', 'P' – zgodnie z Twoją legendą).
+        /// </summary>
+        public char Symbol { get; set; }
+
+        /// <summary>
+        /// Opcjonalny preferowany współdyżurny (co-dyżurny) – preferencja wejściowa.
+        /// Generator może, ale nie musi ją spełnić.
+        /// </summary>
+        public string? CoDutyPreferredDoctorId { get; set; }
+
+        public DeclarationEntry(DutySlot slot, char symbol, string? coDutyPreferredDoctorId = null)
+        {
+            Slot = slot;
+            Symbol = symbol;
+            CoDutyPreferredDoctorId = coDutyPreferredDoctorId;
+        }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat.Core\GrafikoMat.Core.csproj (591 bytes)
+----- BEGIN -----
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>GrafikoMat.Core</RootNamespace>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
+  </ItemGroup>
+  
+</Project>
+----- END -----
+
+===== FILE: GrafikoMat.Core\Roster.Models.cs (2036 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using GrafikoMat.Core.Scheduling;
+
+namespace GrafikoMat.Core.Rostering
+{
+    /// <summary>
+    /// Wymagania personalne na slot (np. 1 osoba albo 2 osoby jako „para”).
+    /// </summary>
+    public sealed class StaffRequirement
+    {
+        /// <summary>Rok/miesiąc obowiązywania.</summary>
+        public int Year { get; init; }
+        public int Month { get; init; }
+
+        /// <summary>Liczba wymaganych osób na każdy slot. 1 (domyślnie) lub 2 dla par dyżurnych.</summary>
+        public int RequiredPersonsPerSlot { get; set; } = 1;
+
+        public StaffRequirement(int year, int month, int requiredPersonsPerSlot = 1)
+        {
+            Year = year;
+            Month = month;
+            RequiredPersonsPerSlot = Math.Max(1, requiredPersonsPerSlot);
+        }
+    }
+
+    /// <summary>
+    /// Przydział na pojedynczy slot: lista lekarzy (rozmiar zależny od wymagań).
+    /// </summary>
+    public sealed class RosterAssignment
+    {
+        public DutySlot Slot { get; init; }
+        public List<string> DoctorIds { get; } = new();
+
+        public RosterAssignment(DutySlot slot, IEnumerable<string>? doctorIds = null)
+        {
+            Slot = slot;
+            if (doctorIds != null) DoctorIds.AddRange(doctorIds);
+        }
+    }
+
+    /// <summary>
+    /// Wynikowy grafik dla miesiąca (zbiór przydziałów na sloty).
+    /// </summary>
+    public sealed class RosterMonth
+    {
+        public int Year { get; init; }
+        public int Month { get; init; }
+
+        public List<RosterAssignment> Assignments { get; } = new();
+
+        public RosterMonth(int year, int month)
+        {
+            Year = year;
+            Month = month;
+        }
+
+        /// <summary>Pomocniczo: zwraca przydziały dla konkretnej daty.</summary>
+        public IEnumerable<RosterAssignment> ForDate(DateOnly date)
+            => Assignments.Where(a => a.Slot.Date == date);
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling.Abstractions.cs (3847 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+
+namespace GrafikoMat.Core.Scheduling
+{
+    /// <summary>
+    /// Część doby reprezentowana przez slot dyżurowy.
+    /// Full24 = dyżur całodobowy; Day12/Night12 = sloty 12-godzinne.
+    /// </summary>
+    public enum ShiftPart
+    {
+        Full24 = 0,
+        Day12 = 1,
+        Night12 = 2
+    }
+
+    /// <summary>
+    /// Układ slotów dla danego dnia: albo jedna doba 24h, albo podział 12+12h.
+    /// </summary>
+    public enum SlotLayout
+    {
+        Full24,
+        Split12x2
+    }
+
+    /// <summary>
+    /// Pojedynczy slot dyżuru w kalendarzu (konkretny dzień + część doby).
+    /// </summary>
+    public readonly struct DutySlot
+    {
+        public DateOnly Date { get; }
+        public ShiftPart Part { get; }
+
+        public DutySlot(DateOnly date, ShiftPart part)
+        {
+            Date = date;
+            Part = part;
+        }
+
+        public static DutySlot Full(DateOnly date) => new(date, ShiftPart.Full24);
+        public static DutySlot Day(DateOnly date) => new(date, ShiftPart.Day12);
+        public static DutySlot Night(DateOnly date) => new(date, ShiftPart.Night12);
+
+        public override string ToString()
+            => Part == ShiftPart.Full24
+                ? $"{Date:yyyy-MM-dd} [24h]"
+                : $"{Date:yyyy-MM-dd} [{(Part == ShiftPart.Day12 ? "Dzień" : "Noc")}]";
+    }
+
+    /// <summary>
+    /// Układ miesięczny: definiuje, które dni są 24h, a które 12+12h.
+    /// </summary>
+    public sealed class MonthLayout
+    {
+        /// <summary>Rok kalendarzowy.</summary>
+        public int Year { get; init; }
+
+        /// <summary>Miesiąc (1-12).</summary>
+        public int Month { get; init; }
+
+        /// <summary>
+        /// Gdy true — domyślnie wszystkie dni są 12+12h, a <see cref="FullDays"/> przywraca 24h.
+        /// Gdy false — domyślnie wszystkie dni są 24h, a <see cref="SplitDays"/> wymusza 12+12h.
+        /// </summary>
+        public bool UseTwelveHourByDefault { get; init; }
+
+        /// <summary>Dni (numer dnia miesiąca) wymuszające 12+12h, gdy domyślnie 24h.</summary>
+        public HashSet<int> SplitDays { get; } = new();
+
+        /// <summary>Dni (numer dnia miesiąca) wymuszające 24h, gdy domyślnie 12+12h.</summary>
+        public HashSet<int> FullDays { get; } = new();
+
+        public MonthLayout(int year, int month, bool useTwelveHourByDefault = false)
+        {
+            Year = year;
+            Month = month;
+            UseTwelveHourByDefault = useTwelveHourByDefault;
+        }
+
+        /// <summary>
+        /// Czy dany dzień ma układ 12+12h (true) czy 24h (false).
+        /// </summary>
+        public bool IsSplit(DateOnly date)
+        {
+            if (date.Year != Year || date.Month != Month)
+                throw new ArgumentOutOfRangeException(nameof(date), "Data poza zakresem układu miesiąca.");
+
+            if (UseTwelveHourByDefault)
+                return !FullDays.Contains(date.Day);
+
+            return SplitDays.Contains(date.Day);
+        }
+
+        /// <summary>
+        /// Zwraca wszystkie sloty (24h albo 12+12h) z tego miesiąca.
+        /// </summary>
+        public IEnumerable<DutySlot> EnumerateSlots()
+        {
+            int days = DateTime.DaysInMonth(Year, Month);
+            for (int day = 1; day <= days; day++)
+            {
+                var date = new DateOnly(Year, Month, day);
+                if (IsSplit(date))
+                {
+                    yield return DutySlot.Day(date);
+                    yield return DutySlot.Night(date);
+                }
+                else
+                {
+                    yield return DutySlot.Full(date);
+                }
+            }
+        }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat.sln (3413 bytes)
+----- BEGIN -----
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GrafikoMat.WinUI", "GrafikoMat\GrafikoMat.WinUI.csproj", "{881AA9FD-FF18-45BF-BE47-A2B1359209B7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GrafikoMat.Core", "GrafikoMat.Core\GrafikoMat.Core.csproj", "{956944C8-34A3-4066-9B80-3B605C82B52D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM64 = Debug|ARM64
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|ARM64 = Release|ARM64
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|ARM64.Build.0 = Debug|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|ARM64.Deploy.0 = Debug|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x64.ActiveCfg = Debug|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x64.Build.0 = Debug|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x64.Deploy.0 = Debug|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x86.ActiveCfg = Debug|x86
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x86.Build.0 = Debug|x86
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Debug|x86.Deploy.0 = Debug|x86
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|ARM64.ActiveCfg = Release|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|ARM64.Build.0 = Release|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|ARM64.Deploy.0 = Release|ARM64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x64.ActiveCfg = Release|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x64.Build.0 = Release|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x64.Deploy.0 = Release|x64
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x86.ActiveCfg = Release|x86
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x86.Build.0 = Release|x86
+		{881AA9FD-FF18-45BF-BE47-A2B1359209B7}.Release|x86.Deploy.0 = Release|x86
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|x64.Build.0 = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Debug|x86.Build.0 = Debug|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|ARM64.Build.0 = Release|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|x64.ActiveCfg = Release|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|x64.Build.0 = Release|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|x86.ActiveCfg = Release|Any CPU
+		{956944C8-34A3-4066-9B80-3B605C82B52D}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B5B1BE27-4C7E-4CD8-928C-CA4A8A8EE828}
+	EndGlobalSection
+EndGlobal
+
+----- END -----
+
+===== FILE: GrafikoMat\App.xaml (613 bytes)
+----- BEGIN -----
+<Application
+    x:Class="GrafikoMat.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Light">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Zasoby kontrolek WinUI 3 (TabView*, NumberBox*, itp.) -->
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
+
+----- END -----
+
+===== FILE: GrafikoMat\App.xaml.cs (388 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+
+namespace GrafikoMat
+{
+    public partial class App : Application
+    {
+        public App()
+        {
+            this.InitializeComponent();
+        }
+
+        protected override void OnLaunched(LaunchActivatedEventArgs args)
+        {
+            var window = new GrafikoMat.MainWindow();
+            window.Activate();
+        }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Common\RelayCommand.cs (708 bytes)
+----- BEGIN -----
+using System;
+using System.Windows.Input;
+
+namespace GrafikoMat.Common
+{
+    public sealed class RelayCommand : ICommand
+    {
+        private readonly Action<object?> _exec;
+        private readonly Func<object?, bool>? _can;
+
+        public RelayCommand(Action<object?> exec, Func<object?, bool>? can = null)
+        {
+            _exec = exec; _can = can;
+        }
+
+        public event EventHandler? CanExecuteChanged;
+        public bool CanExecute(object? parameter) => _can?.Invoke(parameter) ?? true;
+        public void Execute(object? parameter) => _exec(parameter);
+        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (3121 bytes)
+----- BEGIN -----
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>GrafikoMat</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Views\DashboardView.xaml" />
+    <None Remove="Views\DeclarationsView.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\SplashScreen.scale-200.png" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+    <Content Include="Assets\StoreLogo.png" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Views\DashboardView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="Views\DeclarationsView.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+
+  <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+  <!-- Publish Properties -->
+  <PropertyGroup>
+    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
+    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
+    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+  </PropertyGroup>
+</Project>
+----- END -----
+
+===== FILE: GrafikoMat\MainWindow.xaml (6383 bytes)
+----- BEGIN -----
+<UserControl
+    x:Class="GrafikoMat.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="12">
+        <!-- HEADER do paralaksy -->
+        <Grid x:Name="ViewHeader" Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="Deklaracje dyżurowe" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="✕" Width="36" Height="32" Click="OnCloseRequested"/>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="0,8,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Lekarz:" VerticalAlignment="Center"/>
+                <Button Content="⟨" Width="32" Height="32" Click="OnPrevDoctor"/>
+                <ComboBox Width="280"
+                          ItemsSource="{Binding Doctors}"
+                          SelectedItem="{Binding SelectedDoctor, Mode=TwoWay}"
+                          DisplayMemberPath="Name"/>
+                <Button Content="⟩" Width="32" Height="32" Click="OnNextDoctor"/>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="{Binding MonthHeader}" VerticalAlignment="Center" Opacity="0.8"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Limit:" VerticalAlignment="Center"/>
+                <NumberBox Width="90" Minimum="0" Maximum="60" Value="{Binding DutyLimit, Mode=TwoWay}"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" Padding="2,6">
+                <TextBlock Text="Pn" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="Wt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="Śr" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="Cz" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="Pt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="So" HorizontalAlignment="Center" Opacity="0.7"/>
+                <TextBlock Grid.Column="6" Text="Nd" HorizontalAlignment="Center" Opacity="0.7"/>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding DayCells}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="6"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="150" Height="90" Margin="3" CornerRadius="6"
+                                    BorderThickness="{Binding BorderThickness}"
+                                    BorderBrush="{Binding BorderBrush}"
+                                    Background="{Binding Background}">
+                                <Grid RightTapped="OnCellRightTapped"
+                                      Tapped="OnCellTapped"
+                                      PointerPressed="OnCellPointerPressed"
+                                      PointerReleased="OnCellPointerReleased">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="{Binding DayNumber}"
+                                               Margin="8,6,8,4"
+                                               Opacity="{Binding HeaderOpacity}"
+                                               FontWeight="SemiBold"/>
+
+                                    <Grid Grid.Row="1">
+                                        <Grid Visibility="{Binding Full24Visibility}">
+                                            <TextBlock Text="{Binding SymbolFull}" FontSize="22"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <Grid Visibility="{Binding Split12Visibility}" RowDefinitions="*,*">
+                                            <Border BorderBrush="{Binding SplitDividerBrush}" BorderThickness="0,0,0,1" Opacity="0.5"/>
+                                            <TextBlock Grid.Row="0" Text="{Binding SymbolDay}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding SymbolNight}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Wyczyść zaznaczenie" Click="OnClearSelection"/>
+            <Button Content="Zapisz" Click="OnSave"/>
+            <Button Content="Zapisz i zamknij" Click="OnSaveAndClose"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
+
+----- END -----
+
+===== FILE: GrafikoMat\MainWindow.xaml.cs (14913 bytes)
+----- BEGIN -----
+using GrafikoMat.Common;
+using GrafikoMat.Models;
+using GrafikoMat.ViewModels;
+using GrafikoMat.Views;
+using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
+using System;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using System.Windows.Input;
+using Windows.Graphics;
+using Windows.UI;
+using WinRT.Interop;
+
+namespace GrafikoMat
+{
+    public sealed partial class MainWindow : Window
+    {
+        private const int MIN_W = 1600;
+        private const int MIN_H = 900;
+
+        private AppWindow? _appWindow;
+
+        public MainViewModel ViewModel { get; }
+        public ObservableCollection<UiAction> Actions { get; } = new();
+
+        private readonly DashboardView _dashboardView = new();
+        private readonly DeclarationsView _declarationsView = new();
+
+        private bool _isAnimating;
+
+        public MainWindow()
+        {
+            ViewModel = new MainViewModel();
+            InitializeComponent();
+
+            this.ExtendsContentIntoTitleBar = true;
+            this.SetTitleBar(TopBarRow);
+
+            InitAppWindow();
+            SetupBackdrop();
+            EnforceMinSize();
+
+            _dashboardView.Attach(ViewModel);
+            ViewportCurrent.Content = _dashboardView;
+            BuildActionsForDashboard();
+
+            _declarationsView.SaveRequested += OnDeclSave;
+            _declarationsView.SaveAndCloseRequested += OnDeclSaveAndClose;
+            _declarationsView.CloseRequested += OnDeclCloseOnly;
+
+            this.SizeChanged += (_, __) => { SetupBackdrop(); EnforceMinSize(); };
+            this.Activated += (_, __) => SetupBackdrop();
+        }
+
+        private void InitAppWindow()
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+            _appWindow = AppWindow.GetFromWindowId(windowId);
+
+            if (_appWindow is not null)
+            {
+                _appWindow.Title = string.Empty;
+                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
+                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
+            }
+        }
+
+        private void SetupBackdrop()
+        {
+            bool isMaximized = IsWindowMaximized();
+            if (!isMaximized)
+            {
+                try
+                {
+                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
+                    SystemBackdrop = new DesktopAcrylicBackdrop();
+                }
+                catch
+                {
+                    SystemBackdrop = new MicaBackdrop();
+                }
+            }
+            else
+            {
+                SystemBackdrop = null;
+                RootGrid.Background = GetLightFallbackBrush();
+            }
+        }
+
+        private Brush GetLightFallbackBrush()
+        {
+            if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b)
+                return b;
+            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
+        }
+
+        [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hWnd);
+        private bool IsWindowMaximized()
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            return IsZoomed(hwnd);
+        }
+
+        private void EnforceMinSize()
+        {
+            if (_appWindow is null) return;
+            var size = _appWindow.Size;
+            int nw = size.Width < MIN_W ? MIN_W : size.Width;
+            int nh = size.Height < MIN_H ? MIN_H : size.Height;
+            if (nw != size.Width || nh != size.Height)
+                _appWindow.Resize(new SizeInt32(nw, nh));
+        }
+
+        private void BuildActionsForDashboard()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings())));
+            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations())));
+            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManage())));
+            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder())));
+            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder())));
+        }
+
+        private void BuildActionsForDeclarations()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave())));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose())));
+        }
+
+        private void BuildActionsForSettings()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Zapisz ustawienia", new RelayCommand(_ => SaveSettingsPlaceholder())));
+        }
+
+        private void BuildActionsForManage()
+        {
+            Actions.Clear();
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => AddDoctorPlaceholder())));
+        }
+
+        private async void SwitchToDashboard()
+        {
+            _dashboardView.Attach(ViewModel);
+            await AnimateToAsync(_dashboardView, forward: false);
+            BuildActionsForDashboard();
+        }
+
+        private async void SwitchToDeclarations()
+        {
+            var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
+            _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, selectedDoctorIndex: 0);
+            await AnimateToAsync(_declarationsView, forward: true);
+            BuildActionsForDeclarations();
+        }
+
+        private async void SwitchToSettings()
+        {
+            var v = new TextBlock { Text = "Ustawienia (w przygotowaniu)", Margin = new Thickness(12) };
+            await AnimateToAsync(v, forward: true);
+            BuildActionsForSettings();
+        }
+
+        private async void SwitchToManage()
+        {
+            var v = new TextBlock { Text = "Zarządzanie dyżurnymi (w przygotowaniu)", Margin = new Thickness(12) };
+            await AnimateToAsync(v, forward: true);
+            BuildActionsForManage();
+        }
+
+        private static void DetachFromParent(FrameworkElement el)
+        {
+            if (el.Parent is ContentControl cc) cc.Content = null;
+            else if (el.Parent is Border b) b.Child = null;
+            else if (el.Parent is Panel p) p.Children.Remove(el);
+        }
+
+        // znajdź element nagłówka w widoku (szuka x:Name="ViewHeader")
+        private static FrameworkElement? TryGetHeader(object? content)
+        {
+            if (content is FrameworkElement fe)
+            {
+                var header = fe.FindName("ViewHeader") as FrameworkElement;
+                return header;
+            }
+            return null;
+        }
+
+        // Animacja: current: slide -64 / fade-out; next: slide +64->0 / fade-in
+        // Paralaksa: header porusza się o 50% dystansu treści
+        private async Task AnimateToAsync(FrameworkElement nextView, bool forward)
+        {
+            if (ReferenceEquals(ViewportCurrent.Content, nextView))
+                return;
+
+            if (_isAnimating)
+            {
+                DetachFromParent(nextView);
+                ViewportNext.Content = null;
+                ViewportCurrent.Content = nextView;
+                return;
+            }
+
+            _isAnimating = true;
+
+            var curPresenter = ViewportCurrent;
+            var nxtPresenter = ViewportNext;
+
+            // Odczep nowy widok od starego rodzica
+            DetachFromParent(nextView);
+
+            // Transformacje prezenterów
+            var curTransform = (curPresenter.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+            var nxtTransform = (nxtPresenter.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+            curPresenter.RenderTransform = curTransform;
+            nxtPresenter.RenderTransform = nxtTransform;
+
+            // Paralaksa: nagłówki
+            var curHeader = TryGetHeader(curPresenter.Content);
+            var nxtHeader = TryGetHeader(nextView);
+
+            TranslateTransform? curHeaderTransform = null;
+            TranslateTransform? nxtHeaderTransform = null;
+
+            if (curHeader != null)
+            {
+                curHeaderTransform = (curHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                curHeader.RenderTransform = curHeaderTransform;
+            }
+            if (nxtHeader != null)
+            {
+                nxtHeaderTransform = (nxtHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                nxtHeader.RenderTransform = nxtHeaderTransform;
+            }
+
+            // Stany początkowe
+            double offset = 64;
+            double fromNext = forward ? +offset : -offset;
+            double toCur = forward ? -offset : +offset;
+
+            nxtTransform.X = fromNext;
+            nxtPresenter.Opacity = 0;
+            curTransform.X = 0;
+            curPresenter.Opacity = 1;
+
+            if (nxtHeaderTransform != null) nxtHeaderTransform.X = fromNext * 0.5;
+            if (curHeaderTransform != null) curHeaderTransform.X = 0;
+
+            // Wstaw nowy widok do "next"
+            nxtPresenter.Content = nextView;
+
+            // Storyboard
+            var sb = new Storyboard();
+            var dur = TimeSpan.FromMilliseconds(280);
+
+            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
+            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            // current: X 0 -> toCur, Opacity 1 -> 0
+            var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
+            Storyboard.SetTarget(curX, curPresenter);
+            Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sb.Children.Add(curX);
+
+            var curOp = new DoubleAnimation { From = 1, To = 0, Duration = dur, EasingFunction = easeIn };
+            Storyboard.SetTarget(curOp, curPresenter);
+            Storyboard.SetTargetProperty(curOp, "Opacity");
+            sb.Children.Add(curOp);
+
+            // next: X fromNext -> 0, Opacity 0 -> 1
+            var nxtX = new DoubleAnimation { From = fromNext, To = 0, Duration = dur, EasingFunction = easeOut };
+            Storyboard.SetTarget(nxtX, nxtPresenter);
+            Storyboard.SetTargetProperty(nxtX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sb.Children.Add(nxtX);
+
+            var nxtOp = new DoubleAnimation { From = 0, To = 1, Duration = dur, EasingFunction = easeOut };
+            Storyboard.SetTarget(nxtOp, nxtPresenter);
+            Storyboard.SetTargetProperty(nxtOp, "Opacity");
+            sb.Children.Add(nxtOp);
+
+            // PARALAKSA: header bieżącego widoku
+            if (curHeaderTransform != null)
+            {
+                var curHX = new DoubleAnimation { From = 0, To = toCur * 0.5, Duration = dur, EasingFunction = easeIn };
+                Storyboard.SetTarget(curHX, curHeader);
+                Storyboard.SetTargetProperty(curHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                sb.Children.Add(curHX);
+            }
+
+            // PARALAKSA: header nowego widoku
+            if (nxtHeaderTransform != null)
+            {
+                var nxtHX = new DoubleAnimation { From = fromNext * 0.5, To = 0, Duration = dur, EasingFunction = easeOut };
+                Storyboard.SetTarget(nxtHX, nxtHeader);
+                Storyboard.SetTargetProperty(nxtHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                sb.Children.Add(nxtHX);
+            }
+
+            var tcs = new TaskCompletionSource<bool>();
+            sb.Completed += (_, __) => tcs.TrySetResult(true);
+            sb.Begin();
+
+            await tcs.Task;
+
+            // Sprzątanie
+            ViewportNext.Content = null;
+            ViewportCurrent.Content = nextView;
+
+            curTransform.X = 0;
+            nxtTransform.X = 0;
+            curPresenter.Opacity = 1;
+            nxtPresenter.Opacity = 0;
+
+            if (curHeaderTransform != null) curHeaderTransform.X = 0;
+            if (nxtHeaderTransform != null) nxtHeaderTransform.X = 0;
+
+            _isAnimating = false;
+        }
+
+        private void OnDeclSave(DoctorMonthDeclaration dm)
+        {
+            if (!string.IsNullOrWhiteSpace(dm.Doctor))
+                ViewModel.ApplyDoctorMonth(dm);
+        }
+
+        private void OnDeclSaveAndClose(DoctorMonthDeclaration dm)
+        {
+            OnDeclSave(dm);
+            SwitchToDashboard();
+        }
+
+        private void OnDeclCloseOnly() => SwitchToDashboard();
+
+        private async void GenerateRosterPlaceholder()
+            => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
+
+        private async void ExportPlaceholder()
+            => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
+
+        private async void SaveSettingsPlaceholder()
+            => await ShowInfo("Ustawienia", "Zapis ustawień (tryb 12h/24h, motyw, itp.) – w przygotowaniu.");
+
+        private async void AddDoctorPlaceholder()
+            => await ShowInfo("Dodaj dyżurnego", "Formularz dodania/edycji dyżurnego – w przygotowaniu.");
+
+        private async Task ShowInfo(string title, string message)
+        {
+            var dlg = new ContentDialog
+            {
+                Title = title,
+                Content = message,
+                PrimaryButtonText = "OK",
+                XamlRoot = RootGrid.XamlRoot
+            };
+            await dlg.ShowAsync();
+        }
+    }
+
+    public sealed class UiAction
+    {
+        public string Label { get; }
+        public ICommand Command { get; }
+        public UiAction(string label, ICommand command) { Label = label; Command = command; }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Models\DeclarationsDto.cs (695 bytes)
+----- BEGIN -----
+namespace GrafikoMat.Models
+{
+    public enum DayMode { Full24, Split12 }
+
+    public sealed class DayDeclaration
+    {
+        public DayMode Mode { get; set; } = DayMode.Full24;
+        public string? Full { get; set; }      // dla 24h
+        public string? Day { get; set; }       // dla 12h – dzień
+        public string? Night { get; set; }     // dla 12h – noc
+    }
+
+    public sealed class DoctorMonthDeclaration
+    {
+        public string Doctor { get; set; } = "";
+        public int Year { get; set; }
+        public int MonthIndex { get; set; } // 0..11
+        public DayDeclaration[] Days { get; set; } = System.Array.Empty<DayDeclaration>();
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Properties\launchSettings.json (174 bytes)
+----- BEGIN -----
+{
+  "profiles": {
+    "GrafikoMat (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "GrafikoMat (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (10445 bytes)
+----- BEGIN -----
+using GrafikoMat.Models;
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using Windows.UI;
+
+namespace GrafikoMat.ViewModels
+{
+    public sealed class DeclarationsViewModel : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
+        // Parametry miesiąca
+        public int Year { get; }
+        public int MonthIndex { get; } // 0..11
+        public string MonthHeader => $"{PolishMonth(MonthIndex)} {Year}";
+
+        // Lekarze
+        public ObservableCollection<DoctorMini> Doctors { get; } = new();
+
+        // UWAGA: -1 oznacza „brak wyboru” (gdy lista lekarzy pusta)
+        private int _selectedDoctorIndex = -1;
+        public DoctorMini? SelectedDoctor
+        {
+            get => (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ? Doctors[_selectedDoctorIndex] : null;
+            set
+            {
+                if (value == null) { _selectedDoctorIndex = -1; }
+                else
+                {
+                    int idx = Doctors.IndexOf(value);
+                    _selectedDoctorIndex = idx >= 0 ? idx : -1;
+                }
+                Raise();
+            }
+        }
+
+        public int DutyLimit { get; set; } = 0;
+
+        // Siatka dni (6x7) – 42 komórki
+        public ObservableCollection<DayCell> DayCells { get; } = new();
+
+        // Zaznaczenie
+        public HashSet<int> SelectedIndices { get; } = new();
+
+        public DeclarationsViewModel(int year, int monthIndex, string[] doctorNames, int selectedDoctorIndex)
+        {
+            Year = year; MonthIndex = monthIndex;
+
+            if (doctorNames != null)
+                foreach (var name in doctorNames)
+                    Doctors.Add(new DoctorMini(name));
+
+            // Jeśli nie ma lekarzy – brak wyboru; w przeciwnym razie zaclampuj bezpiecznie.
+            _selectedDoctorIndex = Doctors.Count == 0
+                ? -1
+                : Math.Clamp(selectedDoctorIndex, 0, Doctors.Count - 1);
+
+            BuildCalendar();
+        }
+
+        public void SelectPrevDoctor()
+        {
+            if (Doctors.Count == 0) return;
+            if (_selectedDoctorIndex < 0) _selectedDoctorIndex = 0;
+            else _selectedDoctorIndex = (_selectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
+            Raise(nameof(SelectedDoctor));
+        }
+
+        public void SelectNextDoctor()
+        {
+            if (Doctors.Count == 0) return;
+            if (_selectedDoctorIndex < 0) _selectedDoctorIndex = 0;
+            else _selectedDoctorIndex = (_selectedDoctorIndex + 1) % Doctors.Count;
+            Raise(nameof(SelectedDoctor));
+        }
+
+        private void BuildCalendar()
+        {
+            DayCells.Clear();
+            var first = new DateTime(Year, MonthIndex + 1, 1);
+            int offset = ((int)first.DayOfWeek + 6) % 7; // Pon=0 ... Nd=6
+            var start = first.AddDays(-offset);
+
+            for (int i = 0; i < 42; i++)
+            {
+                var date = start.AddDays(i);
+                bool inMonth = (date.Month == MonthIndex + 1);
+                var cell = new DayCell(i, date, inMonth);
+                DayCells.Add(cell);
+            }
+        }
+
+        // ===== Zaznaczenie =====
+        public void SelectSingle(int index)
+        {
+            SelectedIndices.Clear();
+            if (index >= 0 && index < DayCells.Count) SelectedIndices.Add(index);
+            UpdateSelectionVisuals();
+        }
+
+        public void SelectRange(int a, int b)
+        {
+            SelectedIndices.Clear();
+            int start = Math.Min(a, b);
+            int end = Math.Max(a, b);
+            for (int i = start; i <= end; i++) SelectedIndices.Add(i);
+            UpdateSelectionVisuals();
+        }
+
+        public void ClearSelection()
+        {
+            SelectedIndices.Clear();
+            UpdateSelectionVisuals();
+        }
+
+        private void UpdateSelectionVisuals()
+        {
+            foreach (var c in DayCells)
+                c.SetSelected(SelectedIndices.Contains(c.Index));
+        }
+
+        // ===== Deklaracje =====
+        public void ApplySymbolToSelection(char sym)
+        {
+            foreach (var i in SelectedIndices)
+            {
+                var c = DayCells[i];
+                if (!c.InMonth) continue;
+
+                if (!c.IsSplit)
+                {
+                    c.SymbolFull = sym == '-' ? "" : sym.ToString();
+                }
+                else
+                {
+                    c.SymbolDay = sym == '-' ? "" : sym.ToString();
+                    c.SymbolNight = sym == '-' ? "" : sym.ToString();
+                }
+            }
+        }
+
+        public void ToggleSplitForSelectedDays()
+        {
+            foreach (var i in SelectedIndices)
+            {
+                var c = DayCells[i];
+                if (!c.InMonth) continue;
+                c.IsSplit = !c.IsSplit;
+
+                if (!c.IsSplit)
+                {
+                    c.SymbolFull = string.IsNullOrEmpty(c.SymbolDay) ? c.SymbolNight : c.SymbolDay;
+                    c.SymbolDay = c.SymbolNight = "";
+                }
+            }
+        }
+
+        public void ClearSelectionSymbols()
+        {
+            foreach (var i in SelectedIndices)
+            {
+                var c = DayCells[i];
+                c.SymbolFull = c.SymbolDay = c.SymbolNight = "";
+            }
+        }
+
+        public void EditCoDutyPlaceholder()
+        {
+            // Do wpięcia później (ContentDialog z listą lekarzy)
+        }
+
+        public void SaveDraft()
+        {
+            // Miejsce na walidację/auto-korektę przed serializacją do Core
+        }
+
+        public DoctorMonthDeclaration ToResult()
+        {
+            int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+            var res = new DoctorMonthDeclaration
+            {
+                Doctor = SelectedDoctor?.Name ?? string.Empty, // przy braku lekarzy zwróci pustą nazwę
+                Year = Year,
+                MonthIndex = MonthIndex,
+                Days = new DayDeclaration[daysInMonth]
+            };
+
+            for (int i = 0; i < daysInMonth; i++)
+                res.Days[i] = new DayDeclaration();
+
+            foreach (var cell in DayCells)
+            {
+                if (!cell.InMonth) continue;
+                int di = cell.Date.Day - 1;
+
+                if (!cell.IsSplit)
+                {
+                    res.Days[di].Mode = DayMode.Full24;
+                    res.Days[di].Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
+                }
+                else
+                {
+                    res.Days[di].Mode = DayMode.Split12;
+                    res.Days[di].Day = string.IsNullOrWhiteSpace(cell.SymbolDay) ? null : cell.SymbolDay;
+                    res.Days[di].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
+                }
+            }
+            return res;
+        }
+
+        private static string PolishMonth(int idx) => new[]
+        {
+            "Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+            "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"
+        }[idx % 12];
+    }
+
+    public sealed class DoctorMini { public string Name { get; } public DoctorMini(string name) => Name = name; }
+
+    public sealed class DayCell : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise([CallerMemberName] string? n = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
+        public int Index { get; }
+        public DateTime Date { get; }
+        public bool InMonth { get; }
+
+        public string DayNumber => Date.Day.ToString("00");
+        public double HeaderOpacity => InMonth ? 1.0 : 0.4;
+
+        // Tryb 24h / 12+12
+        private bool _isSplit;
+        public bool IsSplit
+        {
+            get => _isSplit;
+            set { if (_isSplit != value) { _isSplit = value; Raise(); Raise(nameof(Full24Visibility)); Raise(nameof(Split12Visibility)); } }
+        }
+        public Visibility Full24Visibility => IsSplit ? Visibility.Collapsed : Visibility.Visible;
+        public Visibility Split12Visibility => IsSplit ? Visibility.Visible : Visibility.Collapsed;
+
+        // Symbole
+        private string _symbolFull = "";
+        public string SymbolFull { get => _symbolFull; set { _symbolFull = value; Raise(); } }
+        private string _symbolDay = "";
+        public string SymbolDay { get => _symbolDay; set { _symbolDay = value; Raise(); } }
+        private string _symbolNight = "";
+        public string SymbolNight { get => _symbolNight; set { _symbolNight = value; Raise(); } }
+
+        // Wizualka zaznaczenia
+        private bool _selected;
+        public void SetSelected(bool sel)
+        {
+            _selected = sel;
+            Raise(nameof(BorderBrush)); Raise(nameof(BorderThickness)); Raise(nameof(Background)); Raise(nameof(SplitDividerBrush));
+        }
+
+        public Brush BorderBrush => _selected ? new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF))
+                                              : new SolidColorBrush(Color.FromArgb(0x30, 0x00, 0x00, 0x00));
+        public Thickness BorderThickness => _selected ? new Thickness(2) : new Thickness(1);
+        public Brush Background
+            => InMonth ? (_selected ? new SolidColorBrush(Color.FromArgb(0x12, 0x33, 0x99, 0xFF))
+                                    : new SolidColorBrush(Colors.Transparent))
+                       : new SolidColorBrush(Color.FromArgb(0x0E, 0x00, 0x00, 0x00));
+        public Brush SplitDividerBrush => new SolidColorBrush(Color.FromArgb(0x50, 0x00, 0x00, 0x00));
+
+        public DayCell(int index, DateTime date, bool inMonth)
+        {
+            Index = index; Date = date; InMonth = inMonth;
+        }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (5816 bytes)
+----- BEGIN -----
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using GrafikoMat.Models;
+
+namespace GrafikoMat.ViewModels
+{
+    public class MainViewModel : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // Jednostka
+        private string _unitName = "Jednostka: (ustaw w Ustawieniach)";
+        public string UnitName
+        {
+            get => _unitName;
+            set { if (_unitName != value) { _unitName = value; OnPropertyChanged(); } }
+        }
+
+        // Lata / miesiące
+        public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
+
+        private int _selectedYear = 2025;
+        public int SelectedYear
+        {
+            get => _selectedYear;
+            set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); } }
+        }
+
+        public string[] Months { get; } = new[]
+        {
+            "Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+            "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"
+        };
+
+        private int _selectedMonthIndex = 0; // 0=Styczeń
+        public int SelectedMonthIndex
+        {
+            get => _selectedMonthIndex;
+            set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); } }
+        }
+
+        // Dane do lewej/prawej tabeli (placeholder)
+        public ObservableCollection<DoctorRow> DoctorRows { get; } = new();
+        public ObservableCollection<RosterRow> RosterRows { get; } = new();
+
+        // Stopka
+        private string _engineName = "Silnik: Klasyczny";
+        public string EngineName
+        {
+            get => _engineName;
+            set { if (_engineName != value) { _engineName = value; OnPropertyChanged(); } }
+        }
+
+        private string _priorityOrder = "Priorytety: Dostępność > Sprawiedliwość > Preferencje";
+        public string PriorityOrder
+        {
+            get => _priorityOrder;
+            set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } }
+        }
+
+        // Deklaracje (tymczasowy magazyn UI)
+        private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
+        private static string Key(string doctor, int year, int monthIndex)
+            => $"{doctor}|{year:D4}-{monthIndex:D2}";
+
+        public MainViewModel()
+        {
+            // Demo – kilka wierszy
+            DoctorRows.Add(new DoctorRow("Kowalski Jan", false));
+            DoctorRows.Add(new DoctorRow("Nowak Anna", true));
+            DoctorRows.Add(new DoctorRow("Wiśniewski Piotr", true));
+            DoctorRows.Add(new DoctorRow("Zielińska Maria", false));
+
+            RosterRows.Add(new RosterRow("01 (Pon)", "—"));
+            RosterRows.Add(new RosterRow("02 (Wto)", "—"));
+            RosterRows.Add(new RosterRow("03 (Śro)", "—"));
+        }
+
+        public void PrevYear() => SelectedYear -= 1;
+        public void NextYear() => SelectedYear += 1;
+
+        public void PrevMonth()
+        {
+            if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); }
+            else SelectedMonthIndex -= 1;
+        }
+
+        public void NextMonth()
+        {
+            if (SelectedMonthIndex == 11) { SelectedMonthIndex = 0; NextYear(); }
+            else SelectedMonthIndex += 1;
+        }
+
+        private void EnsureYearInList(int year)
+        {
+            if (!Years.Contains(year))
+            {
+                int i = 0; while (i < Years.Count && Years[i] < year) i++;
+                Years.Insert(i, year);
+            }
+        }
+
+        // Zastosuj wynik z okna „Deklaracje…”
+        public void ApplyDoctorMonth(DoctorMonthDeclaration dm)
+        {
+            _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm;
+
+            var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor);
+            if (row != null) row.HasDeclarations = true;
+
+            OnPropertyChanged(nameof(_declByKey)); // sygnał do rebuildu
+        }
+
+        // Pobierz wpis do renderu
+        public (bool has, DayMode mode, string? full, string? day, string? night)
+            TryGetEntry(string doctor, int year, int monthIndex, int dayIndex)
+        {
+            if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) &&
+                dayIndex >= 0 && dayIndex < dm.Days.Length)
+            {
+                var d = dm.Days[dayIndex];
+                return (true, d.Mode, d.Full, d.Day, d.Night);
+            }
+            return (false, DayMode.Full24, null, null, null);
+        }
+    }
+
+    public class DoctorRow : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
+        public string Name { get; }
+        private bool _has;
+        public bool HasDeclarations { get => _has; set { if (_has != value) { _has = value; Raise(nameof(HasDeclarations)); } } }
+
+        public DoctorRow(string name, bool hasDeclarations) { Name = name; _has = hasDeclarations; }
+    }
+
+    public class RosterRow
+    {
+        public string DateLabel { get; }
+        public string DutyLabel { get; }
+        public RosterRow(string dateLabel, string dutyLabel) { DateLabel = dateLabel; DutyLabel = dutyLabel; }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Views\DashboardView.xaml (2712 bytes)
+----- BEGIN -----
+<UserControl
+    x:Class="GrafikoMat.Views.DashboardView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
+    mc:Ignorable="d">
+
+	<Grid RowDefinitions="Auto,*" Padding="12">
+		<!-- Pasek: ROK / MIESIĄC -->
+		<Grid Grid.Row="0" ColumnSpacing="8"
+              ColumnDefinitions="Auto,Auto,Auto,Auto, 24, Auto,Auto,Auto,Auto"
+              VerticalAlignment="Center">
+			<TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
+			<Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnYearPrev"/>
+			<ComboBox Grid.Column="2" Width="110"
+                      ItemsSource="{Binding Years}" SelectedItem="{Binding SelectedYear, Mode=TwoWay}"/>
+			<Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnYearNext"/>
+
+			<TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
+			<Button   Grid.Column="6" Content="⟨" Width="32" Height="32" Click="OnMonthPrev"/>
+			<ComboBox Grid.Column="7" Width="180"
+                      ItemsSource="{Binding Months}" SelectedIndex="{Binding SelectedMonthIndex, Mode=TwoWay}"/>
+			<Button   Grid.Column="8" Content="⟩" Width="32" Height="32" Click="OnMonthNext"/>
+		</Grid>
+
+		<!-- Treść: lewa 3/4 (tabela), prawa 1/4 (grafik) -->
+		<Grid Grid.Row="1" ColumnDefinitions="3*,*" ColumnSpacing="12" Padding="0,8,0,0">
+			<Grid RowDefinitions="Auto,*">
+				<TextBlock Text="Deklaracje dyżurowe" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+					<Grid x:Name="LeftTableHost"/>
+				</Border>
+			</Grid>
+
+			<Grid Grid.Column="1" RowDefinitions="Auto,*">
+				<TextBlock Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+					<ScrollViewer>
+						<ListView ItemsSource="{Binding RosterRows}" SelectionMode="None" Padding="4">
+							<ListView.ItemTemplate>
+								<DataTemplate x:DataType="vm:RosterRow">
+									<Grid ColumnDefinitions="2*,3*" Padding="4,2">
+										<TextBlock Text="{x:Bind DateLabel}"/>
+										<TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"/>
+									</Grid>
+								</DataTemplate>
+							</ListView.ItemTemplate>
+						</ListView>
+					</ScrollViewer>
+				</Border>
+			</Grid>
+		</Grid>
+	</Grid>
+</UserControl>
+
+----- END -----
+
+===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (9130 bytes)
+----- BEGIN -----
+using System;
+using System.ComponentModel;
+using GrafikoMat.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
+using Windows.UI;
+
+namespace GrafikoMat.Views
+{
+    public sealed partial class DashboardView : UserControl
+    {
+        private const int NameColWidth = 220;
+        private const int DayColWidth = 40;
+        private const int RowHeight = 32;
+
+        private Grid? _leftGrid;
+        private MainViewModel? _vm;
+
+        public DashboardView()
+        {
+            InitializeComponent();
+            LeftTableHost.SizeChanged += (_, __) => ApplyLeftTableScale();
+        }
+
+        public void Attach(MainViewModel vm)
+        {
+            if (_vm != null)
+                _vm.PropertyChanged -= OnVmPropertyChanged;
+
+            _vm = vm;
+            this.DataContext = vm;
+            _vm.PropertyChanged += OnVmPropertyChanged;
+
+            BuildLeftTable();
+        }
+
+        private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.SelectedYear) ||
+                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex))
+            {
+                BuildLeftTable();
+            }
+        }
+
+        private void OnYearPrev(object sender, RoutedEventArgs e) => _vm?.PrevYear();
+        private void OnYearNext(object sender, RoutedEventArgs e) => _vm?.NextYear();
+        private void OnMonthPrev(object sender, RoutedEventArgs e) => _vm?.PrevMonth();
+        private void OnMonthNext(object sender, RoutedEventArgs e) => _vm?.NextMonth();
+
+        private void BuildLeftTable()
+        {
+            if (_vm is null) return;
+            LeftTableHost.Children.Clear();
+
+            int year = _vm.SelectedYear;
+            int monthIndex = _vm.SelectedMonthIndex;
+            int month = monthIndex + 1;
+            int daysInMonth = DateTime.DaysInMonth(year, month);
+            int rowsCount = _vm.DoctorRows.Count + 1;
+
+            var grid = new Grid();
+            _leftGrid = grid;
+
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NameColWidth) });
+            for (int d = 1; d <= daysInMonth; d++)
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DayColWidth) });
+
+            for (int r = 0; r < rowsCount; r++)
+                grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
+
+            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x00, 0x00));
+            var weekendFill = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
+
+            var hdrName = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
+            Grid.SetRow(hdrName, 0); Grid.SetColumn(hdrName, 0);
+            hdrName.Child = new TextBlock { Text = "Dyżurny", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
+            grid.Children.Add(hdrName);
+
+            for (int d = 1; d <= daysInMonth; d++)
+            {
+                var date = new DateTime(year, month, d);
+                bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+                var cell = new Border
+                {
+                    BorderBrush = borderBrush,
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    Background = weekend ? weekendFill : null
+                };
+                Grid.SetRow(cell, 0); Grid.SetColumn(cell, d);
+                cell.Child = new TextBlock
+                {
+                    Text = $"{d:00}\n{DowPl(date.DayOfWeek)}",
+                    TextAlignment = TextAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    LineHeight = 14,
+                    Padding = new Thickness(0, 4, 0, 0)
+                };
+                grid.Children.Add(cell);
+            }
+
+            for (int r = 0; r < _vm.DoctorRows.Count; r++)
+            {
+                var doctor = _vm.DoctorRows[r];
+                int row = r + 1;
+
+                var nameCell = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
+                Grid.SetRow(nameCell, row); Grid.SetColumn(nameCell, 0);
+                nameCell.Child = new TextBlock
+                {
+                    Text = doctor.Name,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(8, 0, 8, 0),
+                    Opacity = doctor.HasDeclarations ? 1.0 : 0.6
+                };
+                grid.Children.Add(nameCell);
+
+                for (int d = 1; d <= daysInMonth; d++)
+                {
+                    var date = new DateTime(year, month, d);
+                    bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+
+                    var cell = new Border
+                    {
+                        BorderBrush = borderBrush,
+                        BorderThickness = new Thickness(0, 0, 1, 1),
+                        Background = weekend ? weekendFill : null
+                    };
+                    Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
+
+                    var entry = _vm.TryGetEntry(doctor.Name, year, monthIndex, d - 1);
+                    FrameworkElement content;
+
+                    if (!entry.has ||
+                        (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) ||
+                        (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
+                    {
+                        content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                    }
+                    else if (entry.mode == Models.DayMode.Full24)
+                    {
+                        content = new TextBlock { Text = entry.full, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
+                    }
+                    else
+                    {
+                        var g = new Grid();
+                        g.RowDefinitions.Add(new RowDefinition());
+                        g.RowDefinitions.Add(new RowDefinition());
+                        g.Children.Add(new Border
+                        {
+                            BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0x00, 0x00, 0x00)),
+                            BorderThickness = new Thickness(0, 0, 0, 1),
+                            VerticalAlignment = VerticalAlignment.Center
+                        });
+                        var tb1 = new TextBlock { Text = entry.day, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
+                        var tb2 = new TextBlock { Text = entry.night, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
+                        Grid.SetRow(tb1, 0); Grid.SetRow(tb2, 1);
+                        g.Children.Add(tb1); g.Children.Add(tb2);
+                        content = g;
+                    }
+
+                    cell.Child = content;
+                    grid.Children.Add(cell);
+                }
+            }
+
+            LeftTableHost.Children.Add(grid);
+            ApplyLeftTableScale();
+        }
+
+        private void ApplyLeftTableScale()
+        {
+            if (_vm is null || _leftGrid is null) return;
+
+            int year = _vm.SelectedYear;
+            int month = _vm.SelectedMonthIndex + 1;
+            int days = DateTime.DaysInMonth(year, month);
+            int rowsCount = _vm.DoctorRows.Count + 1;
+
+            double requiredW = NameColWidth + days * DayColWidth;
+            double requiredH = rowsCount * RowHeight;
+
+            double availW = Math.Max(0, LeftTableHost.ActualWidth);
+            double availH = Math.Max(0, LeftTableHost.ActualHeight);
+
+            double scaleX = availW > 0 ? Math.Min(1.0, availW / requiredW) : 1.0;
+            double scaleY = availH > 0 ? Math.Min(1.0, availH / requiredH) : 1.0;
+            double scale = Math.Min(scaleX, scaleY);
+
+            _leftGrid.RenderTransform = new ScaleTransform { ScaleX = scale, ScaleY = scale };
+            _leftGrid.RenderTransformOrigin = new Point(0, 0);
+        }
+
+        private static string DowPl(DayOfWeek dow) => dow switch
+        {
+            DayOfWeek.Monday => "Pon",
+            DayOfWeek.Tuesday => "Wto",
+            DayOfWeek.Wednesday => "Śro",
+            DayOfWeek.Thursday => "Czw",
+            DayOfWeek.Friday => "Pią",
+            DayOfWeek.Saturday => "Sob",
+            DayOfWeek.Sunday => "Nie",
+            _ => ""
+        };
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (6340 bytes)
+----- BEGIN -----
+<UserControl
+    x:Class="GrafikoMat.Views.DeclarationsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="12">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="Deklaracje dyżurowe" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="✕" Width="36" Height="32" Click="OnCloseRequested"/>
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Margin="0,8,0,12">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Lekarz:" VerticalAlignment="Center"/>
+                <Button Content="⟨" Width="32" Height="32" Click="OnPrevDoctor"/>
+                <ComboBox Width="280"
+                          ItemsSource="{Binding Doctors}"
+                          SelectedItem="{Binding SelectedDoctor, Mode=TwoWay}"
+                          DisplayMemberPath="Name"/>
+                <Button Content="⟩" Width="32" Height="32" Click="OnNextDoctor"/>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="{Binding MonthHeader}" VerticalAlignment="Center" Opacity="0.8"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Limit:" VerticalAlignment="Center"/>
+                <NumberBox Width="90" Minimum="0" Maximum="60" Value="{Binding DutyLimit, Mode=TwoWay}"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" Padding="2,6">
+                <TextBlock Text="Pn" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="Wt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="2" Text="Śr" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="Cz" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="Pt" HorizontalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="So" HorizontalAlignment="Center" Opacity="0.7"/>
+                <TextBlock Grid.Column="6" Text="Nd" HorizontalAlignment="Center" Opacity="0.7"/>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding DayCells}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="6"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="150" Height="90" Margin="3" CornerRadius="6"
+                                    BorderThickness="{Binding BorderThickness}"
+                                    BorderBrush="{Binding BorderBrush}"
+                                    Background="{Binding Background}">
+                                <Grid RightTapped="OnCellRightTapped"
+                                      Tapped="OnCellTapped"
+                                      PointerPressed="OnCellPointerPressed"
+                                      PointerReleased="OnCellPointerReleased">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="{Binding DayNumber}"
+                                               Margin="8,6,8,4"
+                                               Opacity="{Binding HeaderOpacity}"
+                                               FontWeight="SemiBold"/>
+
+                                    <Grid Grid.Row="1">
+                                        <Grid Visibility="{Binding Full24Visibility}">
+                                            <TextBlock Text="{Binding SymbolFull}" FontSize="22"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <Grid Visibility="{Binding Split12Visibility}" RowDefinitions="*,*">
+                                            <Border BorderBrush="{Binding SplitDividerBrush}" BorderThickness="0,0,0,1" Opacity="0.5"/>
+                                            <TextBlock Grid.Row="0" Text="{Binding SymbolDay}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding SymbolNight}" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Wyczyść zaznaczenie" Click="OnClearSelection"/>
+            <Button Content="Zapisz" Click="OnSave"/>
+            <Button Content="Zapisz i zamknij" Click="OnSaveAndClose"/>
+        </StackPanel>
+    </Grid>
+</UserControl>
+
+----- END -----
+
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (4989 bytes)
+----- BEGIN -----
+using GrafikoMat.Common;
+using GrafikoMat.Models;
+using GrafikoMat.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
+using System;
+
+namespace GrafikoMat.Views
+{
+    public sealed partial class DeclarationsView : UserControl
+    {
+        public DeclarationsViewModel? ViewModel { get; private set; }
+
+        public event Action? CloseRequested;
+        public event Action<DoctorMonthDeclaration>? SaveRequested;
+        public event Action<DoctorMonthDeclaration>? SaveAndCloseRequested;
+
+        public DeclarationsView()
+        {
+            InitializeComponent();
+        }
+
+        public void LoadContext(int year, int monthIndex, string[] doctorNames, int selectedDoctorIndex)
+        {
+            ViewModel = new DeclarationsViewModel(year, monthIndex, doctorNames, selectedDoctorIndex);
+            this.DataContext = ViewModel;
+        }
+
+        public void TriggerSave() { if (ViewModel != null) SaveRequested?.Invoke(ViewModel.ToResult()); }
+        public void TriggerSaveAndClose() { if (ViewModel != null) SaveAndCloseRequested?.Invoke(ViewModel.ToResult()); }
+
+        private void OnPrevDoctor(object sender, RoutedEventArgs e) => ViewModel?.SelectPrevDoctor();
+        private void OnNextDoctor(object sender, RoutedEventArgs e) => ViewModel?.SelectNextDoctor();
+
+        private bool _dragSelecting;
+        private int? _startIndex;
+
+        private void OnCellTapped(object sender, TappedRoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is DayCell cell && ViewModel != null)
+            {
+                ViewModel.SelectSingle(cell.Index);
+                _startIndex = cell.Index;
+            }
+        }
+
+        private void OnCellPointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (e.Pointer.IsInContact && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed
+                && (sender as FrameworkElement)?.DataContext is DayCell cell && ViewModel != null)
+            {
+                _dragSelecting = true;
+                _startIndex = cell.Index;
+                ViewModel.SelectSingle(cell.Index);
+            }
+        }
+
+        private void OnCellPointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (_dragSelecting && (sender as FrameworkElement)?.DataContext is DayCell cell && _startIndex is int s && ViewModel != null)
+                ViewModel.SelectRange(s, cell.Index);
+            _dragSelecting = false;
+        }
+
+        private void OnCellRightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not DayCell cell || ViewModel is null) return;
+
+            if (!ViewModel.SelectedIndices.Contains(cell.Index))
+                ViewModel.SelectSingle(cell.Index);
+
+            var menu = BuildContextMenu(cell);
+            menu.ShowAt(sender as FrameworkElement, new FlyoutShowOptions { Placement = FlyoutPlacementMode.Bottom });
+        }
+
+        private MenuFlyout BuildContextMenu(DayCell cell)
+        {
+            var menu = new MenuFlyout();
+
+            var setDecl = new MenuFlyoutSubItem { Text = "Ustaw deklarację…" };
+            foreach (var sym in new[] { '-', 'D', 'N', 'X', 'P' })
+            {
+                setDecl.Items.Add(new MenuFlyoutItem
+                {
+                    Text = sym == '-' ? "— (puste)" : sym.ToString(),
+                    Command = new RelayCommand(_ => ViewModel?.ApplySymbolToSelection(sym))
+                });
+            }
+            menu.Items.Add(setDecl);
+
+            menu.Items.Add(new MenuFlyoutSeparator());
+
+            menu.Items.Add(new MenuFlyoutItem
+            {
+                Text = cell.IsSplit ? "Scal dzień (24h)" : "Podziel na 12+12h",
+                Command = new RelayCommand(_ => ViewModel?.ToggleSplitForSelectedDays())
+            });
+
+            menu.Items.Add(new MenuFlyoutSeparator());
+
+            menu.Items.Add(new MenuFlyoutItem
+            {
+                Text = "Wyczyść",
+                Command = new RelayCommand(_ => ViewModel?.ClearSelectionSymbols())
+            });
+
+            menu.Items.Add(new MenuFlyoutItem
+            {
+                Text = "Ustaw co-dyżurnego…",
+                Command = new RelayCommand(_ => ViewModel?.EditCoDutyPlaceholder()),
+                Opacity = 0.7
+            });
+
+            return menu;
+        }
+
+        private void OnClearSelection(object sender, RoutedEventArgs e) => ViewModel?.ClearSelection();
+        private void OnSave(object sender, RoutedEventArgs e) => TriggerSave();
+        private void OnSaveAndClose(object sender, RoutedEventArgs e) => TriggerSaveAndClose();
+        private void OnCloseRequested(object sender, RoutedEventArgs e) => CloseRequested?.Invoke();
+    }
+}
+
+----- END -----
+

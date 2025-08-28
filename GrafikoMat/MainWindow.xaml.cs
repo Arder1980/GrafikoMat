@@ -8,6 +8,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -22,8 +23,8 @@ namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window
     {
-        private const int MIN_W = 1280;
-        private const int MIN_H = 720;
+        private const int MIN_W = 1600;
+        private const int MIN_H = 900;
 
         private AppWindow? _appWindow;
 
@@ -32,6 +33,10 @@ namespace GrafikoMat
 
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
+
+        private bool _isAnimating;
+        private bool _isClosing;
+        private Storyboard? _activeStoryboard;
 
         public MainWindow()
         {
@@ -45,21 +50,20 @@ namespace GrafikoMat
             SetupBackdrop();
             EnforceMinSize();
 
-            // start: dashboard w Viewporcie
             _dashboardView.Attach(ViewModel);
-            ViewportPresenter.Content = _dashboardView;
+            ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
+            ResetViewportState(); // <-- startowo wyzeruj
 
-            // hooki z edytora deklaracji
             _declarationsView.SaveRequested += OnDeclSave;
             _declarationsView.SaveAndCloseRequested += OnDeclSaveAndClose;
             _declarationsView.CloseRequested += OnDeclCloseOnly;
 
-            this.SizeChanged += (_, __) => { SetupBackdrop(); EnforceMinSize(); };
-            this.Activated += (_, __) => SetupBackdrop();
+            this.SizeChanged += OnWindowSizeChanged;
+            this.Activated += OnWindowActivated;
+            this.Closed += OnWindowClosed;
         }
 
-        // ==== Backdrop/AppWindow ====
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
@@ -74,13 +78,36 @@ namespace GrafikoMat
             }
         }
 
+        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
+        {
+            if (_isClosing) return;
+            SetupBackdrop();
+        }
+
+        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e)
+        {
+            if (_isClosing) return;
+            SetupBackdrop();
+            EnforceMinSize();
+        }
+
         private void SetupBackdrop()
         {
+            if (_isClosing) return;
+
             bool isMaximized = IsWindowMaximized();
             if (!isMaximized)
             {
-                try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); }
-                catch { SystemBackdrop = new MicaBackdrop(); }
+                try
+                {
+                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
+                    SystemBackdrop = new DesktopAcrylicBackdrop();
+                }
+                catch
+                {
+                    SystemBackdrop = null;
+                    RootGrid.Background = GetLightFallbackBrush();
+                }
             }
             else
             {
@@ -113,7 +140,6 @@ namespace GrafikoMat
                 _appWindow.Resize(new SizeInt32(nw, nh));
         }
 
-        // ==== Pasek akcji ====
         private void BuildActionsForDashboard()
         {
             Actions.Clear();
@@ -128,6 +154,7 @@ namespace GrafikoMat
         {
             Actions.Clear();
             Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(_ => _declarationsView.TriggerClearSelection())));
             Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave())));
             Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose())));
         }
@@ -146,35 +173,243 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => AddDoctorPlaceholder())));
         }
 
-        // ==== Przełączanie widoków ====
-        private void SwitchToDashboard()
+        private async void SwitchToDashboard()
         {
+            if (_isClosing) return;
             _dashboardView.Attach(ViewModel);
-            ViewportPresenter.Content = _dashboardView;
+            await AnimateToAsync(_dashboardView, forward: false);
             BuildActionsForDashboard();
         }
 
-        private void SwitchToDeclarations()
+        private async void SwitchToDeclarations()
         {
+            if (_isClosing) return;
             var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
             _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, selectedDoctorIndex: 0);
-            ViewportPresenter.Content = _declarationsView;
+            await AnimateToAsync(_declarationsView, forward: true);
             BuildActionsForDeclarations();
         }
 
-        private void SwitchToSettings()
+        private async void SwitchToSettings()
         {
-            ViewportPresenter.Content = new TextBlock { Text = "Ustawienia (w przygotowaniu)", Margin = new Thickness(12) };
+            if (_isClosing) return;
+            var v = new TextBlock { Text = "Ustawienia (w przygotowaniu)", Margin = new Thickness(12) };
+            await AnimateToAsync(v, forward: true);
             BuildActionsForSettings();
         }
 
-        private void SwitchToManage()
+        private async void SwitchToManage()
         {
-            ViewportPresenter.Content = new TextBlock { Text = "Zarządzanie dyżurnymi (w przygotowaniu)", Margin = new Thickness(12) };
+            if (_isClosing) return;
+            var v = new TextBlock { Text = "Zarządzanie dyżurnymi (w przygotowaniu)", Margin = new Thickness(12) };
+            await AnimateToAsync(v, forward: true);
             BuildActionsForManage();
         }
 
-        // ==== Callbacks z DeclarationsView ====
+        private static void DetachFromParent(FrameworkElement el)
+        {
+            if (el.Parent is ContentControl cc) cc.Content = null;
+            else if (el.Parent is Border b) b.Child = null;
+            else if (el.Parent is Panel p) p.Children.Remove(el);
+        }
+
+        private static FrameworkElement? TryGetHeader(object? content)
+        {
+            if (content is FrameworkElement fe)
+                return fe.FindName("ViewHeader") as FrameworkElement;
+            return null;
+        }
+
+        // --- NOWE: reset domyślnych transformacji i opacity prezenterów + headerów
+        private void ResetViewportState()
+        {
+            var cur = ViewportCurrent;
+            var nxt = ViewportNext;
+
+            var curT = (cur.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+            var nxtT = (nxt.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+            cur.RenderTransform = curT;
+            nxt.RenderTransform = nxtT;
+
+            curT.X = 0;
+            nxtT.X = 0;
+            cur.Opacity = 1;
+            nxt.Opacity = 0;
+
+            var ch = TryGetHeader(cur.Content);
+            var nh = TryGetHeader(nxt.Content);
+
+            if (ch != null)
+            {
+                var t = (ch.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                t.X = 0;
+                ch.RenderTransform = t;
+            }
+            if (nh != null)
+            {
+                var t = (nh.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                t.X = 0;
+                nh.RenderTransform = t;
+            }
+        }
+
+        private async Task AnimateToAsync(FrameworkElement nextView, bool forward)
+        {
+            if (_isClosing) { ViewportCurrent.Content = nextView; ResetViewportState(); return; }
+            if (ReferenceEquals(ViewportCurrent.Content, nextView))
+                return;
+
+            // Jeżeli trwa animacja: przerwij i ustaw docelowy widok, ALE wyzeruj transformacje
+            if (_isAnimating)
+            {
+                DetachFromParent(nextView);
+                _activeStoryboard?.Stop();
+                _activeStoryboard = null;
+
+                ViewportNext.Content = null;
+                ViewportCurrent.Content = nextView;
+                ResetViewportState(); // <-- kluczowe
+                return;
+            }
+
+            _isAnimating = true;
+
+            var curPresenter = ViewportCurrent;
+            var nxtPresenter = ViewportNext;
+
+            DetachFromParent(nextView);
+
+            // Zawsze startuj z wyzerowanego stanu
+            ResetViewportState();
+
+            var curTransform = (curPresenter.RenderTransform as TranslateTransform)!;
+            var nxtTransform = (nxtPresenter.RenderTransform as TranslateTransform)!;
+
+            var curHeader = TryGetHeader(curPresenter.Content);
+            var nxtHeader = TryGetHeader(nextView);
+
+            TranslateTransform? curHeaderTransform = null;
+            TranslateTransform? nxtHeaderTransform = null;
+
+            if (curHeader != null)
+            {
+                curHeaderTransform = (curHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                curHeader.RenderTransform = curHeaderTransform;
+            }
+            if (nxtHeader != null)
+            {
+                nxtHeaderTransform = (nxtHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform();
+                nxtHeader.RenderTransform = nxtHeaderTransform;
+            }
+
+            double offset = 64;
+            double fromNext = forward ? +offset : -offset;
+            double toCur = forward ? -offset : +offset;
+
+            nxtTransform.X = fromNext;
+            nxtPresenter.Opacity = 0;
+            curTransform.X = 0;
+            curPresenter.Opacity = 1;
+
+            if (nxtHeaderTransform != null) nxtHeaderTransform.X = fromNext * 0.5;
+            if (curHeaderTransform != null) curHeaderTransform.X = 0;
+
+            nxtPresenter.Content = nextView;
+
+            var sb = new Storyboard();
+            _activeStoryboard = sb;
+            var dur = TimeSpan.FromMilliseconds(280);
+
+            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
+            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
+            Storyboard.SetTarget(curX, curPresenter);
+            Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sb.Children.Add(curX);
+
+            var curOp = new DoubleAnimation { From = 1, To = 0, Duration = dur, EasingFunction = easeIn };
+            Storyboard.SetTarget(curOp, curPresenter);
+            Storyboard.SetTargetProperty(curOp, "Opacity");
+            sb.Children.Add(curOp);
+
+            var nxtX = new DoubleAnimation { From = fromNext, To = 0, Duration = dur, EasingFunction = easeOut };
+            Storyboard.SetTarget(nxtX, nxtPresenter);
+            Storyboard.SetTargetProperty(nxtX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sb.Children.Add(nxtX);
+
+            var nxtOp = new DoubleAnimation { From = 0, To = 1, Duration = dur, EasingFunction = easeOut };
+            Storyboard.SetTarget(nxtOp, nxtPresenter);
+            Storyboard.SetTargetProperty(nxtOp, "Opacity");
+            sb.Children.Add(nxtOp);
+
+            if (curHeaderTransform != null)
+            {
+                var curHX = new DoubleAnimation { From = 0, To = toCur * 0.5, Duration = dur, EasingFunction = easeIn };
+                Storyboard.SetTarget(curHX, curHeader);
+                Storyboard.SetTargetProperty(curHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                sb.Children.Add(curHX);
+            }
+
+            if (nxtHeaderTransform != null)
+            {
+                var nxtHX = new DoubleAnimation { From = fromNext * 0.5, To = 0, Duration = dur, EasingFunction = easeOut };
+                Storyboard.SetTarget(nxtHX, nxtHeader);
+                Storyboard.SetTargetProperty(nxtHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                sb.Children.Add(nxtHX);
+            }
+
+            var tcs = new TaskCompletionSource<bool>();
+            sb.Completed += (_, __) =>
+            {
+                _activeStoryboard = null;
+                tcs.TrySetResult(true);
+            };
+
+            try
+            {
+                sb.Begin();
+                await tcs.Task;
+            }
+            catch
+            {
+                // okno mogło się zamykać
+            }
+
+            if (_isClosing) return;
+
+            ViewportNext.Content = null;
+            ViewportCurrent.Content = nextView;
+
+            // finalny reset
+            ResetViewportState();
+
+            _isAnimating = false;
+        }
+
+        private void OnWindowClosed(object sender, WindowEventArgs args)
+        {
+            _isClosing = true;
+
+            try { _activeStoryboard?.Stop(); } catch { }
+            _activeStoryboard = null;
+            _isAnimating = false;
+
+            this.SizeChanged -= OnWindowSizeChanged;
+            this.Activated -= OnWindowActivated;
+            this.Closed -= OnWindowClosed;
+
+            _declarationsView.SaveRequested -= OnDeclSave;
+            _declarationsView.SaveAndCloseRequested -= OnDeclSaveAndClose;
+            _declarationsView.CloseRequested -= OnDeclCloseOnly;
+
+            try { ViewportNext.Content = null; } catch { }
+            try { ViewportCurrent.Content = null; } catch { }
+
+            try { SystemBackdrop = null; } catch { }
+            try { RootGrid.Background = GetLightFallbackBrush(); } catch { }
+        }
+
         private void OnDeclSave(DoctorMonthDeclaration dm)
         {
             if (!string.IsNullOrWhiteSpace(dm.Doctor))
@@ -189,7 +424,6 @@ namespace GrafikoMat
 
         private void OnDeclCloseOnly() => SwitchToDashboard();
 
-        // ==== Placeholdery brakujących metod ====
         private async void GenerateRosterPlaceholder()
             => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
 
