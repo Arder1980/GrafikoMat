@@ -7,7 +7,6 @@
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid" RowDefinitions="Auto,100,*,Auto,Auto" Background="Transparent">
-        <!-- Topbar — niższy (32 px) -->
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
               Background="{ThemeResource LayerFillColorDefaultBrush}"
               Padding="10,0" Margin="0,0,140,0">
@@ -16,22 +15,21 @@
             </Grid>
         </Grid>
 
-        <!-- Dane jednostki (jak było) -->
         <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
             <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}" FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
         </Grid>
 
-        <!-- Viewport: dwa hosty animacji -->
         <Grid Grid.Row="2" Padding="12,8,12,8">
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <Grid x:Name="ViewportGrid">
-                    <ContentControl x:Name="ViewportCurrent" Opacity="1"/>
+                    <ContentControl x:Name="ViewportCurrent" Opacity="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"/>
                     <ContentControl x:Name="ViewportNext" Opacity="0"/>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- Pasek akcji – mniejszy (mniej paddingu, mniejsze buttony) -->
         <Grid Grid.Row="3" Padding="12,4">
             <ItemsControl ItemsSource="{x:Bind Actions}">
                 <ItemsControl.ItemsPanel>
@@ -59,7 +57,6 @@
             </ItemsControl>
         </Grid>
 
-        <!-- Stopka — niższa -->
         <Grid Grid.Row="4" Padding="10,4" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16"
               Background="{ThemeResource LayerFillColorDefaultBrush}">
             <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12"/>

@@ -1,1 +1,1 @@
-[OK] Zapisano snapshot: ProjektSnapshot_utf8.txt
+[OK] Zapisano snapshot: C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\ProjektSnapshot_utf8.txt

@@ -2,143 +2,37 @@
     x:Class="GrafikoMat.Views.DeclarationsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    UseLayoutRounding="True">
 
-	<!-- Dwie kolumny: lewa ~1/3 na sterowanie, prawa ~2/3 na kalendarz -->
-	<Grid ColumnDefinitions="0.33*,0.67*" Padding="12" ColumnSpacing="12">
-		<!-- LEWA KOLUMNA -->
-		<Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
-			<!-- HEADER (dla paralaksy) – „na {miesiąc rok}” -->
-			<Grid x:Name="ViewHeader" RowDefinitions="Auto" Margin="0,0,0,6">
-				<TextBlock FontSize="18" FontWeight="SemiBold">
-					<Run Text="Deklaracje dyżurowe — na "/>
-					<Run Text="{Binding MonthHeader}"/>
-				</TextBlock>
-			</Grid>
+    <Grid ColumnDefinitions="0.25*,0.75*" Padding="12" ColumnSpacing="12">
 
-			<!-- Wybór lekarza -->
-			<Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
-				<TextBlock Grid.Column="0" Text="Lekarz:" VerticalAlignment="Center"/>
-				<Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnPrevDoctor"/>
-				<ComboBox Grid.Column="2"
-                          MinWidth="160"
-                          HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding Doctors}"
-                          SelectedItem="{Binding SelectedDoctor, Mode=TwoWay}"
-                          DisplayMemberPath="Name"/>
-				<Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnNextDoctor"/>
-			</Grid>
+        <Grid Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
+            <TextBlock FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2">
+                <Run Text="Deklaracje dyżurowe na "/>
+                <Run x:Name="MonthRun" Text="(miesiąc)"/>
+            </TextBlock>
 
-			<!-- Limit dyżurów -->
-			<StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
-				<TextBlock Text="Limit dyżurów:" VerticalAlignment="Center"/>
-				<NumberBox Width="100" Minimum="0" Maximum="60" Value="{Binding DutyLimit, Mode=TwoWay}"/>
-			</StackPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Lekarz:" VerticalAlignment="Center" Opacity="0.9"/>
+                <ComboBox x:Name="DoctorsCombo"
+                          MinWidth="200"
+                          SelectionChanged="OnDoctorSelectionChanged"/>
+            </StackPanel>
 
-			<Grid Grid.Row="3"/>
-			<Grid Grid.Row="4"/>
-		</Grid>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Limity:" VerticalAlignment="Center" Opacity="0.85"/>
+                <TextBox Width="120" PlaceholderText="np. 10 nocy"/>
+            </StackPanel>
 
-		<!-- PRAWA KOLUMNA: kalendarz (bez przewijania; dynamiczne dopasowanie) -->
-		<Grid x:Name="RightHost" Grid.Column="1" SizeChanged="OnCalendarSizeChanged">
-			<!-- Animowany host (slide przy zmianie lekarza) -->
-			<Grid x:Name="CalendarAnimHost" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-				<Grid.RenderTransform>
-					<TranslateTransform/>
-				</Grid.RenderTransform>
+            <Grid Grid.Row="4" ColumnDefinitions="Auto,Auto" ColumnSpacing="8" HorizontalAlignment="Right">
+                <Button Content="Zapisz" Click="OnSaveClick"/>
+                <Button Grid.Column="1" Content="Zapisz i zamknij" Click="OnSaveAndCloseClick"/>
+            </Grid>
+        </Grid>
 
-				<!-- Layout kalendarza: nagłówki + siatka -->
-				<Grid x:Name="CalendarLayoutRoot" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-					<Grid.RowDefinitions>
-						<RowDefinition Height="Auto"/>
-						<RowDefinition Height="*"/>
-					</Grid.RowDefinitions>
+        <Grid x:Name="CalendarGridHost" Grid.Column="1"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch" />
 
-					<!-- Nagłówki dni tygodnia – 7 kolumn, lewa krawędź = krawędź siatki -->
-					<Grid x:Name="WeekHeaderGrid"
-                          Grid.Row="0"
-                          HorizontalAlignment="Left"
-                          ColumnSpacing="8"
-                          Margin="4,0">
-						<Grid.ColumnDefinitions>
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-							<ColumnDefinition Width="*" />
-						</Grid.ColumnDefinitions>
-
-						<TextBlock Grid.Column="0" Text="Pn" HorizontalAlignment="Center"/>
-						<TextBlock Grid.Column="1" Text="Wt" HorizontalAlignment="Center"/>
-						<TextBlock Grid.Column="2" Text="Śr" HorizontalAlignment="Center"/>
-						<TextBlock Grid.Column="3" Text="Cz" HorizontalAlignment="Center"/>
-						<TextBlock Grid.Column="4" Text="Pt" HorizontalAlignment="Center"/>
-						<TextBlock Grid.Column="5" Text="So" HorizontalAlignment="Center" Opacity="0.7"/>
-						<TextBlock Grid.Column="6" Text="Nd" HorizontalAlignment="Center" Opacity="0.7"/>
-					</Grid>
-
-					<!-- Siatka dni: 7 kolumn × ≤6 wierszy; dopasowywana w .xaml.cs -->
-					<ItemsControl x:Name="CalendarItems"
-                                  Grid.Row="1"
-                                  HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Stretch"
-                                  ItemsSource="{Binding DayCells}">
-						<ItemsControl.ItemsPanel>
-							<ItemsPanelTemplate>
-								<ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="7"/>
-							</ItemsPanelTemplate>
-						</ItemsControl.ItemsPanel>
-
-						<ItemsControl.ItemContainerStyle>
-							<Style TargetType="ContentPresenter">
-								<Setter Property="Margin" Value="4"/>
-							</Style>
-						</ItemsControl.ItemContainerStyle>
-
-						<ItemsControl.ItemTemplate>
-							<DataTemplate>
-								<Border CornerRadius="6"
-                                        BorderThickness="{Binding BorderThickness}"
-                                        BorderBrush="{Binding BorderBrush}"
-                                        Background="{Binding Background}">
-									<Grid RightTapped="OnCellRightTapped"
-                                          Tapped="OnCellTapped"
-                                          PointerPressed="OnCellPointerPressed"
-                                          PointerReleased="OnCellPointerReleased">
-										<Grid.RowDefinitions>
-											<RowDefinition Height="Auto"/>
-											<RowDefinition Height="*"/>
-										</Grid.RowDefinitions>
-
-										<TextBlock Text="{Binding DayNumber}"
-                                                   Margin="8,6,8,4"
-                                                   Opacity="{Binding HeaderOpacity}"
-                                                   FontWeight="SemiBold"/>
-
-										<Grid Grid.Row="1">
-											<Grid Visibility="{Binding Full24Visibility}">
-												<TextBlock Text="{Binding SymbolFull}" FontSize="22"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-											</Grid>
-											<Grid Visibility="{Binding Split12Visibility}" RowDefinitions="*,*">
-												<Border BorderBrush="{Binding SplitDividerBrush}" BorderThickness="0,0,0,1" Opacity="0.5"/>
-												<TextBlock Grid.Row="0" Text="{Binding SymbolDay}" FontSize="18"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-												<TextBlock Grid.Row="1" Text="{Binding SymbolNight}" FontSize="18"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-											</Grid>
-										</Grid>
-									</Grid>
-								</Border>
-							</DataTemplate>
-						</ItemsControl.ItemTemplate>
-					</ItemsControl>
-				</Grid>
-			</Grid>
-		</Grid>
-	</Grid>
+    </Grid>
 </UserControl>

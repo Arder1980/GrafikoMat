@@ -1,161 +1,219 @@
 ﻿using System;
-using System.Linq;
+using System.Collections.ObjectModel;
+using Microsoft.UI;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
-using GrafikoMat.ViewModels;
+using GrafikoMat.Models;
+using Windows.UI;
 
 namespace GrafikoMat.Views
 {
     public sealed partial class DeclarationsView : UserControl
     {
-        private const int Columns = 7;
-        private const double ItemMargin = 4.0; // musi odpowiadać Margin w XAML
+        public event Action<DoctorMonthDeclaration>? SaveRequested;
+        public event Action<DoctorMonthDeclaration>? SaveAndCloseRequested;
+        public event Action? CloseRequested;
 
-        private Storyboard? _calendarSb;
-        private DeclarationsViewModel? _vm;
+        public ObservableCollection<DayCell> CalendarItems { get; } = new();
+
+        private int _year;
+        private int _monthIndex;
+        private string[] _doctorNames = Array.Empty<string>();
+        private int _selectedDoctorIndex = -1;
+        private bool _isGridBuilt = false;
 
         public DeclarationsView()
         {
-            this.InitializeComponent();
-            this.Loaded += OnLoaded;
+            InitializeComponent();
+
+            this.Loaded += DeclarationsView_InitialBuild;
+            CalendarGridHost.SizeChanged += CalendarGridHost_SizeChanged;
+
+            var today = DateTime.Today;
+            var testDoctors = new[] { "dr Anna Testowa", "dr Bartosz Przykładowy", "dr Celina Demo" };
+            LoadContext(today.Year, today.Month - 1, testDoctors, 0);
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private void DeclarationsView_InitialBuild(object sender, RoutedEventArgs e)
         {
-            // Gdy ItemsPanelRoot się pojawi, policz pierwszy layout
-            CalendarItems.Loaded += (_, __) => UpdateCalendarLayout();
-            CalendarItems.LayoutUpdated += (_, __) => UpdateCalendarLayout();
-            UpdateCalendarLayout();
+            this.Loaded -= DeclarationsView_InitialBuild;
+            BuildCalendarGrid();
+        }
+
+        private void CalendarGridHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (_isGridBuilt && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            {
+                BuildCalendarGrid();
+            }
         }
 
         public void LoadContext(int year, int monthIndex, string[] doctorNames, int selectedDoctorIndex)
         {
-            _vm = new DeclarationsViewModel(year, monthIndex, doctorNames, selectedDoctorIndex);
-            this.DataContext = _vm;
-            UpdateCalendarLayout();
-        }
+            _year = year;
+            _monthIndex = Math.Clamp(monthIndex, 0, 11);
+            _doctorNames = (doctorNames != null && doctorNames.Length > 0) ? doctorNames : new[] { "..." };
+            _selectedDoctorIndex = Math.Clamp(selectedDoctorIndex, 0, _doctorNames.Length - 1);
 
-        // API dla MainWindow (pasek akcji)
-        public event Action<Models.DoctorMonthDeclaration>? SaveRequested;
-        public event Action<Models.DoctorMonthDeclaration>? SaveAndCloseRequested;
-        public event Action? CloseRequested;
-        public void TriggerSave() => OnSave(this, new RoutedEventArgs());
-        public void TriggerSaveAndClose() => OnSaveAndClose(this, new RoutedEventArgs());
-        public void TriggerClearSelection() => OnClearSelection(this, new RoutedEventArgs());
+            MonthRun.Text = $"{PolishMonth(_monthIndex)} {_year}";
+            DoctorsCombo.ItemsSource = _doctorNames;
+            DoctorsCombo.SelectedIndex = _selectedDoctorIndex;
 
-        // Zmiana lekarza -> lekki slide
-        private void OnPrevDoctor(object sender, RoutedEventArgs e) { BumpDoctor(-1); AnimateCalendarSlide(+1); }
-        private void OnNextDoctor(object sender, RoutedEventArgs e) { BumpDoctor(+1); AnimateCalendarSlide(-1); }
-
-        private void BumpDoctor(int delta)
-        {
-            if (_vm is null) return;
-            try
+            if (_isGridBuilt)
             {
-                var list = _vm.Doctors?.ToList() ?? [];
-                if (list.Count == 0) return;
-
-                var cur = _vm.SelectedDoctor;
-                int idx = Math.Max(0, list.IndexOf(cur));
-                int next = (idx + delta + list.Count) % list.Count;
-                _vm.SelectedDoctor = list[next];
+                BuildCalendarGrid();
             }
-            catch { /* bez wywrotki UI */ }
         }
 
-        private void AnimateCalendarSlide(int direction)
+        private void BuildCalendarGrid()
         {
-            _calendarSb?.Stop();
+            CalendarGridHost.Children.Clear();
+            CalendarGridHost.RowDefinitions.Clear();
+            CalendarGridHost.ColumnDefinitions.Clear();
 
-            var tt = CalendarAnimHost.RenderTransform as TranslateTransform ?? new TranslateTransform();
-            CalendarAnimHost.RenderTransform = tt;
+            // ZMIANA: Dodajemy odstępy między komórkami
+            CalendarGridHost.RowSpacing = 4;
+            CalendarGridHost.ColumnSpacing = 4;
 
-            double offset = 120 * Math.Sign(direction);
-            tt.X = offset;
-            CalendarAnimHost.Opacity = 0.0;
+            var firstDayOfMonth = new DateTime(_year, _monthIndex + 1, 1);
+            int offset = ((int)firstDayOfMonth.DayOfWeek + 6) % 7;
+            int daysInMonth = DateTime.DaysInMonth(_year, _monthIndex + 1);
+            int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
+            var startDate = firstDayOfMonth.AddDays(-offset);
 
-            var sb = new Storyboard();
-            _calendarSb = sb;
+            CalendarItems.Clear();
+            for (int i = 0; i < weeks * 7; i++)
+            {
+                var date = startDate.AddDays(i);
+                CalendarItems.Add(new DayCell(date, date.Month == _monthIndex + 1));
+            }
 
-            var dur = TimeSpan.FromMilliseconds(220);
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            for (int c = 0; c < 7; c++)
+                CalendarGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            var animX = new DoubleAnimation { From = offset, To = 0, Duration = dur, EasingFunction = ease };
-            Storyboard.SetTarget(animX, CalendarAnimHost);
-            Storyboard.SetTargetProperty(animX, "(UIElement.RenderTransform).(TranslateTransform.X)");
-            sb.Children.Add(animX);
+            CalendarGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            for (int w = 0; w < weeks; w++)
+                CalendarGridHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            var animOp = new DoubleAnimation { From = 0, To = 1, Duration = dur, EasingFunction = ease };
-            Storyboard.SetTarget(animOp, CalendarAnimHost);
-            Storyboard.SetTargetProperty(animOp, "Opacity");
-            sb.Children.Add(animOp);
+            var dayNames = new[] { "Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd" };
+            for (int c = 0; c < 7; c++)
+            {
+                var textBlock = new TextBlock
+                {
+                    Text = dayNames[c],
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 4, 0, 4),
+                    Opacity = (c >= 5) ? 0.7 : 1.0
+                };
+                Grid.SetRow(textBlock, 0);
+                Grid.SetColumn(textBlock, c);
+                CalendarGridHost.Children.Add(textBlock);
+            }
 
-            sb.Begin();
+            for (int i = 0; i < CalendarItems.Count; i++)
+            {
+                var dayCellVM = CalendarItems[i];
+                var border = new Border { DataContext = dayCellVM, CornerRadius = new CornerRadius(6) };
+                border.Background = dayCellVM.Background;
+                border.BorderBrush = dayCellVM.BorderBrush;
+                border.BorderThickness = dayCellVM.BorderThickness;
+
+                var contentGrid = new Grid { Padding = new Thickness(6) };
+                var dayNumberText = new TextBlock
+                {
+                    Text = dayCellVM.DayNumber,
+                    FontWeight = FontWeights.SemiBold,
+                    Opacity = dayCellVM.HeaderOpacity,
+                    Margin = new Thickness(2, 0, 2, 4)
+                };
+                contentGrid.Children.Add(dayNumberText);
+                border.Child = contentGrid;
+
+                border.RightTapped += OnCellRightTapped;
+
+                int row = (i / 7) + 1;
+                int col = i % 7;
+                Grid.SetRow(border, row);
+                Grid.SetColumn(border, col);
+                CalendarGridHost.Children.Add(border);
+            }
+            _isGridBuilt = true;
         }
 
-        // === DYNAMICZNE DOPASOWANIE KAFLI ===
+        public void TriggerClearSelection() { /* ... */ }
+        public void TriggerSave() { SaveRequested?.Invoke(ToResult()); }
+        public void TriggerSaveAndClose() { SaveAndCloseRequested?.Invoke(ToResult()); CloseRequested?.Invoke(); }
 
-        private void OnCalendarSizeChanged(object sender, SizeChangedEventArgs e)
-            => UpdateCalendarLayout();
+        private void OnSaveClick(object sender, RoutedEventArgs e) => TriggerSave();
+        private void OnSaveAndCloseClick(object sender, RoutedEventArgs e) => TriggerSaveAndClose();
 
-        private void UpdateCalendarLayout()
+        private void OnDoctorSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (CalendarItems.ItemsPanelRoot is not ItemsWrapGrid wrap) return;
-
-            // 1) POBIERZ REALNY OBSZAR DOSTĘPNY DLA PRAWEJ KOLUMNY
-            double availableWidth = Math.Max(0, RightHost.ActualWidth);
-            double availableHeight = Math.Max(0, RightHost.ActualHeight);
-
-            if (availableWidth <= 0 || availableHeight <= 0)
-                return;
-
-            // 2) ROZCIĄGNIJ ItemsControl, żeby panel dostał pełną szerokość
-            CalendarItems.Width = availableWidth;
-
-            // 3) Ile wierszy będzie (max 6)
-            int count = CalendarItems.Items.Count;
-            int rows = Math.Max(1, (int)Math.Ceiling(count / (double)Columns));
-            rows = Math.Min(rows, 6);
-
-            // 4) Wysokość nagłówka (dni tygodnia)
-            double headerHeight = WeekHeaderGrid.ActualHeight;
-
-            // 5) LICZENIA: szerokość i wysokość kafla, tak by:
-            //    - 7 kolumn zmieściło się poziomo (z marginesami),
-            //    - wszystkie rzędy zmieściły się pionowo (bez scrolla).
-            double totalMarginsW = 2 * ItemMargin * Columns;
-            double itemWidth = (availableWidth - totalMarginsW) / Columns;
-            itemWidth = Math.Floor(Math.Max(60, itemWidth)); // sensowny dolny limit
-
-            double spaceForGrid = Math.Max(0, availableHeight - headerHeight);
-            double totalMarginsH = 2 * ItemMargin * rows;
-            double itemHeight = (spaceForGrid - totalMarginsH) / rows;
-            itemHeight = Math.Floor(Math.Max(50, itemHeight)); // priorytet: zmieścić się pionowo
-
-            // 6) Zastosuj do panelu
-            wrap.ItemWidth = itemWidth;
-            wrap.ItemHeight = itemHeight;
-
-            // 7) Nagłówki wyrównane do siatki
-            WeekHeaderGrid.ColumnSpacing = 2 * ItemMargin;
-            for (int i = 0; i < WeekHeaderGrid.ColumnDefinitions.Count; i++)
-                WeekHeaderGrid.ColumnDefinitions[i].Width = new GridLength(itemWidth);
-
-            // lewy margines = ItemMargin (jak kafle)
-            if (Math.Abs(WeekHeaderGrid.Margin.Left - ItemMargin) > 0.5)
-                WeekHeaderGrid.Margin = new Thickness(ItemMargin, 0, 0, 0);
+            _selectedDoctorIndex = DoctorsCombo.SelectedIndex;
         }
 
-        // ==== Handlery (Twoja logika) ====
-        private void OnCellTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) { }
-        private void OnCellRightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e) { }
-        private void OnCellPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) { }
-        private void OnCellPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) { }
-        private void OnClearSelection(object sender, RoutedEventArgs e) { }
-        private void OnSave(object sender, RoutedEventArgs e) { /* SaveRequested?.Invoke(dm); */ }
-        private void OnSaveAndClose(object sender, RoutedEventArgs e) { /* SaveAndCloseRequested?.Invoke(dm); */ }
-        private void OnCloseRequested(object sender, RoutedEventArgs e) { CloseRequested?.Invoke(); }
+        private void OnCellRightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            if ((sender as FrameworkElement)?.DataContext is DayCell cell)
+            {
+                // Tutaj w przyszłości będzie logika menu kontekstowego
+            }
+        }
+
+        private DoctorMonthDeclaration ToResult()
+        {
+            int y = _year; int m = _monthIndex;
+            if (y <= 0) { var t = DateTime.Today; y = t.Year; m = t.Month - 1; }
+            int daysInMonth = DateTime.DaysInMonth(y, m + 1);
+            var res = new DoctorMonthDeclaration
+            {
+                Year = y,
+                MonthIndex = m,
+                Doctor = (_doctorNames.Length > 0 && _selectedDoctorIndex >= 0) ? _doctorNames[_selectedDoctorIndex] : string.Empty,
+                Days = new DayDeclaration[daysInMonth]
+            };
+            for (int i = 0; i < daysInMonth; i++) res.Days[i] = new DayDeclaration();
+            return res;
+        }
+
+        private static string PolishMonth(int idx) => new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[Math.Clamp(idx, 0, 11)];
+
+        public sealed class DayCell
+        {
+            public DateTime Date { get; }
+            public bool InMonth { get; }
+
+            public DayCell(DateTime date, bool inMonth)
+            {
+                Date = date;
+                InMonth = inMonth;
+                UpdateBrushes();
+            }
+
+            public string DayNumber => Date.Day.ToString("00");
+            public double HeaderOpacity => InMonth ? 1.0 : 0.45;
+            public Brush Background { get; private set; }
+            public Brush BorderBrush { get; private set; }
+            public Thickness BorderThickness { get; private set; } = new Thickness(1);
+
+            private void UpdateBrushes()
+            {
+                bool isToday = (Date.Date == DateTime.Today);
+                Color bgColor = InMonth ? Colors.Transparent : Color.FromArgb(0x10, 0x80, 0x80, 0x80);
+                Color borderColor = InMonth ? Color.FromArgb(0x30, 0, 0, 0) : Color.FromArgb(0x25, 0x60, 0x60, 0x60);
+                if (isToday)
+                {
+                    bgColor = Color.FromArgb(0x22, 0x1E, 0x90, 0xFF);
+                    borderColor = Color.FromArgb(0xAA, 0x1E, 0x90, 0xFF);
+                }
+                Background = new SolidColorBrush(bgColor);
+                BorderBrush = new SolidColorBrush(borderColor);
+            }
+        }
     }
 }

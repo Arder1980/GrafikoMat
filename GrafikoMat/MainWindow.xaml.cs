@@ -33,6 +33,10 @@ namespace GrafikoMat
 
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
+        // Delegaty do subskrypcji eventów z DeclarationsView (żeby móc poprawnie odsubskrybować)
+        private Action<DoctorMonthDeclaration>? _evtDeclSave;
+        private Action<DoctorMonthDeclaration>? _evtDeclSaveAndClose;
+        private Action? _evtDeclClose;
 
         private bool _isAnimating;
         private bool _isClosing;
@@ -55,9 +59,13 @@ namespace GrafikoMat
             BuildActionsForDashboard();
             ResetViewportState(); // <-- startowo wyzeruj
 
-            _declarationsView.SaveRequested += OnDeclSave;
-            _declarationsView.SaveAndCloseRequested += OnDeclSaveAndClose;
-            _declarationsView.CloseRequested += OnDeclCloseOnly;
+            _evtDeclSave = dm => OnDeclSave(dm);
+            _evtDeclSaveAndClose = dm => OnDeclSaveAndClose(dm);
+            _evtDeclClose = () => OnDeclCloseOnly();
+
+            _declarationsView.SaveRequested += _evtDeclSave;
+            _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
+            _declarationsView.CloseRequested += _evtDeclClose;
 
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
@@ -185,7 +193,8 @@ namespace GrafikoMat
         {
             if (_isClosing) return;
             var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
-            _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, selectedDoctorIndex: 0);
+            _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0);
+
             await AnimateToAsync(_declarationsView, forward: true);
             BuildActionsForDeclarations();
         }
@@ -399,9 +408,9 @@ namespace GrafikoMat
             this.Activated -= OnWindowActivated;
             this.Closed -= OnWindowClosed;
 
-            _declarationsView.SaveRequested -= OnDeclSave;
-            _declarationsView.SaveAndCloseRequested -= OnDeclSaveAndClose;
-            _declarationsView.CloseRequested -= OnDeclCloseOnly;
+            if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
+            if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
+            if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
 
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
