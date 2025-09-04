@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -6,33 +7,40 @@ using Windows.Storage;
 
 namespace GrafikoMat.Services
 {
-    /// <summary>
-    /// Model przechowujący ustawienia aplikacji. Użycie 'record' upraszcza definicję.
-    /// </summary>
+    public record UnitProfile
+    {
+        public Guid Id { get; init; } = Guid.NewGuid();
+        public string Name { get; init; } = "Nowa jednostka";
+
+        // ZMIANA: Dodajemy nowe pola dla profilu
+        public string HospitalFullName { get; init; } = string.Empty;
+        public string DepartmentName { get; init; } = string.Empty;
+
+        public string SupabaseUrl { get; init; } = string.Empty;
+        public string SupabaseApiKey { get; init; } = string.Empty;
+    }
+
     public record AppSettings
     {
-        public string UnitName { get; init; } = "Moja Jednostka Medyczna";
-        public string Theme { get; init; } = "Light"; // "Light" or "Dark"
-        public string Engine { get; init; } = "Klasyczny";
+        public List<UnitProfile> UnitProfiles { get; init; } = new();
+        public Guid? ActiveUnitProfileId { get; init; }
+
+        // ZMIANA: Przenosimy globalne ustawienia tutaj
+        public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
+        public string EngineType { get; init; } = "Klasyczny";
         public string PriorityOrder { get; init; } = "Dostępność > Sprawiedliwość > Preferencje";
+
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
     }
 
     public record WindowSize(int Width, int Height);
 
-    /// <summary>
-    /// Serwis do zarządzania lokalnymi ustawieniami aplikacji, zapisywanymi w pliku JSON.
-    /// </summary>
     public sealed class SettingsService
     {
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
-
         private AppSettings? _currentSettings;
 
-        /// <summary>
-        /// Asynchronicznie wczytuje ustawienia z pliku lub zwraca domyślne, jeśli plik nie istnieje.
-        /// </summary>
         public async Task<AppSettings> LoadSettingsAsync()
         {
             if (_currentSettings != null)
@@ -46,19 +54,12 @@ namespace GrafikoMat.Services
                     _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
                 }
             }
-            catch (Exception ex)
-            {
-                // TODO: Dodać logowanie błędu
-                _currentSettings = null;
-            }
+            catch (Exception) { _currentSettings = null; }
 
             _currentSettings ??= new AppSettings();
             return _currentSettings;
         }
 
-        /// <summary>
-        /// Zapisuje bieżący obiekt ustawień do pliku JSON.
-        /// </summary>
         public async Task SaveSettingsAsync(AppSettings settings)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
