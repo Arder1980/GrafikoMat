@@ -2,14 +2,24 @@
     x:Class="GrafikoMat.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:common="using:GrafikoMat.Common"
     RequestedTheme="Light">
 
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Zasoby kontrolek WinUI 3 (TabView*, NumberBox*, itp.) -->
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="SubtleButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+            </Style>
+
+            <common:BooleanToBrushConverter_DayOff x:Key="BooleanToBrushConverter_DayOff"/>
+
+            <common:BooleanToThicknessConverter_LastItemBorder x:Key="LastItemBorderConverter"/>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

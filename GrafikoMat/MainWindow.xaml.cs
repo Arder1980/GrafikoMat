@@ -25,34 +25,29 @@ namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window
     {
+        // ... (stałe, pola, właściwości - bez zmian) ...
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
-
         private AppWindow? _appWindow;
-
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
         private readonly SettingsView _settingsView = new();
-
         private Action<DoctorMonthDeclaration>? _evtDeclSave;
         private Action<DoctorMonthDeclaration>? _evtDeclSaveAndClose;
         private Action? _evtDeclClose;
-
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
-
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
-
         private bool _isInitialSizeSet = false;
-
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
         private AppSettings? _appSettings;
+
 
         public MainWindow()
         {
@@ -85,6 +80,10 @@ namespace GrafikoMat
 
             _settingsView.ReloadRequired += OnReloadRequired;
 
+            // ZMIANA: Podpinamy realną logikę pod komendy w ViewModelu
+            ViewModel.SwitchToPreviousUnitCommand = new RelayCommand(_ => SwitchUnit(false));
+            ViewModel.SwitchToNextUnitCommand = new RelayCommand(_ => SwitchUnit(true));
+
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
@@ -99,14 +98,19 @@ namespace GrafikoMat
             if (activeProfile != null)
             {
                 _supabaseService.Initialize(activeProfile);
-                ViewModel.UnitName = activeProfile.Name;
+                // ZMIANA: Ustawiamy nowe, rozbudowane właściwości
+                ViewModel.ActiveUnitHospitalName = activeProfile.HospitalFullName;
+                ViewModel.ActiveUnitDepartmentName = activeProfile.DepartmentName;
+
                 if (_supabaseService.Doctors != null)
                     ViewModel.LoadDoctorsAsync();
             }
             else
             {
                 _supabaseService.Initialize(new UnitProfile());
-                ViewModel.UnitName = "Brak aktywnej jednostki. Skonfiguruj w ustawieniach.";
+                // ZMIANA: Ustawiamy nowe, rozbudowane właściwości
+                ViewModel.ActiveUnitHospitalName = "GrafikoMat Dyżurowy";
+                ViewModel.ActiveUnitDepartmentName = "Brak aktywnej jednostki. Skonfiguruj w ustawieniach.";
                 ViewModel.DoctorRows.Clear();
             }
         }
@@ -115,6 +119,33 @@ namespace GrafikoMat
         {
             LoadInitialDataAsync();
             SwitchToDashboard();
+        }
+
+        // ZMIANA: Nowa metoda do obsługi przełączania jednostek
+        private async void SwitchUnit(bool next)
+        {
+            if (_appSettings == null || _appSettings.UnitProfiles.Count < 2 || _appSettings.ActiveUnitProfileId == null)
+            {
+                return; // Nie ma między czym przełączać
+            }
+
+            var profiles = _appSettings.UnitProfiles.OrderBy(p => p.Name).ToList();
+            int currentIndex = profiles.FindIndex(p => p.Id == _appSettings.ActiveUnitProfileId);
+
+            if (currentIndex == -1) return; // Coś poszło nie tak
+
+            int newIndex = next
+                ? (currentIndex + 1) % profiles.Count
+                : (currentIndex - 1 + profiles.Count) % profiles.Count;
+
+            var newActiveProfile = profiles[newIndex];
+
+            // Zapisz nowe ustawienie
+            _appSettings = _appSettings with { ActiveUnitProfileId = newActiveProfile.Id };
+            await _settingsService.SaveSettingsAsync(_appSettings);
+
+            // Przeładuj całą aplikację
+            LoadInitialDataAsync();
         }
 
         private async void SwitchToSettings()
@@ -127,57 +158,19 @@ namespace GrafikoMat
             BuildActionsForSettings();
         }
 
+        // ... cała reszta pliku MainWindow.xaml.cs pozostaje bez zmian ...
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = AppWindow.GetFromWindowId(windowId);
-
-            if (_appWindow is not null)
-            {
-                _appWindow.Title = string.Empty;
-                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
-                _appWindow.Changed += OnAppWindowChanged;
-                SubclassWindow(hwnd);
-            }
+            if (_appWindow is not null) { _appWindow.Title = string.Empty; try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { } _appWindow.Changed += OnAppWindowChanged; SubclassWindow(hwnd); }
         }
-
-        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
-        {
-            if (args.DidPresenterChange && !_isClosing) { SetupBackdrop(); }
-        }
-
-        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
-        {
-            if (!_isInitialSizeSet && _appWindow != null)
-            {
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-                _isInitialSizeSet = true;
-            }
-            if (_isClosing) return;
-            SetupBackdrop();
-        }
-
-        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e)
-        {
-            if (_isClosing) return;
-        }
-
-        private void SetupBackdrop()
-        {
-            if (_isClosing) return;
-            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-
-            if (!isMaximized) { try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); } catch { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } }
-            else { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); }
-        }
-
-        private Brush GetLightFallbackBrush()
-        {
-            if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b) return b;
-            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
-        }
-
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args) { if (args.DidPresenterChange && !_isClosing) { SetupBackdrop(); } }
+        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e) { if (!_isInitialSizeSet && _appWindow != null) { _appWindow.Resize(new SizeInt32(MIN_W, MIN_H)); _isInitialSizeSet = true; } if (_isClosing) return; SetupBackdrop(); }
+        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e) { if (_isClosing) return; }
+        private void SetupBackdrop() { if (_isClosing) return; bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized; if (!isMaximized) { try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); } catch { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } } else { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } }
+        private Brush GetLightFallbackBrush() { if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b) return b; return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7)); }
         #region Win32 Interop for Min/Max Size
         private void SubclassWindow(IntPtr hwnd) { _newWndProc = new WndProc(AppWndProc); _oldWndProc = SetWindowLongPtr(hwnd, -4, Marshal.GetFunctionPointerForDelegate(_newWndProc)); }
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam) { if (msg == 0x0024) { var minMaxInfo = Marshal.PtrToStructure<MINMAXINFO>(lParam); var dpi = GetDpiForWindow(hWnd); float scalingFactor = dpi / 96f; minMaxInfo.ptMinTrackSize.x = (int)(MIN_W * scalingFactor); minMaxInfo.ptMinTrackSize.y = (int)(MIN_H * scalingFactor); Marshal.StructureToPtr(minMaxInfo, lParam, true); return IntPtr.Zero; } return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam); }
@@ -187,156 +180,12 @@ namespace GrafikoMat
         [DllImport("user32.dll")] private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
         #endregion
-
         private void BuildActionsForDashboard() { Actions.Clear(); Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings()))); Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations()))); Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManage()))); Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder()))); Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder()))); }
         private void BuildActionsForDeclarations() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(_ => _declarationsView.TriggerClearSelection()))); Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave()))); Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose()))); }
         private void BuildActionsForSettings() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); }
         private void BuildActionsForManage() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => ShowAddDoctorDialogAsync()))); }
-
-        private async void SwitchToDashboard()
-        {
-            if (_isClosing || _isAnimating) return;
-            _isAnimating = true;
-
-            // ZMIANA: Upewniamy się, że ActionButtons mają właściwą transformację przed animacją
-            if (ActionButtons.RenderTransform is not TranslateTransform)
-            {
-                ActionButtons.RenderTransform = new TranslateTransform();
-            }
-
-            var sbExit = new Storyboard();
-            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            if (ViewportCurrent.Content == _declarationsView)
-            {
-                var leftCol = _declarationsView.LeftColumn;
-                var calendar = _declarationsView.CalendarView;
-
-                var calendarOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut };
-                Storyboard.SetTarget(calendarOpacityAnim, calendar);
-                Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity");
-                sbExit.Children.Add(calendarOpacityAnim);
-
-                var leftColOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(50) };
-                Storyboard.SetTarget(leftColOpacityAnim, leftCol);
-                Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity");
-                sbExit.Children.Add(leftColOpacityAnim);
-            }
-
-            var buttonsOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) };
-            Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons);
-            Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity");
-            sbExit.Children.Add(buttonsOpacityAnim);
-
-            var buttonsTranslateAnim = new DoubleAnimation { To = 30, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) };
-            Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons);
-            Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)");
-            sbExit.Children.Add(buttonsTranslateAnim);
-
-            var tcsExit = new TaskCompletionSource();
-            sbExit.Completed += (_, _) => tcsExit.TrySetResult();
-            sbExit.Begin();
-            await tcsExit.Task;
-
-            _dashboardView.Attach(ViewModel);
-            ViewportCurrent.Content = _dashboardView;
-            BuildActionsForDashboard();
-            ActionButtons.Opacity = 0;
-            ActionButtons.RenderTransform = new TranslateTransform { X = -30 };
-
-            var sbEnter = new Storyboard();
-            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
-
-            var newButtonsOpacity = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn };
-            Storyboard.SetTarget(newButtonsOpacity, ActionButtons);
-            Storyboard.SetTargetProperty(newButtonsOpacity, "Opacity");
-            sbEnter.Children.Add(newButtonsOpacity);
-
-            var newButtonsTranslate = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn };
-            Storyboard.SetTarget(newButtonsTranslate, ActionButtons);
-            Storyboard.SetTargetProperty(newButtonsTranslate, "(UIElement.RenderTransform).(TranslateTransform.X)");
-            sbEnter.Children.Add(newButtonsTranslate);
-
-            var tcsEnter = new TaskCompletionSource();
-            sbEnter.Completed += (_, _) => tcsEnter.TrySetResult();
-            sbEnter.Begin();
-            await tcsEnter.Task;
-
-            _isAnimating = false;
-        }
-
-        private async void SwitchToDeclarations()
-        {
-            if (_isClosing || _isAnimating) return;
-            if (_supabaseService.Doctors == null)
-            {
-                await ShowInfo("Brak aktywnego profilu", "Wybierz aktywny profil w ustawieniach, aby dodać deklaracje.");
-                return;
-            }
-            _isAnimating = true;
-
-            var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
-            _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0);
-
-            ActionButtons.Opacity = 0;
-            ActionButtons.RenderTransform = new TranslateTransform { X = 30 };
-
-            var leftCol = _declarationsView.LeftColumn;
-            var calendar = _declarationsView.CalendarView;
-            leftCol.Opacity = 0;
-            leftCol.RenderTransform = new TranslateTransform { Y = -20 };
-            calendar.Opacity = 0;
-            calendar.RenderTransform = new ScaleTransform { ScaleX = 0.95, ScaleY = 0.95 };
-
-            ViewportCurrent.Content = _declarationsView;
-            BuildActionsForDeclarations();
-
-            var sb = new Storyboard();
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
-            var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease };
-            Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons);
-            Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity");
-            sb.Children.Add(buttonsOpacityAnim);
-
-            var buttonsTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease };
-            Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons);
-            Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)");
-            sb.Children.Add(buttonsTranslateAnim);
-
-            var leftColOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) };
-            Storyboard.SetTarget(leftColOpacityAnim, leftCol);
-            Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity");
-            sb.Children.Add(leftColOpacityAnim);
-
-            var leftColTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) };
-            Storyboard.SetTarget(leftColTranslateAnim, leftCol);
-            Storyboard.SetTargetProperty(leftColTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.Y)");
-            sb.Children.Add(leftColTranslateAnim);
-
-            var calendarOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
-            Storyboard.SetTarget(calendarOpacityAnim, calendar);
-            Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity");
-            sb.Children.Add(calendarOpacityAnim);
-
-            var calendarScaleXAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
-            Storyboard.SetTarget(calendarScaleXAnim, calendar);
-            Storyboard.SetTargetProperty(calendarScaleXAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleX)");
-            sb.Children.Add(calendarScaleXAnim);
-
-            var calendarScaleYAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
-            Storyboard.SetTarget(calendarScaleYAnim, calendar);
-            Storyboard.SetTargetProperty(calendarScaleYAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)");
-            sb.Children.Add(calendarScaleYAnim);
-
-            var tcs = new TaskCompletionSource();
-            sb.Completed += (_, _) => tcs.TrySetResult();
-            sb.Begin();
-            await tcs.Task;
-
-            _isAnimating = false;
-        }
-
+        private async void SwitchToDashboard() { if (_isClosing || _isAnimating) return; _isAnimating = true; var sbExit = new Storyboard(); var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut }; if (ViewportCurrent.Content == _declarationsView) { var leftCol = _declarationsView.LeftColumn; var calendar = _declarationsView.CalendarView; var calendarOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut }; Storyboard.SetTarget(calendarOpacityAnim, calendar); Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity"); sbExit.Children.Add(calendarOpacityAnim); var leftColOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(50) }; Storyboard.SetTarget(leftColOpacityAnim, leftCol); Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity"); sbExit.Children.Add(leftColOpacityAnim); } var buttonsOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity"); sbExit.Children.Add(buttonsOpacityAnim); var buttonsTranslateAnim = new DoubleAnimation { To = 30, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)"); sbExit.Children.Add(buttonsTranslateAnim); var tcsExit = new TaskCompletionSource(); sbExit.Completed += (_, _) => tcsExit.TrySetResult(); sbExit.Begin(); await tcsExit.Task; _dashboardView.Attach(ViewModel); ViewportCurrent.Content = _dashboardView; BuildActionsForDashboard(); ActionButtons.Opacity = 0; ActionButtons.RenderTransform = new TranslateTransform { X = -30 }; var sbEnter = new Storyboard(); var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn }; var newButtonsOpacity = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn }; Storyboard.SetTarget(newButtonsOpacity, ActionButtons); Storyboard.SetTargetProperty(newButtonsOpacity, "Opacity"); sbEnter.Children.Add(newButtonsOpacity); var newButtonsTranslate = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn }; Storyboard.SetTarget(newButtonsTranslate, ActionButtons); Storyboard.SetTargetProperty(newButtonsTranslate, "(UIElement.RenderTransform).(TranslateTransform.X)"); sbEnter.Children.Add(newButtonsTranslate); var tcsEnter = new TaskCompletionSource(); sbEnter.Completed += (_, _) => tcsEnter.TrySetResult(); sbEnter.Begin(); await tcsEnter.Task; _isAnimating = false; }
+        private async void SwitchToDeclarations() { if (_isClosing || _isAnimating) return; if (_supabaseService.Doctors == null) { await ShowInfo("Brak aktywnego profilu", "Wybierz aktywny profil w ustawieniach, aby dodać deklaracje."); return; } _isAnimating = true; var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray(); _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0); ActionButtons.Opacity = 0; ActionButtons.RenderTransform = new TranslateTransform { X = 30 }; var leftCol = _declarationsView.LeftColumn; var calendar = _declarationsView.CalendarView; leftCol.Opacity = 0; leftCol.RenderTransform = new TranslateTransform { Y = -20 }; calendar.Opacity = 0; calendar.RenderTransform = new ScaleTransform { ScaleX = 0.95, ScaleY = 0.95 }; ViewportCurrent.Content = _declarationsView; BuildActionsForDeclarations(); var sb = new Storyboard(); var ease = new CubicEase { EasingMode = EasingMode.EaseOut }; var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity"); sb.Children.Add(buttonsOpacityAnim); var buttonsTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)"); sb.Children.Add(buttonsTranslateAnim); var leftColOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColOpacityAnim, leftCol); Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity"); sb.Children.Add(leftColOpacityAnim); var leftColTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColTranslateAnim, leftCol); Storyboard.SetTargetProperty(leftColTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.Y)"); sb.Children.Add(leftColTranslateAnim); var calendarOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarOpacityAnim, calendar); Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity"); sb.Children.Add(calendarOpacityAnim); var calendarScaleXAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleXAnim, calendar); Storyboard.SetTargetProperty(calendarScaleXAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleX)"); sb.Children.Add(calendarScaleXAnim); var calendarScaleYAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleYAnim, calendar); Storyboard.SetTargetProperty(calendarScaleYAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)"); sb.Children.Add(calendarScaleYAnim); var tcs = new TaskCompletionSource(); sb.Completed += (_, _) => tcs.TrySetResult(); sb.Begin(); await tcs.Task; _isAnimating = false; }
         private async void SwitchToManage() { if (_isClosing) return; if (_supabaseService.Doctors == null) { await ShowInfo("Brak aktywnego profilu", "Wybierz aktywny profil w ustawieniach, aby zarządzać dyżurnymi."); return; } await ShowAddDoctorDialogAsync(); }
         private static void DetachFromParent(FrameworkElement el) { if (el.Parent is ContentControl cc) cc.Content = null; else if (el.Parent is Border b) b.Child = null; else if (el.Parent is Panel p) p.Children.Remove(el); }
         private static FrameworkElement? TryGetHeader(object? content) { if (content is FrameworkElement fe) return fe.FindName("ViewHeader") as FrameworkElement; return null; }

@@ -6,7 +6,15 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,100,*,Auto,Auto" Background="Transparent">
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="100"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
               Background="{ThemeResource LayerFillColorDefaultBrush}"
               Padding="10,0" Margin="0,0,140,0">
@@ -16,10 +24,46 @@
         </Grid>
 
         <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
-            <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}" FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="PrevUnitButton"
+                    Grid.Column="0"
+                    Content="&#xE0E2;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}"
+                    ToolTipService.ToolTip="Poprzednia jednostka"/>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}"
+                           FontSize="20" FontWeight="SemiBold"
+                           TextWrapping="Wrap" TextAlignment="Center"/>
+
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}"
+                           FontSize="18" 
+                           FontWeight="SemiBold" 
+                           Opacity="0.8"
+                           TextWrapping="Wrap" 
+                           TextAlignment="Center"
+                           Margin="0,6,0,0"/>
+            </StackPanel>
+
+            <Button x:Name="NextUnitButton"
+                    Grid.Column="2"
+                    Content="&#xE0E3;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.SwitchToNextUnitCommand}"
+                    ToolTipService.ToolTip="Następna jednostka"/>
         </Grid>
 
-        <Grid Grid.Row="2" Padding="12,8,12,8">
+        <Grid Grid.Row="2" Padding="12,8,12,4">
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <Grid x:Name="ViewportGrid">
                     <ContentControl x:Name="ViewportCurrent" Opacity="1"
@@ -30,8 +74,10 @@
             </Border>
         </Grid>
 
-        <Grid Grid.Row="3" Padding="12,4">
-            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}">
+        <Grid Grid.Row="3" Padding="12,4,12,10">
+            <ItemsControl x:Name="ActionButtons"
+                          ItemsSource="{x:Bind Actions}"
+                          VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -51,11 +97,24 @@
             </ItemsControl>
         </Grid>
 
-        <Grid Grid.Row="4" Padding="10,4" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16"
+        <Grid Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
               Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12" VerticalAlignment="Center"/>
             <Border Grid.Column="1" Width="1" Background="#22000000"/>
-            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
+
+            <TextBlock Grid.Column="2" 
+                       Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" 
+                       Opacity="0.9" 
+                       FontSize="13" 
+                       FontWeight="SemiBold" 
+                       Margin="0,2,0,0"
+                       VerticalAlignment="Center"/>
         </Grid>
     </Grid>
 </Window>

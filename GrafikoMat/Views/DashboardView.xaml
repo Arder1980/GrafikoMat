@@ -5,52 +5,95 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:controls="using:GrafikoMat.Controls"
     mc:Ignorable="d">
 
-	<Grid RowDefinitions="Auto,*" Padding="12">
-		<!-- Pasek: ROK / MIESIĄC -->
-		<Grid Grid.Row="0" ColumnSpacing="8"
-              ColumnDefinitions="Auto,Auto,Auto,Auto, 24, Auto,Auto,Auto,Auto"
-              VerticalAlignment="Center">
-			<TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
-			<Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnYearPrev"/>
-			<ComboBox Grid.Column="2" Width="110"
-                      ItemsSource="{Binding Years}" SelectedItem="{Binding SelectedYear, Mode=TwoWay}"/>
-			<Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnYearNext"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-			<TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
-			<Button   Grid.Column="6" Content="⟨" Width="32" Height="32" Click="OnMonthPrev"/>
-			<ComboBox Grid.Column="7" Width="180"
-                      ItemsSource="{Binding Months}" SelectedIndex="{Binding SelectedMonthIndex, Mode=TwoWay}"/>
-			<Button   Grid.Column="8" Content="⟩" Width="32" Height="32" Click="OnMonthNext"/>
-		</Grid>
+        <Grid Grid.Row="0" Padding="12" ColumnSpacing="8" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="24"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
 
-		<!-- Treść: lewa 3/4 (tabela), prawa 1/4 (grafik) -->
-		<Grid Grid.Row="1" ColumnDefinitions="3*,*" ColumnSpacing="12" Padding="0,8,0,0">
-			<Grid RowDefinitions="Auto,*">
-				<TextBlock Text="Deklaracje dyżurowe" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-					<Grid x:Name="LeftTableHost"/>
-				</Border>
-			</Grid>
+            <TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="1" Content="&#x27E8;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnYearPrev"/>
+            <ComboBox Grid.Column="2" Width="110" ItemsSource="{Binding Years}" SelectedItem="{Binding SelectedYear, Mode=TwoWay}"/>
+            <Button   Grid.Column="3" Content="&#x27E9;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnYearNext"/>
+            <TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="6" Content="&#x27E8;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnMonthPrev"/>
+            <ComboBox Grid.Column="7" Width="180" ItemsSource="{Binding Months}" SelectedIndex="{Binding SelectedMonthIndex, Mode=TwoWay}"/>
+            <Button   Grid.Column="8" Content="&#x27E9;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnMonthNext"/>
+        </Grid>
 
-			<Grid Grid.Column="1" RowDefinitions="Auto,*">
-				<TextBlock Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-					<ScrollViewer>
-						<ListView ItemsSource="{Binding RosterRows}" SelectionMode="None" Padding="4">
-							<ListView.ItemTemplate>
-								<DataTemplate x:DataType="vm:RosterRow">
-									<Grid ColumnDefinitions="2*,3*" Padding="4,2">
-										<TextBlock Text="{x:Bind DateLabel}"/>
-										<TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"/>
-									</Grid>
-								</DataTemplate>
-							</ListView.ItemTemplate>
-						</ListView>
-					</ScrollViewer>
-				</Border>
-			</Grid>
-		</Grid>
-	</Grid>
+        <Grid Grid.Row="1" Padding="12,0,12,12" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Zestawienie deklaracji dyżurowych" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                    <Grid x:Name="LeftTableHost"/>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+                <Border x:Name="RosterContainer" Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                    <ItemsControl ItemsSource="{Binding RosterRows}">
+
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:AutoEqualRowsGrid/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RosterRow">
+                                <Grid ColumnSpacing="12" Padding="8,0"
+                                      Background="{x:Bind IsDayOff, Converter={StaticResource BooleanToBrushConverter_DayOff}}"
+                                      BorderBrush="{ThemeResource CardStrokeColorDefault}"
+                                      BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
 </UserControl>
