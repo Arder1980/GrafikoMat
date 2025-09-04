@@ -30,10 +30,8 @@ namespace GrafikoMat
 
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
-
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
-        // Delegaty do subskrypcji eventów z DeclarationsView (żeby móc poprawnie odsubskrybować)
         private Action<DoctorMonthDeclaration>? _evtDeclSave;
         private Action<DoctorMonthDeclaration>? _evtDeclSaveAndClose;
         private Action? _evtDeclClose;
@@ -41,7 +39,6 @@ namespace GrafikoMat
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
-
         public MainWindow()
         {
             ViewModel = new MainViewModel();
@@ -57,7 +54,7 @@ namespace GrafikoMat
             _dashboardView.Attach(ViewModel);
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
-            ResetViewportState(); // <-- startowo wyzeruj
+            ResetViewportState();
 
             _evtDeclSave = dm => OnDeclSave(dm);
             _evtDeclSaveAndClose = dm => OnDeclSaveAndClose(dm);
@@ -66,7 +63,6 @@ namespace GrafikoMat
             _declarationsView.SaveRequested += _evtDeclSave;
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
-
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
@@ -102,7 +98,6 @@ namespace GrafikoMat
         private void SetupBackdrop()
         {
             if (_isClosing) return;
-
             bool isMaximized = IsWindowMaximized();
             if (!isMaximized)
             {
@@ -181,22 +176,143 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => AddDoctorPlaceholder())));
         }
 
+        // ##################################################################################
+        // ### ZMIANA: Przebudowa metody powrotu do pulpitu na w pełni customową animację
+        // ##################################################################################
         private async void SwitchToDashboard()
         {
-            if (_isClosing) return;
+            if (_isClosing || _isAnimating) return;
+            _isAnimating = true;
+
+            var sbExit = new Storyboard();
+            var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            // Krok 1: Animacja wyjścia aktualnych elementów (kolejność odwrotna do wejścia)
+            if (ViewportCurrent.Content == _declarationsView)
+            {
+                var leftCol = _declarationsView.LeftColumn;
+                var calendar = _declarationsView.CalendarView;
+
+                var calendarOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut };
+                Storyboard.SetTarget(calendarOpacityAnim, calendar);
+                Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity");
+                sbExit.Children.Add(calendarOpacityAnim);
+
+                var leftColOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(50) };
+                Storyboard.SetTarget(leftColOpacityAnim, leftCol);
+                Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity");
+                sbExit.Children.Add(leftColOpacityAnim);
+            }
+
+            var buttonsOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) };
+            Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons);
+            Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity");
+            sbExit.Children.Add(buttonsOpacityAnim);
+
+            var buttonsTranslateAnim = new DoubleAnimation { To = 30, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) };
+            Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons);
+            Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sbExit.Children.Add(buttonsTranslateAnim);
+
+            var tcsExit = new TaskCompletionSource();
+            sbExit.Completed += (_, _) => tcsExit.TrySetResult();
+            sbExit.Begin();
+            await tcsExit.Task;
+
+            // Krok 2: Podmiana widoku i przycisków
             _dashboardView.Attach(ViewModel);
-            await AnimateToAsync(_dashboardView, forward: false);
+            ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
+            ActionButtons.Opacity = 0;
+            ActionButtons.RenderTransform = new TranslateTransform { X = -30 }; // Stan początkowy dla wjazdu z lewej
+
+            // Krok 3: Animacja wejścia nowych przycisków
+            var sbEnter = new Storyboard();
+            var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
+
+            var newButtonsOpacity = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn };
+            Storyboard.SetTarget(newButtonsOpacity, ActionButtons);
+            Storyboard.SetTargetProperty(newButtonsOpacity, "Opacity");
+            sbEnter.Children.Add(newButtonsOpacity);
+
+            var newButtonsTranslate = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn };
+            Storyboard.SetTarget(newButtonsTranslate, ActionButtons);
+            Storyboard.SetTargetProperty(newButtonsTranslate, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sbEnter.Children.Add(newButtonsTranslate);
+
+            var tcsEnter = new TaskCompletionSource();
+            sbEnter.Completed += (_, _) => tcsEnter.TrySetResult();
+            sbEnter.Begin();
+            await tcsEnter.Task;
+
+            _isAnimating = false;
         }
 
         private async void SwitchToDeclarations()
         {
-            if (_isClosing) return;
+            if (_isClosing || _isAnimating) return;
+            _isAnimating = true;
+
             var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
             _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0);
 
-            await AnimateToAsync(_declarationsView, forward: true);
+            ActionButtons.Opacity = 0;
+            ActionButtons.RenderTransform = new TranslateTransform { X = 30 };
+
+            var leftCol = _declarationsView.LeftColumn;
+            var calendar = _declarationsView.CalendarView;
+            leftCol.Opacity = 0;
+            leftCol.RenderTransform = new TranslateTransform { Y = -20 };
+            calendar.Opacity = 0;
+            calendar.RenderTransform = new ScaleTransform { ScaleX = 0.95, ScaleY = 0.95 };
+
+            ViewportCurrent.Content = _declarationsView;
             BuildActionsForDeclarations();
+
+            var sb = new Storyboard();
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease };
+            Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons);
+            Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity");
+            sb.Children.Add(buttonsOpacityAnim);
+
+            var buttonsTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease };
+            Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons);
+            Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            sb.Children.Add(buttonsTranslateAnim);
+
+            var leftColOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) };
+            Storyboard.SetTarget(leftColOpacityAnim, leftCol);
+            Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity");
+            sb.Children.Add(leftColOpacityAnim);
+
+            var leftColTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) };
+            Storyboard.SetTarget(leftColTranslateAnim, leftCol);
+            Storyboard.SetTargetProperty(leftColTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.Y)");
+            sb.Children.Add(leftColTranslateAnim);
+
+            var calendarOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
+            Storyboard.SetTarget(calendarOpacityAnim, calendar);
+            Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity");
+            sb.Children.Add(calendarOpacityAnim);
+
+            var calendarScaleXAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
+            Storyboard.SetTarget(calendarScaleXAnim, calendar);
+            Storyboard.SetTargetProperty(calendarScaleXAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleX)");
+            sb.Children.Add(calendarScaleXAnim);
+
+            var calendarScaleYAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) };
+            Storyboard.SetTarget(calendarScaleYAnim, calendar);
+            Storyboard.SetTargetProperty(calendarScaleYAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)");
+            sb.Children.Add(calendarScaleYAnim);
+
+            var tcs = new TaskCompletionSource();
+            sb.Completed += (_, _) => tcs.TrySetResult();
+            sb.Begin();
+            await tcs.Task;
+
+            _isAnimating = false;
         }
 
         private async void SwitchToSettings()
@@ -229,7 +345,6 @@ namespace GrafikoMat
             return null;
         }
 
-        // --- NOWE: reset domyślnych transformacji i opacity prezenterów + headerów
         private void ResetViewportState()
         {
             var cur = ViewportCurrent;
@@ -244,7 +359,6 @@ namespace GrafikoMat
             nxtT.X = 0;
             cur.Opacity = 1;
             nxt.Opacity = 0;
-
             var ch = TryGetHeader(cur.Content);
             var nh = TryGetHeader(nxt.Content);
 
@@ -267,8 +381,6 @@ namespace GrafikoMat
             if (_isClosing) { ViewportCurrent.Content = nextView; ResetViewportState(); return; }
             if (ReferenceEquals(ViewportCurrent.Content, nextView))
                 return;
-
-            // Jeżeli trwa animacja: przerwij i ustaw docelowy widok, ALE wyzeruj transformacje
             if (_isAnimating)
             {
                 DetachFromParent(nextView);
@@ -277,7 +389,7 @@ namespace GrafikoMat
 
                 ViewportNext.Content = null;
                 ViewportCurrent.Content = nextView;
-                ResetViewportState(); // <-- kluczowe
+                ResetViewportState();
                 return;
             }
 
@@ -288,15 +400,12 @@ namespace GrafikoMat
 
             DetachFromParent(nextView);
 
-            // Zawsze startuj z wyzerowanego stanu
             ResetViewportState();
-
             var curTransform = (curPresenter.RenderTransform as TranslateTransform)!;
             var nxtTransform = (nxtPresenter.RenderTransform as TranslateTransform)!;
 
             var curHeader = TryGetHeader(curPresenter.Content);
             var nxtHeader = TryGetHeader(nextView);
-
             TranslateTransform? curHeaderTransform = null;
             TranslateTransform? nxtHeaderTransform = null;
 
@@ -331,7 +440,6 @@ namespace GrafikoMat
 
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
             Storyboard.SetTarget(curX, curPresenter);
             Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
@@ -380,26 +488,19 @@ namespace GrafikoMat
                 sb.Begin();
                 await tcs.Task;
             }
-            catch
-            {
-                // okno mogło się zamykać
-            }
+            catch { }
 
             if (_isClosing) return;
-
             ViewportNext.Content = null;
             ViewportCurrent.Content = nextView;
 
-            // finalny reset
             ResetViewportState();
-
             _isAnimating = false;
         }
 
         private void OnWindowClosed(object sender, WindowEventArgs args)
         {
             _isClosing = true;
-
             try { _activeStoryboard?.Stop(); } catch { }
             _activeStoryboard = null;
             _isAnimating = false;
@@ -432,19 +533,14 @@ namespace GrafikoMat
         }
 
         private void OnDeclCloseOnly() => SwitchToDashboard();
-
         private async void GenerateRosterPlaceholder()
             => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
-
         private async void ExportPlaceholder()
             => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-
         private async void SaveSettingsPlaceholder()
             => await ShowInfo("Ustawienia", "Zapis ustawień (tryb 12h/24h, motyw, itp.) – w przygotowaniu.");
-
         private async void AddDoctorPlaceholder()
             => await ShowInfo("Dodaj dyżurnego", "Formularz dodania/edycji dyżurnego – w przygotowaniu.");
-
         private async Task ShowInfo(string title, string message)
         {
             var dlg = new ContentDialog

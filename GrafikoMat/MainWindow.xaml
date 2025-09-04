@@ -31,16 +31,10 @@
         </Grid>
 
         <Grid Grid.Row="3" Padding="12,4">
-            <ItemsControl ItemsSource="{x:Bind Actions}">
+            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <StackPanel.ChildrenTransitions>
-                                <TransitionCollection>
-                                    <EntranceThemeTransition/>
-                                    <RepositionThemeTransition/>
-                                </TransitionCollection>
-                            </StackPanel.ChildrenTransitions>
                         </StackPanel>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
