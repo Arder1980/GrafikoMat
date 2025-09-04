@@ -24,7 +24,7 @@ namespace GrafikoMat
     public sealed partial class MainWindow : Window
     {
         private const int MIN_W = 1600;
-        private const int MIN_H = 900;
+        private const int MIN_H = 1000;
 
         private AppWindow? _appWindow;
 
@@ -39,6 +39,14 @@ namespace GrafikoMat
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
+
+        private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        private WndProc? _newWndProc;
+        private IntPtr _oldWndProc;
+
+        // ZMIANA: Dodajemy flagę, aby ustawić rozmiar tylko raz
+        private bool _isInitialSizeSet = false;
+
         public MainWindow()
         {
             ViewModel = new MainViewModel();
@@ -49,7 +57,6 @@ namespace GrafikoMat
 
             InitAppWindow();
             SetupBackdrop();
-            EnforceMinSize();
 
             _dashboardView.Attach(ViewModel);
             ViewportCurrent.Content = _dashboardView;
@@ -77,13 +84,33 @@ namespace GrafikoMat
             if (_appWindow is not null)
             {
                 _appWindow.Title = string.Empty;
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
+                // ZMIANA: Usunięto ustawianie rozmiaru stąd, bo jest za wcześnie
+                // _appWindow.Resize(new SizeInt32(MIN_W, MIN_H)); 
                 try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
+
+                _appWindow.Changed += OnAppWindowChanged;
+
+                SubclassWindow(hwnd);
+            }
+        }
+
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (args.DidPresenterChange && !_isClosing)
+            {
+                SetupBackdrop();
             }
         }
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
+            // ZMIANA: Ustawiamy początkowy rozmiar okna tutaj, przy pierwszej aktywacji.
+            if (!_isInitialSizeSet && _appWindow != null)
+            {
+                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
+                _isInitialSizeSet = true;
+            }
+
             if (_isClosing) return;
             SetupBackdrop();
         }
@@ -91,14 +118,13 @@ namespace GrafikoMat
         private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e)
         {
             if (_isClosing) return;
-            SetupBackdrop();
-            EnforceMinSize();
         }
 
         private void SetupBackdrop()
         {
             if (_isClosing) return;
-            bool isMaximized = IsWindowMaximized();
+            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
+
             if (!isMaximized)
             {
                 try
@@ -126,22 +152,45 @@ namespace GrafikoMat
             return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
         }
 
-        [DllImport("user32.dll")] private static extern bool IsZoomed(IntPtr hWnd);
-        private bool IsWindowMaximized()
+        #region Win32 Interop for Min/Max Size
+
+        private void SubclassWindow(IntPtr hwnd)
         {
-            var hwnd = WindowNative.GetWindowHandle(this);
-            return IsZoomed(hwnd);
+            _newWndProc = new WndProc(AppWndProc);
+            _oldWndProc = SetWindowLongPtr(hwnd, -4, Marshal.GetFunctionPointerForDelegate(_newWndProc));
         }
 
-        private void EnforceMinSize()
+        private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if (_appWindow is null) return;
-            var size = _appWindow.Size;
-            int nw = size.Width < MIN_W ? MIN_W : size.Width;
-            int nh = size.Height < MIN_H ? MIN_H : size.Height;
-            if (nw != size.Width || nh != size.Height)
-                _appWindow.Resize(new SizeInt32(nw, nh));
+            if (msg == 0x0024) // WM_GETMINMAXINFO
+            {
+                var minMaxInfo = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                var dpi = GetDpiForWindow(hWnd);
+                float scalingFactor = dpi / 96f;
+
+                minMaxInfo.ptMinTrackSize.x = (int)(MIN_W * scalingFactor);
+                minMaxInfo.ptMinTrackSize.y = (int)(MIN_H * scalingFactor);
+
+                Marshal.StructureToPtr(minMaxInfo, lParam, true);
+                return IntPtr.Zero;
+            }
+
+            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MINMAXINFO { public POINT ptReserved; public POINT ptMaxSize; public POINT ptMaxPosition; public POINT ptMinTrackSize; public POINT ptMaxTrackSize; }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT { public int x; public int y; }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        #endregion
 
         private void BuildActionsForDashboard()
         {
@@ -176,9 +225,6 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => AddDoctorPlaceholder())));
         }
 
-        // ##################################################################################
-        // ### ZMIANA: Przebudowa metody powrotu do pulpitu na w pełni customową animację
-        // ##################################################################################
         private async void SwitchToDashboard()
         {
             if (_isClosing || _isAnimating) return;
@@ -187,7 +233,6 @@ namespace GrafikoMat
             var sbExit = new Storyboard();
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-            // Krok 1: Animacja wyjścia aktualnych elementów (kolejność odwrotna do wejścia)
             if (ViewportCurrent.Content == _declarationsView)
             {
                 var leftCol = _declarationsView.LeftColumn;
@@ -219,14 +264,12 @@ namespace GrafikoMat
             sbExit.Begin();
             await tcsExit.Task;
 
-            // Krok 2: Podmiana widoku i przycisków
             _dashboardView.Attach(ViewModel);
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ActionButtons.Opacity = 0;
-            ActionButtons.RenderTransform = new TranslateTransform { X = -30 }; // Stan początkowy dla wjazdu z lewej
+            ActionButtons.RenderTransform = new TranslateTransform { X = -30 };
 
-            // Krok 3: Animacja wejścia nowych przycisków
             var sbEnter = new Storyboard();
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
 
@@ -508,6 +551,8 @@ namespace GrafikoMat
             this.SizeChanged -= OnWindowSizeChanged;
             this.Activated -= OnWindowActivated;
             this.Closed -= OnWindowClosed;
+
+            if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
 
             if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
