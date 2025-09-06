@@ -14,15 +14,53 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
-              Background="{ThemeResource LayerFillColorDefaultBrush}"
-              Padding="10,0" Margin="0,0,140,0">
-            <Grid x:Name="DragBar" VerticalAlignment="Center">
+      Background="{ThemeResource LayerFillColorDefaultBrush}"
+      Padding="10,0,0,0">
+            <!-- prawa krawędź ustawimy dynamicznie w C# -->
+
+            <Grid.Resources>
+                <!-- Flyout w zasobach -->
+                <MenuFlyout x:Key="TitleBarMenu" Placement="BottomEdgeAlignedRight">
+                    <MenuFlyoutItem Text="Ustawienia" Click="TitleBarSettings_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE713;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator/>
+                    <MenuFlyoutItem Text="Wyloguj i zamknij" Click="TitleBarSignOutAndClose_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE8AC;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout>
+            </Grid.Resources>
+
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- TYLKO to jest strefą przeciągania -->
+            <Grid x:Name="DragBar" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="GrafikoMat Dyżurowy" FontSize="14" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
-        </Grid>
 
+            <!-- Hamburger „jak przyciski okna”: prostokątny, biała ikona, hover=seledyn -->
+            <Button Grid.Column="1"
+            x:Name="TitleBarMenuButton"
+            Width="46" Height="32"
+            HorizontalAlignment="Right"
+            ToolTipService.ToolTip="Menu"
+            FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}"
+            Click="TitleBarMenuButton_Click">
+                <Button.Resources>
+                    <!-- prostokątny kształt (bez zaokrągleń) -->
+                    <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
+                </Button.Resources>
+                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;"/>
+            </Button>
+        </Grid>
         <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>

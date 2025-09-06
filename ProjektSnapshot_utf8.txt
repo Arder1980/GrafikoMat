@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-06 23:07:28
+# Data:       2025-09-07 00:13:01
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -1159,7 +1159,7 @@ namespace GrafikoMat.Controls
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (27616 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (28021 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1180,6 +1180,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Diagnostics; // <= LOGI
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
@@ -1264,19 +1265,23 @@ namespace GrafikoMat
             }
 
             // 3) *** KLUCZ *** spróbuj przywrócić sesję z dysku (FileSessionHandler)
-            var restored = await _supabaseService.TryRestoreSessionAsync();
+            Debug.WriteLine("[MainWindow] Init: RestoreSessionIfAnyAsync() AWAIT...");
+            var restored = await _supabaseService.RestoreSessionIfAnyAsync(); // <= naprawa: było TryRestoreSessionAsync()
+            Debug.WriteLine($"[MainWindow] Init: restored={restored}, IsAuthenticated={_supabaseService.IsAuthenticated}");
 
             // 4) Jeśli nadal nieautoryzowani – pokaż logowanie
             if (!restored && !_supabaseService.IsAuthenticated)
             {
+                Debug.WriteLine("[MainWindow] Init: brak sesji – pokazuję ekran logowania");
                 bool loggedIn = await ShowLoginScreenAsync();
+                Debug.WriteLine($"[MainWindow] Init: wynik logowania = {loggedIn}");
+
                 if (!loggedIn)
                 {
                     this.Close();
                     return;
                 }
-                // Po udanym logowaniu GoTrue samo zapisze sesję przez SessionPersistence
-                // (FileSessionHandler), więc nie musisz tu nic dopisywać.
+                // Po udanym logowaniu sesja jest zapisywana ręcznie w LoginSuccess -> SaveCurrentSessionAsync()
             }
 
             // 5) Załaduj dane i pokaż dashboard
@@ -1293,7 +1298,7 @@ namespace GrafikoMat
                 _dataService = new DataService(_supabaseService);
                 ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
 
-                // NOWE: po zainicjalizowaniu klienta spróbuj od razu przywrócić sesję z pliku
+                // Opcjonalnie zostawiamy: wstępne przywrócenie tuż po inicjalizacji klienta
                 await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
@@ -1346,7 +1351,7 @@ namespace GrafikoMat
 
         private async Task<bool> ShowLoginScreenAsync()
         {
-            // NOWE: jeśli już jesteśmy zalogowani (sesja przywrócona), po prostu pomijamy ekran logowania
+            // Jeśli już jesteśmy zalogowani (sesja przywrócona), pomijamy logowanie.
             if (_supabaseService != null && _supabaseService.IsAuthenticated)
                 return true;
 
@@ -1709,9 +1714,10 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\FileSessionHandler.cs (1922 bytes)
+===== FILE: GrafikoMat\Services\FileSessionHandler.cs (3489 bytes)
 ----- BEGIN -----
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -1740,31 +1746,71 @@ namespace GrafikoMat.Services
 
         public async Task SaveAsync(Session session)
         {
-            if (session is null) return;
+            if (session is null)
+            {
+                Debug.WriteLine("[FileSessionHandler] SaveAsync: brak sesji do zapisania.");
+                return;
+            }
+
             try
             {
                 var json = JsonSerializer.Serialize(session, JsonOpts);
                 await File.WriteAllTextAsync(SessionPath, json).ConfigureAwait(false);
+                Debug.WriteLine($"[FileSessionHandler] Sesja ZAPISANA do pliku: {SessionPath}");
             }
-            catch { /* log opcjonalny */ }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FileSessionHandler] Błąd zapisu do {SessionPath}: {ex.Message}");
+            }
         }
+        public static string SessionFilePath => SessionPath;
 
         public async Task<Session?> LoadAsync()
         {
             try
             {
-                if (!File.Exists(SessionPath)) return null;
+                if (!File.Exists(SessionPath))
+                {
+                    Debug.WriteLine($"[FileSessionHandler] LoadAsync: brak pliku {SessionPath}");
+                    return null;
+                }
+
                 var json = await File.ReadAllTextAsync(SessionPath).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(json)) return null;
-                return JsonSerializer.Deserialize<Session>(json, JsonOpts);
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    Debug.WriteLine($"[FileSessionHandler] LoadAsync: plik {SessionPath} pusty.");
+                    return null;
+                }
+
+                var session = JsonSerializer.Deserialize<Session>(json, JsonOpts);
+                Debug.WriteLine($"[FileSessionHandler] Sesja WCZYTANA z pliku: {SessionPath}");
+                return session;
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FileSessionHandler] Błąd odczytu z {SessionPath}: {ex.Message}");
+                return null;
+            }
         }
 
         public void Delete()
         {
-            try { if (File.Exists(SessionPath)) File.Delete(SessionPath); }
-            catch { /* ignorujemy */ }
+            try
+            {
+                if (File.Exists(SessionPath))
+                {
+                    File.Delete(SessionPath);
+                    Debug.WriteLine($"[FileSessionHandler] Sesja USUNIĘTA (plik {SessionPath})");
+                }
+                else
+                {
+                    Debug.WriteLine($"[FileSessionHandler] Delete: plik {SessionPath} nie istnieje.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FileSessionHandler] Błąd usuwania {SessionPath}: {ex.Message}");
+            }
         }
     }
 }
@@ -1842,7 +1888,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SupabaseService.cs (9069 bytes)
+===== FILE: GrafikoMat\Services\SupabaseService.cs (10045 bytes)
 ----- BEGIN -----
 using System;
 using System.Diagnostics;
@@ -1910,109 +1956,125 @@ namespace GrafikoMat.Services
         /// </summary>
         public async Task<bool> RestoreSessionIfAnyAsync()
         {
+            Debug.WriteLine("[SupabaseService] Restore: START");
+
             if (_client is null)
             {
-                Debug.WriteLine("[SupabaseService] Restore: brak klienta.");
+                Debug.WriteLine("[SupabaseService] Restore: brak klienta – PRZERWANE");
                 return false;
             }
 
             var fh = new FileSessionHandler();
             var saved = await fh.LoadAsync().ConfigureAwait(false);
-            if (saved is null)
-            {
-                Debug.WriteLine("[SupabaseService] Restore: brak zapisanego pliku sesji.");
-                return false;
-            }
+            Debug.WriteLine("[SupabaseService] Restore: LoadAsync() -> " + (saved is null ? "NULL" : "OK"));
+
+            if (saved is null) return false;
 
             var auth = _client.Auth;
+            var authType = auth.GetType();
 
-            // 1) Spróbuj wstrzyknąć sesję do SDK
-            var setSessionStrStr = auth.GetType().GetMethod(
-                "SetSession",
-                BindingFlags.Public | BindingFlags.Instance,
-                binder: null,
-                types: new[] { typeof(string), typeof(string) },
-                modifiers: null);
-
-            var setSessionSession = auth.GetType().GetMethod(
-                "SetSession",
-                BindingFlags.Public | BindingFlags.Instance,
-                binder: null,
-                types: new[] { typeof(Session) },
-                modifiers: null);
-
-            try
-            {
-                if (setSessionStrStr != null)
-                {
-                    setSessionStrStr.Invoke(auth, new object[] { saved.AccessToken, saved.RefreshToken });
-                    Debug.WriteLine("[SupabaseService] Restore: SetSession(string,string) wywołane.");
-                }
-                else if (setSessionSession != null)
-                {
-                    setSessionSession.Invoke(auth, new object[] { saved });
-                    Debug.WriteLine("[SupabaseService] Restore: SetSession(Session) wywołane.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[SupabaseService] Restore: wyjątek SetSession(...): " + ex.Message);
-            }
-
-            // Jeśli już mamy sesję po SetSession – gotowe.
-            if (auth.CurrentSession != null)
-            {
-                await SaveCurrentSessionAsync().ConfigureAwait(false); // utrwal świeże tokeny
-                Debug.WriteLine("[SupabaseService] Restore: sesja ustawiona po SetSession.");
-                return true;
-            }
-
-            // 2) Jeśli nadal brak – odśwież sesję i POCZEKAJ na Task z refleksji
-            static async Task InvokeMaybeTask(MethodInfo mi, object target, params object[] args)
+            // helper do refleksji z opcjonalnym await
+            static async Task InvokeAwaitIfTask(System.Reflection.MethodInfo mi, object target, params object[] args)
             {
                 var result = mi.Invoke(target, args);
                 if (result is Task t) await t.ConfigureAwait(false);
             }
 
-            var refreshNoArgs = auth.GetType().GetMethod(
-                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-
-            var refreshWithSession = auth.GetType().GetMethod(
-                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(Session) }, null);
-
-            var refreshWithTokens = auth.GetType().GetMethod(
-                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string), typeof(string) }, null);
-
             try
             {
-                if (refreshWithTokens != null)
+                // 1) NAJPIERW spróbuj SetSession(string,string,bool) – tego brakowało
+                var setSession3 = authType.GetMethod(
+                    "SetSession",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    binder: null,
+                    types: new[] { typeof(string), typeof(string), typeof(bool) },
+                    modifiers: null);
+
+                if (setSession3 != null)
                 {
-                    await InvokeMaybeTask(refreshWithTokens, auth, saved.AccessToken, saved.RefreshToken);
-                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession(string,string) awaited.");
+                    Debug.WriteLine("[SupabaseService] Restore: SetSession(access,refresh,force=true) AWAIT...");
+                    await InvokeAwaitIfTask(setSession3, auth, saved.AccessToken, saved.RefreshToken, true);
+
+                    if (auth.CurrentSession != null)
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: CurrentSession != null po SetSession(3).");
+                        await SaveCurrentSessionAsync().ConfigureAwait(false);
+                        Debug.WriteLine("[SupabaseService] Restore: END -> TRUE (po SetSession(3))");
+                        return true;
+                    }
+                    else
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: nadal brak CurrentSession po SetSession(3).");
+                    }
                 }
-                else if (refreshWithSession != null)
+                else
                 {
-                    await InvokeMaybeTask(refreshWithSession, auth, saved);
-                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession(Session) awaited.");
+                    Debug.WriteLine("[SupabaseService] Restore: Brak SetSession(string,string,bool) w SDK.");
                 }
-                else if (refreshNoArgs != null)
+
+                // 2) Fallback: RefreshToken(string,string) – odśwież po tokenach z pliku
+                var refreshToken2 = authType.GetMethod(
+                    "RefreshToken",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    binder: null,
+                    types: new[] { typeof(string), typeof(string) },
+                    modifiers: null);
+
+                if (refreshToken2 != null)
                 {
-                    await InvokeMaybeTask(refreshNoArgs, auth);
-                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession() awaited.");
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshToken(access,refresh) AWAIT...");
+                    await InvokeAwaitIfTask(refreshToken2, auth, saved.AccessToken, saved.RefreshToken);
+
+                    if (auth.CurrentSession != null)
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: CurrentSession != null po RefreshToken(2).");
+                        await SaveCurrentSessionAsync().ConfigureAwait(false);
+                        Debug.WriteLine("[SupabaseService] Restore: END -> TRUE (po RefreshToken(2))");
+                        return true;
+                    }
+                    else
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: nadal brak CurrentSession po RefreshToken(2).");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: Brak RefreshToken(string,string) w SDK.");
+                }
+
+                // 3) Ostateczny fallback: RefreshSession() – działa TYLKO gdy SDK już ma sesję w pamięci
+                var refreshNoArgs = authType.GetMethod(
+                    "RefreshSession",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    binder: null,
+                    types: Type.EmptyTypes,
+                    modifiers: null);
+
+                if (refreshNoArgs != null)
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession() AWAIT...");
+                    await InvokeAwaitIfTask(refreshNoArgs, auth);
+
+                    if (auth.CurrentSession != null)
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: CurrentSession != null po RefreshSession().");
+                        await SaveCurrentSessionAsync().ConfigureAwait(false);
+                        Debug.WriteLine("[SupabaseService] Restore: END -> TRUE (po RefreshSession())");
+                        return true;
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: Brak RefreshSession() w SDK.");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[SupabaseService] Restore: wyjątek RefreshSession(...): " + ex.Message);
+                Debug.WriteLine("[SupabaseService] Restore: EX -> " + ex.Message);
             }
 
-            var ok = auth.CurrentSession != null;
-            Debug.WriteLine("[SupabaseService] Restore: wynik końcowy = " + ok);
-
-            if (ok)
-                await SaveCurrentSessionAsync().ConfigureAwait(false); // utrwal odświeżone tokeny
-
-            return ok;
+            Debug.WriteLine("[SupabaseService] Restore: END -> FALSE");
+            return false;
         }
 
         /// <summary>
@@ -3379,7 +3441,7 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\LoginView.xaml.cs (2218 bytes)
+===== FILE: GrafikoMat\Views\LoginView.xaml.cs (2443 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
@@ -3425,8 +3487,13 @@ namespace GrafikoMat.Views
                 var session = await _supabaseService.Client.Auth.SignIn(email, password);
                 if (session?.User != null)
                 {
+                    // ZAPISZ sesję do LocalFolder\supabase_session.json
+                    await _supabaseService.SaveCurrentSessionAsync();
+
+                    // Dopiero potem sygnalizuj sukces do okna głównego
                     LoginSuccess?.Invoke();
                 }
+
             }
             catch (Exception)
             {

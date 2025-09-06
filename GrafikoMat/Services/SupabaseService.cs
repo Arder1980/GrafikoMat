@@ -232,5 +232,23 @@ namespace GrafikoMat.Services
             new FileSessionHandler().Delete();
             Debug.WriteLine("[SupabaseService] SignOut: usunięto plik sesji.");
         }
+        public async Task SignOutAsync()
+        {
+            try
+            {
+                if (_client != null)
+                    await _client.Auth.SignOut(); // czyści sesję w SDK
+            }
+            catch { /* brak aktywnej sesji? pomijamy */ }
+
+            try
+            {
+                new FileSessionHandler().Delete(); // usuń plik supabase_session.json
+            }
+            catch { /* pomijamy */ }
+
+            System.Diagnostics.Debug.WriteLine("[SupabaseService] SignOut: SDK sign-out + usunięty plik sesji.");
+        }
+
     }
 }
