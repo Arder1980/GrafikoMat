@@ -6,30 +6,39 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
-	<Grid>
-		<Grid.ColumnDefinitions>
-			<ColumnDefinition Width="280"/>
-			<ColumnDefinition Width="*"/>
-		</Grid.ColumnDefinitions>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-		<ListView x:Name="SettingsMenu"
+        <ListView x:Name="SettingsMenu"
                   Grid.Column="0"
                   SelectionMode="Single"
                   SelectionChanged="SettingsMenu_SelectionChanged"
                   Background="{ThemeResource LayerFillColorDefaultBrush}">
-			<ListView.ItemTemplate>
-				<DataTemplate>
-					<TextBlock Text="{Binding}" FontSize="16" Margin="12,8"/>
-				</DataTemplate>
-			</ListView.ItemTemplate>
-		</ListView>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="16" Margin="12,8"/>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
 
-		<Border Grid.Column="1"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                Padding="24">
-			<ContentControl x:Name="SettingsDetailContent"
-                            HorizontalContentAlignment="Stretch"
-                            VerticalContentAlignment="Stretch"/>
-		</Border>
-	</Grid>
+        <Grid Grid.Column="1" Padding="24">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                <FontIcon Glyph="&#xE713;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
+                <TextBlock Text="Wybierz kategorię z menu po lewej stronie."
+                           Margin="0,12,0,0"
+                           Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+            </StackPanel>
+
+            <Border Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                    Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                <ContentControl x:Name="SettingsDetailContent"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"/>
+            </Border>
+        </Grid>
+    </Grid>
 </UserControl>

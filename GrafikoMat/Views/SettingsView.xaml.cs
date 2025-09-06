@@ -15,7 +15,6 @@ namespace GrafikoMat.Views
         public SettingsView()
         {
             this.InitializeComponent();
-            // Zaktualizowana lista pozycji w menu
             SettingsMenu.ItemsSource = new[]
             {
                 "Baza danych",
@@ -24,7 +23,8 @@ namespace GrafikoMat.Views
                 "Wybór silnika",
                 "Wygląd"
             };
-            SettingsMenu.SelectedIndex = 0;
+            // ZMIANA: Usunęliśmy automatyczne zaznaczanie
+            SettingsMenu.SelectedIndex = -1;
         }
 
         public void Initialize(DataService? dataService, SettingsService settingsService, AppSettings settings)
@@ -33,7 +33,9 @@ namespace GrafikoMat.Views
             _settingsService = settingsService;
             _appSettings = settings;
 
-            LoadSubView(SettingsMenu.Items[0] as string);
+            // ZMIANA: Czyścimy zawartość przy każdym wejściu do ustawień
+            SettingsDetailContent.Content = null;
+            SettingsMenu.SelectedIndex = -1;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -44,7 +46,11 @@ namespace GrafikoMat.Views
 
         private void LoadSubView(string? selectedItem)
         {
-            if (_settingsService == null || _appSettings == null) return;
+            if (_settingsService == null || _appSettings == null)
+            {
+                SettingsDetailContent.Content = null;
+                return;
+            }
 
             switch (selectedItem)
             {

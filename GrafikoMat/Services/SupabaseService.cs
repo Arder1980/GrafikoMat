@@ -33,7 +33,9 @@ namespace GrafikoMat.Services
             var options = new SupabaseOptions
             {
                 AutoRefreshToken = true,
-                AutoConnectRealtime = true
+                AutoConnectRealtime = true,
+                // ZMIANA: Podajemy nasz nowy mechanizm obsługi sesji
+                SessionHandler = new FileSessionHandler()
             };
             _client = new Client(url, apiKey, options);
 

@@ -67,7 +67,7 @@ namespace GrafikoMat.Views.Settings
                 if (result == ContentDialogResult.Primary)
                 {
                     await _dataService.DeleteUnitAsync(selectedUnit.Id);
-                    await LoadUnitsAsync(); // Odśwież listę
+                    await LoadUnitsAsync();
                 }
             }
         }
@@ -108,7 +108,7 @@ namespace GrafikoMat.Views.Settings
                 };
 
                 await _dataService.SaveUnitAsync(unitToSave);
-                await LoadUnitsAsync(); // Odśwież listę po zapisie
+                await LoadUnitsAsync();
             }
         }
     }
