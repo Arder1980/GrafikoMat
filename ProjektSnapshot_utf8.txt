@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-04 18:36:04
+# Data:       2025-09-06 09:10:30
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -9,7 +9,7 @@
 DIR  GrafikoMat
 DIR  GrafikoMat.Core
 DIR  GrafikoMat.Core\Data
-DIR  GrafikoMat.Core\Repository
+DIR  GrafikoMat.Core\Repositories
 DIR  GrafikoMat\Common
 DIR  GrafikoMat\Controls
 DIR  GrafikoMat\Models
@@ -18,19 +18,23 @@ DIR  GrafikoMat\Repositories
 DIR  GrafikoMat\Services
 DIR  GrafikoMat\ViewModels
 DIR  GrafikoMat\Views
+DIR  GrafikoMat\Views\Settings
 
-## FILES (liczba): 28
+## FILES (liczba): 33
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Declarations.Models.cs
 FILE GrafikoMat.Core\GrafikoMat.Core.csproj
-FILE GrafikoMat.Core\Repository\IDoctorRepository.cs
+FILE GrafikoMat.Core\Repositories\IDoctorRepository.cs
 FILE GrafikoMat.Core\Roster.Models.cs
 FILE GrafikoMat.Core\Scheduling.Abstractions.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
+FILE GrafikoMat\Common\Converters.cs
+FILE GrafikoMat\Common\PolishHolidays.cs
 FILE GrafikoMat\Common\RelayCommand.cs
+FILE GrafikoMat\Controls\AutoEqualRowsGrid.cs
 FILE GrafikoMat\Controls\CalendarUniformGridPanel.cs
 FILE GrafikoMat\GrafikoMat.WinUI.csproj
 FILE GrafikoMat\MainWindow.xaml
@@ -46,6 +50,8 @@ FILE GrafikoMat\Views\DashboardView.xaml
 FILE GrafikoMat\Views\DashboardView.xaml.cs
 FILE GrafikoMat\Views\DeclarationsView.xaml
 FILE GrafikoMat\Views\DeclarationsView.xaml.cs
+FILE GrafikoMat\Views\Settings\ProfilesSettingsView.xaml
+FILE GrafikoMat\Views\Settings\ProfilesSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
@@ -196,7 +202,7 @@ namespace GrafikoMat.Core.Declarations
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Repository\IDoctorRepository.cs (600 bytes)
+===== FILE: GrafikoMat.Core\Repositories\IDoctorRepository.cs (600 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using System;
@@ -469,24 +475,33 @@ EndGlobal
 
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml (613 bytes)
+===== FILE: GrafikoMat\App.xaml (1042 bytes)
 ----- BEGIN -----
 <Application
     x:Class="GrafikoMat.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:common="using:GrafikoMat.Common"
     RequestedTheme="Light">
 
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Zasoby kontrolek WinUI 3 (TabView*, NumberBox*, itp.) -->
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="SubtleButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+            </Style>
+
+            <common:BooleanToBrushConverter_DayOff x:Key="BooleanToBrushConverter_DayOff"/>
+
+            <common:BooleanToThicknessConverter_LastItemBorder x:Key="LastItemBorderConverter"/>
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>
-
 ----- END -----
 
 ===== FILE: GrafikoMat\App.xaml.cs (388 bytes)
@@ -510,6 +525,94 @@ namespace GrafikoMat
     }
 }
 
+----- END -----
+
+===== FILE: GrafikoMat\Common\Converters.cs (1508 bytes)
+----- BEGIN -----
+using Microsoft.UI;
+using Microsoft.UI.Xaml; // ZMIANA: Dodajemy ten using
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
+using System;
+using Windows.UI;
+
+namespace GrafikoMat.Common
+{
+    public class BooleanToBrushConverter_DayOff : IValueConverter
+    {
+        public Brush DayOffBrush { get; set; } = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
+        public Brush WorkDayBrush { get; set; } = new SolidColorBrush(Colors.Transparent);
+        public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? DayOffBrush : WorkDayBrush;
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
+    // ZMIANA: Nowy konwerter do ukrywania dolnej ramki ostatniego elementu
+    public class BooleanToThicknessConverter_LastItemBorder : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            // Jeśli 'value' to 'true' (czyli IsLast == true), zwróć grubość 0. W przeciwnym razie 1.
+            return (value is bool isLast && isLast)
+                ? new Thickness(0, 0, 0, 0)
+                : new Thickness(0, 0, 0, 1);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\Common\PolishHolidays.cs (1546 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+
+namespace GrafikoMat.Common
+{
+    public static class PolishHolidays
+    {
+        private static readonly HashSet<(int, int)> _fixedHolidays = new HashSet<(int, int)>
+        {
+            (1, 1),   // Nowy Rok
+            (1, 6),   // Trzech Króli
+            (5, 1),   // Święto Pracy
+            (5, 3),   // Święto Konstytucji 3 Maja
+            (8, 15),  // Wniebowzięcie NMP
+            (11, 1),  // Wszystkich Świętych
+            (11, 11), // Święto Niepodległości
+            (12, 25), // Boże Narodzenie
+            (12, 26)  // Boże Narodzenie
+        };
+
+        public static bool IsHoliday(DateTime date)
+        {
+            if (_fixedHolidays.Contains((date.Month, date.Day)))
+                return true;
+
+            // Obliczanie Wielkanocy (algorytm Gaussa)
+            int a = date.Year % 19;
+            int b = date.Year % 4;
+            int c = date.Year % 7;
+            int d = (19 * a + 24) % 30;
+            int e = (2 * b + 4 * c + 6 * d + 5) % 7;
+            var easterSunday = new DateTime(date.Year, 3, 22).AddDays(d + e);
+
+            if (date == easterSunday.AddDays(1)) // Poniedziałek Wielkanocny
+                return true;
+
+            if (date == easterSunday.AddDays(49)) // Zesłanie Ducha Świętego (Zielone Świątki)
+                return true;
+
+            if (date == easterSunday.AddDays(60)) // Boże Ciało
+                return true;
+
+            return false;
+        }
+    }
+}
 ----- END -----
 
 ===== FILE: GrafikoMat\Common\RelayCommand.cs (708 bytes)
@@ -536,6 +639,52 @@ namespace GrafikoMat.Common
     }
 }
 
+----- END -----
+
+===== FILE: GrafikoMat\Controls\AutoEqualRowsGrid.cs (1702 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
+
+namespace GrafikoMat.Controls
+{
+    /// <summary>
+    /// Specjalny panel Grid, który automatycznie dzieli swoją przestrzeń
+    /// na tyle równych wierszy (*), ile zawiera elementów.
+    /// </summary>
+    public class AutoEqualRowsGrid : Grid
+    {
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            // ZMIANA: Przeniesiono całą logikę tworzenia wierszy do fazy Measure.
+            // To jest prawidłowe i bezpieczne miejsce na modyfikację struktury siatki.
+            if (this.RowDefinitions.Count != this.Children.Count)
+            {
+                this.RowDefinitions.Clear();
+                for (int i = 0; i < this.Children.Count; i++)
+                {
+                    this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+                    if (this.Children[i] is FrameworkElement fe)
+                    {
+                        SetRow(fe, i);
+                    }
+                }
+            }
+
+            // Po zdefiniowaniu struktury, wywołujemy bazową metodę MeasureOverride, 
+            // aby standardowy Grid mógł poprawnie zmierzyć siebie i swoje dzieci.
+            return base.MeasureOverride(availableSize);
+        }
+
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            // Metoda ArrangeOverride teraz tylko przekazuje wywołanie do bazy,
+            // ponieważ struktura wierszy została już w pełni przygotowana w fazie Measure.
+            return base.ArrangeOverride(finalSize);
+        }
+    }
+}
 ----- END -----
 
 ===== FILE: GrafikoMat\Controls\CalendarUniformGridPanel.cs (3617 bytes)
@@ -626,95 +775,81 @@ namespace GrafikoMat.Controls
 }
 ----- END -----
 
-===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (3612 bytes)
+===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (2607 bytes)
 ----- BEGIN -----
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>GrafikoMat</RootNamespace>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x86;x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-    <UseWinUI>true</UseWinUI>
-    <EnableMsixTooling>true</EnableMsixTooling>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Views\DashboardView.xaml" />
-    <None Remove="Views\DeclarationsView.xaml" />
-  </ItemGroup>
-  <ItemGroup>
-    <Page Remove="Views\SettingsView.xaml" />
-  </ItemGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+		<RootNamespace>GrafikoMat</RootNamespace>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<Platforms>x86;x64;ARM64</Platforms>
+		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<PublishProfile>win-$(Platform).pubxml</PublishProfile>
+		<UseWinUI>true</UseWinUI>
+		<EnableMsixTooling>true</EnableMsixTooling>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+	<ItemGroup>
+	  <None Remove="Views\Settings\ProfilesSettingsView.xaml" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Assets\SplashScreen.scale-200.png" />
-    <Content Include="Assets\LockScreenLogo.scale-200.png" />
-    <Content Include="Assets\Square150x150Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-    <Content Include="Assets\StoreLogo.png" />
-    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Assets\SplashScreen.scale-200.png" />
+		<Content Include="Assets\LockScreenLogo.scale-200.png" />
+		<Content Include="Assets\Square150x150Logo.scale-200.png" />
+		<Content Include="Assets\Square44x44Logo.scale-200.png" />
+		<Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
+		<Content Include="Assets\StoreLogo.png" />
+		<Content Include="Assets\Wide310x150Logo.scale-200.png" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <Manifest Include="$(ApplicationManifest)" />
-  </ItemGroup>
+	<ItemGroup>
+		<Manifest Include="$(ApplicationManifest)" />
+	</ItemGroup>
 
-  <!--
-    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
-    Tools extension to be activated for this project even if the Windows App SDK Nuget
-    package has not yet been restored.
-  -->
-  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <ProjectCapability Include="Msix" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.250402" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
-    <PackageReference Include="supabase-csharp" Version="0.16.2" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\GrafikoMat.Core\GrafikoMat.Core.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="Views\SettingsView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\DashboardView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Update="Views\DeclarationsView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
+	<ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+		<ProjectCapability Include="Msix" />
+	</ItemGroup>
 
-  <!--
-    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
-    Explorer "Package and Publish" context menu entry to be enabled for this project even if
-    the Windows App SDK Nuget package has not yet been restored.
-  -->
-  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
-  </PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.250402" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
+		<PackageReference Include="supabase-csharp" Version="0.16.2" />
+	</ItemGroup>
 
-  <!-- Publish Properties -->
-  <PropertyGroup>
-    <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
-    <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
-  </PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\GrafikoMat.Core\GrafikoMat.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Page Update="Views\DashboardView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\DeclarationsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\SettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\Settings\ProfilesSettingsView.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+		<HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+	</PropertyGroup>
+
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (3104 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (5582 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -724,7 +859,15 @@ namespace GrafikoMat.Controls
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid" RowDefinitions="Auto,100,*,Auto,Auto" Background="Transparent">
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="100"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
               Background="{ThemeResource LayerFillColorDefaultBrush}"
               Padding="10,0" Margin="0,0,140,0">
@@ -734,10 +877,46 @@ namespace GrafikoMat.Controls
         </Grid>
 
         <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
-            <TextBlock Text="{x:Bind ViewModel.UnitName, Mode=OneWay}" FontSize="14" Opacity="0.9" TextWrapping="WrapWholeWords"/>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="PrevUnitButton"
+                    Grid.Column="0"
+                    Content="&#xE0E2;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}"
+                    ToolTipService.ToolTip="Poprzednia jednostka"/>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}"
+                           FontSize="20" FontWeight="SemiBold"
+                           TextWrapping="Wrap" TextAlignment="Center"/>
+
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}"
+                           FontSize="18" 
+                           FontWeight="SemiBold" 
+                           Opacity="0.8"
+                           TextWrapping="Wrap" 
+                           TextAlignment="Center"
+                           Margin="0,6,0,0"/>
+            </StackPanel>
+
+            <Button x:Name="NextUnitButton"
+                    Grid.Column="2"
+                    Content="&#xE0E3;"
+                    FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.SwitchToNextUnitCommand}"
+                    ToolTipService.ToolTip="Następna jednostka"/>
         </Grid>
 
-        <Grid Grid.Row="2" Padding="12,8,12,8">
+        <Grid Grid.Row="2" Padding="12,8,12,4">
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <Grid x:Name="ViewportGrid">
                     <ContentControl x:Name="ViewportCurrent" Opacity="1"
@@ -748,8 +927,10 @@ namespace GrafikoMat.Controls
             </Border>
         </Grid>
 
-        <Grid Grid.Row="3" Padding="12,4">
-            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}">
+        <Grid Grid.Row="3" Padding="12,4,12,10">
+            <ItemsControl x:Name="ActionButtons"
+                          ItemsSource="{x:Bind Actions}"
+                          VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -769,17 +950,30 @@ namespace GrafikoMat.Controls
             </ItemsControl>
         </Grid>
 
-        <Grid Grid.Row="4" Padding="10,4" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16"
+        <Grid Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
               Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <TextBlock Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12" VerticalAlignment="Center"/>
             <Border Grid.Column="1" Width="1" Background="#22000000"/>
-            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.8" FontSize="12"/>
+
+            <TextBlock Grid.Column="2" 
+                       Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" 
+                       Opacity="0.9" 
+                       FontSize="13" 
+                       FontWeight="SemiBold" 
+                       Margin="0,2,0,0"
+                       VerticalAlignment="Center"/>
         </Grid>
     </Grid>
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (24103 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (25379 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -808,34 +1002,29 @@ namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window
     {
+        // ... (stałe, pola, właściwości - bez zmian) ...
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
-
         private AppWindow? _appWindow;
-
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
-        private readonly SettingsView _settingsView = new(); // ZMIANA: Dodajemy instancję nowego widoku
-
+        private readonly SettingsView _settingsView = new();
         private Action<DoctorMonthDeclaration>? _evtDeclSave;
         private Action<DoctorMonthDeclaration>? _evtDeclSaveAndClose;
         private Action? _evtDeclClose;
-
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
-
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
-
         private bool _isInitialSizeSet = false;
-
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
-        private AppSettings? _appSettings; // ZMIANA: Pole do przechowywania wczytanych ustawień
+        private AppSettings? _appSettings;
+
 
         public MainWindow()
         {
@@ -866,8 +1055,11 @@ namespace GrafikoMat
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
 
-            // ZMIANA: Subskrybujemy event z SettingsView
             _settingsView.ReloadRequired += OnReloadRequired;
+
+            // ZMIANA: Podpinamy realną logikę pod komendy w ViewModelu
+            ViewModel.SwitchToPreviousUnitCommand = new RelayCommand(_ => SwitchUnit(false));
+            ViewModel.SwitchToNextUnitCommand = new RelayCommand(_ => SwitchUnit(true));
 
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
@@ -876,7 +1068,6 @@ namespace GrafikoMat
 
         private async void LoadInitialDataAsync()
         {
-            // ZMIANA: Wczytane ustawienia zapisujemy w polu _appSettings
             _appSettings = await _settingsService.LoadSettingsAsync();
 
             var activeProfile = _appSettings.UnitProfiles.FirstOrDefault(p => p.Id == _appSettings.ActiveUnitProfileId);
@@ -884,89 +1075,79 @@ namespace GrafikoMat
             if (activeProfile != null)
             {
                 _supabaseService.Initialize(activeProfile);
-                ViewModel.UnitName = activeProfile.Name;
-                ViewModel.LoadDoctorsAsync();
+                // ZMIANA: Ustawiamy nowe, rozbudowane właściwości
+                ViewModel.ActiveUnitHospitalName = activeProfile.HospitalFullName;
+                ViewModel.ActiveUnitDepartmentName = activeProfile.DepartmentName;
+
+                if (_supabaseService.Doctors != null)
+                    ViewModel.LoadDoctorsAsync();
             }
             else
             {
-                _supabaseService.Initialize(new UnitProfile()); // De-inicjalizacja
-                ViewModel.UnitName = "Brak aktywnej jednostki. Skonfiguruj w ustawieniach.";
+                _supabaseService.Initialize(new UnitProfile());
+                // ZMIANA: Ustawiamy nowe, rozbudowane właściwości
+                ViewModel.ActiveUnitHospitalName = "GrafikoMat Dyżurowy";
+                ViewModel.ActiveUnitDepartmentName = "Brak aktywnej jednostki. Skonfiguruj w ustawieniach.";
                 ViewModel.DoctorRows.Clear();
             }
         }
 
-        // ZMIANA: Nowa metoda obsługująca przeładowanie
         private void OnReloadRequired()
         {
             LoadInitialDataAsync();
-            SwitchToDashboard(); // Wracamy do pulpitu po zmianie
+            SwitchToDashboard();
+        }
+
+        // ZMIANA: Nowa metoda do obsługi przełączania jednostek
+        private async void SwitchUnit(bool next)
+        {
+            if (_appSettings == null || _appSettings.UnitProfiles.Count < 2 || _appSettings.ActiveUnitProfileId == null)
+            {
+                return; // Nie ma między czym przełączać
+            }
+
+            var profiles = _appSettings.UnitProfiles.OrderBy(p => p.Name).ToList();
+            int currentIndex = profiles.FindIndex(p => p.Id == _appSettings.ActiveUnitProfileId);
+
+            if (currentIndex == -1) return; // Coś poszło nie tak
+
+            int newIndex = next
+                ? (currentIndex + 1) % profiles.Count
+                : (currentIndex - 1 + profiles.Count) % profiles.Count;
+
+            var newActiveProfile = profiles[newIndex];
+
+            // Zapisz nowe ustawienie
+            _appSettings = _appSettings with { ActiveUnitProfileId = newActiveProfile.Id };
+            await _settingsService.SaveSettingsAsync(_appSettings);
+
+            // Przeładuj całą aplikację
+            LoadInitialDataAsync();
         }
 
         private async void SwitchToSettings()
         {
             if (_isClosing || _appSettings == null) return;
 
-            // Przekazujemy do widoku aktualne ustawienia
             _settingsView.Initialize(_settingsService, _appSettings);
 
             await AnimateToAsync(_settingsView, forward: true);
             BuildActionsForSettings();
         }
 
-        // ... reszta pliku MainWindow.xaml.cs pozostaje bez zmian ...
-        // (poniżej znajduje się skrócona wersja dla zwięzłości, ale w Twoim projekcie niczego nie usuwaj)
-
+        // ... cała reszta pliku MainWindow.xaml.cs pozostaje bez zmian ...
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = AppWindow.GetFromWindowId(windowId);
-
-            if (_appWindow is not null)
-            {
-                _appWindow.Title = string.Empty;
-                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
-                _appWindow.Changed += OnAppWindowChanged;
-                SubclassWindow(hwnd);
-            }
+            if (_appWindow is not null) { _appWindow.Title = string.Empty; try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { } _appWindow.Changed += OnAppWindowChanged; SubclassWindow(hwnd); }
         }
-
-        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
-        {
-            if (args.DidPresenterChange && !_isClosing) { SetupBackdrop(); }
-        }
-
-        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
-        {
-            if (!_isInitialSizeSet && _appWindow != null)
-            {
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-                _isInitialSizeSet = true;
-            }
-            if (_isClosing) return;
-            SetupBackdrop();
-        }
-
-        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e)
-        {
-            if (_isClosing) return;
-        }
-
-        private void SetupBackdrop()
-        {
-            if (_isClosing) return;
-            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-
-            if (!isMaximized) { try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); } catch { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } }
-            else { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); }
-        }
-
-        private Brush GetLightFallbackBrush()
-        {
-            if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b) return b;
-            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
-        }
-
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args) { if (args.DidPresenterChange && !_isClosing) { SetupBackdrop(); } }
+        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e) { if (!_isInitialSizeSet && _appWindow != null) { _appWindow.Resize(new SizeInt32(MIN_W, MIN_H)); _isInitialSizeSet = true; } if (_isClosing) return; SetupBackdrop(); }
+        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e) { if (_isClosing) return; }
+        private void SetupBackdrop() { if (_isClosing) return; bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized; if (!isMaximized) { try { RootGrid.Background = new SolidColorBrush(Colors.Transparent); SystemBackdrop = new DesktopAcrylicBackdrop(); } catch { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } } else { SystemBackdrop = null; RootGrid.Background = GetLightFallbackBrush(); } }
+        private Brush GetLightFallbackBrush() { if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b) return b; return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7)); }
         #region Win32 Interop for Min/Max Size
         private void SubclassWindow(IntPtr hwnd) { _newWndProc = new WndProc(AppWndProc); _oldWndProc = SetWindowLongPtr(hwnd, -4, Marshal.GetFunctionPointerForDelegate(_newWndProc)); }
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam) { if (msg == 0x0024) { var minMaxInfo = Marshal.PtrToStructure<MINMAXINFO>(lParam); var dpi = GetDpiForWindow(hWnd); float scalingFactor = dpi / 96f; minMaxInfo.ptMinTrackSize.x = (int)(MIN_W * scalingFactor); minMaxInfo.ptMinTrackSize.y = (int)(MIN_H * scalingFactor); Marshal.StructureToPtr(minMaxInfo, lParam, true); return IntPtr.Zero; } return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam); }
@@ -976,14 +1157,13 @@ namespace GrafikoMat
         [DllImport("user32.dll")] private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
         #endregion
-
         private void BuildActionsForDashboard() { Actions.Clear(); Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings()))); Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations()))); Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManage()))); Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder()))); Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder()))); }
         private void BuildActionsForDeclarations() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(_ => _declarationsView.TriggerClearSelection()))); Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave()))); Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose()))); }
         private void BuildActionsForSettings() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); }
         private void BuildActionsForManage() { Actions.Clear(); Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard()))); Actions.Add(new UiAction("Dodaj dyżurnego", new RelayCommand(_ => ShowAddDoctorDialogAsync()))); }
         private async void SwitchToDashboard() { if (_isClosing || _isAnimating) return; _isAnimating = true; var sbExit = new Storyboard(); var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut }; if (ViewportCurrent.Content == _declarationsView) { var leftCol = _declarationsView.LeftColumn; var calendar = _declarationsView.CalendarView; var calendarOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut }; Storyboard.SetTarget(calendarOpacityAnim, calendar); Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity"); sbExit.Children.Add(calendarOpacityAnim); var leftColOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(50) }; Storyboard.SetTarget(leftColOpacityAnim, leftCol); Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity"); sbExit.Children.Add(leftColOpacityAnim); } var buttonsOpacityAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity"); sbExit.Children.Add(buttonsOpacityAnim); var buttonsTranslateAnim = new DoubleAnimation { To = 30, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeOut, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)"); sbExit.Children.Add(buttonsTranslateAnim); var tcsExit = new TaskCompletionSource(); sbExit.Completed += (_, _) => tcsExit.TrySetResult(); sbExit.Begin(); await tcsExit.Task; _dashboardView.Attach(ViewModel); ViewportCurrent.Content = _dashboardView; BuildActionsForDashboard(); ActionButtons.Opacity = 0; ActionButtons.RenderTransform = new TranslateTransform { X = -30 }; var sbEnter = new Storyboard(); var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn }; var newButtonsOpacity = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn }; Storyboard.SetTarget(newButtonsOpacity, ActionButtons); Storyboard.SetTargetProperty(newButtonsOpacity, "Opacity"); sbEnter.Children.Add(newButtonsOpacity); var newButtonsTranslate = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn }; Storyboard.SetTarget(newButtonsTranslate, ActionButtons); Storyboard.SetTargetProperty(newButtonsTranslate, "(UIElement.RenderTransform).(TranslateTransform.X)"); sbEnter.Children.Add(newButtonsTranslate); var tcsEnter = new TaskCompletionSource(); sbEnter.Completed += (_, _) => tcsEnter.TrySetResult(); sbEnter.Begin(); await tcsEnter.Task; _isAnimating = false; }
-        private async void SwitchToDeclarations() { if (_isClosing || _isAnimating) return; _isAnimating = true; var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray(); _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0); ActionButtons.Opacity = 0; ActionButtons.RenderTransform = new TranslateTransform { X = 30 }; var leftCol = _declarationsView.LeftColumn; var calendar = _declarationsView.CalendarView; leftCol.Opacity = 0; leftCol.RenderTransform = new TranslateTransform { Y = -20 }; calendar.Opacity = 0; calendar.RenderTransform = new ScaleTransform { ScaleX = 0.95, ScaleY = 0.95 }; ViewportCurrent.Content = _declarationsView; BuildActionsForDeclarations(); var sb = new Storyboard(); var ease = new CubicEase { EasingMode = EasingMode.EaseOut }; var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity"); sb.Children.Add(buttonsOpacityAnim); var buttonsTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)"); sb.Children.Add(buttonsTranslateAnim); var leftColOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColOpacityAnim, leftCol); Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity"); sb.Children.Add(leftColOpacityAnim); var leftColTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColTranslateAnim, leftCol); Storyboard.SetTargetProperty(leftColTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.Y)"); sb.Children.Add(leftColTranslateAnim); var calendarOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarOpacityAnim, calendar); Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity"); sb.Children.Add(calendarOpacityAnim); var calendarScaleXAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleXAnim, calendar); Storyboard.SetTargetProperty(calendarScaleXAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleX)"); sb.Children.Add(calendarScaleXAnim); var calendarScaleYAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleYAnim, calendar); Storyboard.SetTargetProperty(calendarScaleYAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)"); sb.Children.Add(calendarScaleYAnim); var tcs = new TaskCompletionSource(); sb.Completed += (_, _) => tcs.TrySetResult(); sb.Begin(); await tcs.Task; _isAnimating = false; }
-        private async void SwitchToManage() { if (_isClosing) return; await ShowAddDoctorDialogAsync(); }
+        private async void SwitchToDeclarations() { if (_isClosing || _isAnimating) return; if (_supabaseService.Doctors == null) { await ShowInfo("Brak aktywnego profilu", "Wybierz aktywny profil w ustawieniach, aby dodać deklaracje."); return; } _isAnimating = true; var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray(); _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0); ActionButtons.Opacity = 0; ActionButtons.RenderTransform = new TranslateTransform { X = 30 }; var leftCol = _declarationsView.LeftColumn; var calendar = _declarationsView.CalendarView; leftCol.Opacity = 0; leftCol.RenderTransform = new TranslateTransform { Y = -20 }; calendar.Opacity = 0; calendar.RenderTransform = new ScaleTransform { ScaleX = 0.95, ScaleY = 0.95 }; ViewportCurrent.Content = _declarationsView; BuildActionsForDeclarations(); var sb = new Storyboard(); var ease = new CubicEase { EasingMode = EasingMode.EaseOut }; var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity"); sb.Children.Add(buttonsOpacityAnim); var buttonsTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease }; Storyboard.SetTarget(buttonsTranslateAnim, ActionButtons); Storyboard.SetTargetProperty(buttonsTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.X)"); sb.Children.Add(buttonsTranslateAnim); var leftColOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColOpacityAnim, leftCol); Storyboard.SetTargetProperty(leftColOpacityAnim, "Opacity"); sb.Children.Add(leftColOpacityAnim); var leftColTranslateAnim = new DoubleAnimation { To = 0, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(100) }; Storyboard.SetTarget(leftColTranslateAnim, leftCol); Storyboard.SetTargetProperty(leftColTranslateAnim, "(UIElement.RenderTransform).(TranslateTransform.Y)"); sb.Children.Add(leftColTranslateAnim); var calendarOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarOpacityAnim, calendar); Storyboard.SetTargetProperty(calendarOpacityAnim, "Opacity"); sb.Children.Add(calendarOpacityAnim); var calendarScaleXAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleXAnim, calendar); Storyboard.SetTargetProperty(calendarScaleXAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleX)"); sb.Children.Add(calendarScaleXAnim); var calendarScaleYAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(350)), EasingFunction = ease, BeginTime = TimeSpan.FromMilliseconds(200) }; Storyboard.SetTarget(calendarScaleYAnim, calendar); Storyboard.SetTargetProperty(calendarScaleYAnim, "(UIElement.RenderTransform).(ScaleTransform.ScaleY)"); sb.Children.Add(calendarScaleYAnim); var tcs = new TaskCompletionSource(); sb.Completed += (_, _) => tcs.TrySetResult(); sb.Begin(); await tcs.Task; _isAnimating = false; }
+        private async void SwitchToManage() { if (_isClosing) return; if (_supabaseService.Doctors == null) { await ShowInfo("Brak aktywnego profilu", "Wybierz aktywny profil w ustawieniach, aby zarządzać dyżurnymi."); return; } await ShowAddDoctorDialogAsync(); }
         private static void DetachFromParent(FrameworkElement el) { if (el.Parent is ContentControl cc) cc.Content = null; else if (el.Parent is Border b) b.Child = null; else if (el.Parent is Panel p) p.Children.Remove(el); }
         private static FrameworkElement? TryGetHeader(object? content) { if (content is FrameworkElement fe) return fe.FindName("ViewHeader") as FrameworkElement; return null; }
         private void ResetViewportState() { var cur = ViewportCurrent; var nxt = ViewportNext; var curT = (cur.RenderTransform as TranslateTransform) ?? new TranslateTransform(); var nxtT = (nxt.RenderTransform as TranslateTransform) ?? new TranslateTransform(); cur.RenderTransform = curT; nxt.RenderTransform = nxtT; curT.X = 0; nxtT.X = 0; cur.Opacity = 1; nxt.Opacity = 0; var ch = TryGetHeader(cur.Content); var nh = TryGetHeader(nxt.Content); if (ch != null) { var t = (ch.RenderTransform as TranslateTransform) ?? new TranslateTransform(); t.X = 0; ch.RenderTransform = t; } if (nh != null) { var t = (nh.RenderTransform as TranslateTransform) ?? new TranslateTransform(); t.X = 0; nh.RenderTransform = t; } }
@@ -995,7 +1175,7 @@ namespace GrafikoMat
         private async void GenerateRosterPlaceholder() => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
         private async void SaveSettingsPlaceholder() => await ShowInfo("Ustawienia", "Zapis ustawień (tryb 12h/24h, motyw, itp.) – w przygotowaniu.");
-        private async Task ShowAddDoctorDialogAsync() { var nameTextBox = new TextBox { Header = "Imię i nazwisko" }; var emailTextBox = new TextBox { Header = "Adres e-mail" }; var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, emailTextBox } }; var dialog = new ContentDialog { Title = "Dodaj nowego dyżurnego", Content = panel, PrimaryButtonText = "Zapisz", CloseButtonText = "Anuluj", DefaultButton = ContentDialogButton.Primary, XamlRoot = this.Content.XamlRoot }; var result = await dialog.ShowAsync(); if (result == ContentDialogResult.Primary) { var newDoctor = new Doctor { FullName = nameTextBox.Text, Email = emailTextBox.Text }; if (!string.IsNullOrWhiteSpace(newDoctor.FullName) && !string.IsNullOrWhiteSpace(newDoctor.Email)) { try { await _supabaseService.Doctors.AddAsync(newDoctor); ViewModel.LoadDoctorsAsync(); } catch (Exception ex) { } } } }
+        private async Task ShowAddDoctorDialogAsync() { var nameTextBox = new TextBox { Header = "Imię i nazwisko" }; var emailTextBox = new TextBox { Header = "Adres e-mail" }; var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, emailTextBox } }; var dialog = new ContentDialog { Title = "Dodaj nowego dyżurnego", Content = panel, PrimaryButtonText = "Zapisz", CloseButtonText = "Anuluj", DefaultButton = ContentDialogButton.Primary, XamlRoot = this.Content.XamlRoot }; var result = await dialog.ShowAsync(); if (result == ContentDialogResult.Primary) { var newDoctor = new Doctor { FullName = nameTextBox.Text, Email = emailTextBox.Text }; if (!string.IsNullOrWhiteSpace(newDoctor.FullName) && !string.IsNullOrWhiteSpace(newDoctor.Email)) { try { if (_supabaseService.Doctors != null) { await _supabaseService.Doctors.AddAsync(newDoctor); ViewModel.LoadDoctorsAsync(); } } catch (Exception) { } } } }
         private async Task ShowInfo(string title, string message) { var dlg = new ContentDialog { Title = title, Content = message, PrimaryButtonText = "OK", XamlRoot = RootGrid.XamlRoot }; await dlg.ShowAsync(); }
     }
 
@@ -1095,10 +1275,10 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (2808 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (2624 bytes)
 ----- BEGIN -----
 using System;
-using System.Collections.Generic; // ZMIANA: Dodajemy using
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -1106,41 +1286,38 @@ using Windows.Storage;
 
 namespace GrafikoMat.Services
 {
-    // ZMIANA: Nowy model dla pojedynczego profilu jednostki
     public record UnitProfile
     {
         public Guid Id { get; init; } = Guid.NewGuid();
         public string Name { get; init; } = "Nowa jednostka";
+
+        // ZMIANA: Dodajemy nowe pola dla profilu
+        public string HospitalFullName { get; init; } = string.Empty;
+        public string DepartmentName { get; init; } = string.Empty;
+
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseApiKey { get; init; } = string.Empty;
     }
 
-    /// <summary>
-    /// Główny model ustawień aplikacji, teraz przechowujący listę profili.
-    /// </summary>
     public record AppSettings
     {
-        // ZMIANA: Zamiast pojedynczych pól, mamy listę profili
         public List<UnitProfile> UnitProfiles { get; init; } = new();
-
-        // ZMIANA: Przechowujemy ID aktywnego profilu
         public Guid? ActiveUnitProfileId { get; init; }
 
-        // Globalne ustawienia pozostają bez zmian
-        public string Theme { get; init; } = "Light";
+        // ZMIANA: Przenosimy globalne ustawienia tutaj
+        public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
+        public string EngineType { get; init; } = "Klasyczny";
+        public string PriorityOrder { get; init; } = "Dostępność > Sprawiedliwość > Preferencje";
+
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
     }
 
     public record WindowSize(int Width, int Height);
 
-    /// <summary>
-    /// Serwis do zarządzania lokalnymi ustawieniami aplikacji. Jego logika wewnętrzna pozostaje taka sama.
-    /// </summary>
     public sealed class SettingsService
     {
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
-
         private AppSettings? _currentSettings;
 
         public async Task<AppSettings> LoadSettingsAsync()
@@ -1156,11 +1333,7 @@ namespace GrafikoMat.Services
                     _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
                 }
             }
-            catch (Exception ex)
-            {
-                // TODO: Dodać logowanie błędu
-                _currentSettings = null;
-            }
+            catch (Exception) { _currentSettings = null; }
 
             _currentSettings ??= new AppSettings();
             return _currentSettings;
@@ -1510,168 +1683,119 @@ namespace GrafikoMat.ViewModels
 
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (5857 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (7180 bytes)
 ----- BEGIN -----
+using GrafikoMat.Common;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
+        // ... (górna część bez zmian) ...
         public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
+        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         private readonly IDoctorRepository? _doctorRepository;
-
-        private string _unitName = "Jednostka: (ładowanie...)";
-        public string UnitName
-        {
-            get => _unitName;
-            set { if (_unitName != value) { _unitName = value; OnPropertyChanged(); } }
-        }
-
+        private string _activeUnitHospitalName = "GrafikoMat Dyżurowy";
+        public string ActiveUnitHospitalName { get => _activeUnitHospitalName; set { if (_activeUnitHospitalName != value) { _activeUnitHospitalName = value; OnPropertyChanged(); } } }
+        private string _activeUnitDepartmentName = "Proszę wybrać aktywny profil w ustawieniach";
+        public string ActiveUnitDepartmentName { get => _activeUnitDepartmentName; set { if (_activeUnitDepartmentName != value) { _activeUnitDepartmentName = value; OnPropertyChanged(); } } }
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
-
-        private int _selectedYear = 2025;
-        public int SelectedYear
-        {
-            get => _selectedYear;
-            set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); } }
-        }
-
-        public string[] Months { get; } = new[]
-        {
-            "Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
-            "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"
-        };
-        private int _selectedMonthIndex = 0;
-        public int SelectedMonthIndex
-        {
-            get => _selectedMonthIndex;
-            set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); } }
-        }
-
+        private int _selectedYear = DateTime.Today.Year;
+        public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
+        public string[] Months { get; } = new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" };
+        private int _selectedMonthIndex = DateTime.Today.Month - 1;
+        public int SelectedMonthIndex { get => _selectedMonthIndex; set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
         public ObservableCollection<DoctorRow> DoctorRows { get; } = new();
         public ObservableCollection<RosterRow> RosterRows { get; } = new();
-
         private string _engineName = "Silnik: Klasyczny";
-        public string EngineName
-        {
-            get => _engineName;
-            set { if (_engineName != value) { _engineName = value; OnPropertyChanged(); } }
-        }
-
+        public string EngineName { get => _engineName; set { if (_engineName != value) { _engineName = value; OnPropertyChanged(); } } }
         private string _priorityOrder = "Priorytety: Dostępność > Sprawiedliwość > Preferencje";
-        public string PriorityOrder
-        {
-            get => _priorityOrder;
-            set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } }
-        }
-
+        public string PriorityOrder { get => _priorityOrder; set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } } }
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
-        private static string Key(string doctor, int year, int monthIndex)
-            => $"{doctor}|{year:D4}-{monthIndex:D2}";
+        private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
+        public ICommand SwitchToPreviousUnitCommand { get; set; }
+        public ICommand SwitchToNextUnitCommand { get; set; }
 
         public MainViewModel(IDoctorRepository? doctorRepository = null)
         {
             _doctorRepository = doctorRepository;
-
-            RosterRows.Add(new RosterRow("01 (Pon)", "—"));
-            RosterRows.Add(new RosterRow("02 (Wto)", "—"));
-            RosterRows.Add(new RosterRow("03 (Śro)", "—"));
+            SwitchToPreviousUnitCommand = new RelayCommand(_ => { });
+            SwitchToNextUnitCommand = new RelayCommand(_ => { });
+            UpdateRosterForSelectedMonth();
         }
 
         public async void LoadDoctorsAsync()
         {
-            if (_doctorRepository == null) return;
-
+            if (_doctorRepository == null) { DoctorRows.Clear(); return; }
+            ;
             var doctors = await _doctorRepository.GetAllAsync();
             DoctorRows.Clear();
-            if (doctors != null)
+            if (doctors != null) { foreach (var doctor in doctors.OrderBy(d => d.FullName)) { DoctorRows.Add(new DoctorRow(doctor.FullName, false)); } }
+        }
+
+        private void UpdateRosterForSelectedMonth()
+        {
+            RosterRows.Clear();
+            int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
+            for (int day = 1; day <= daysInMonth; day++)
             {
-                foreach (var doctor in doctors)
-                {
-                    DoctorRows.Add(new DoctorRow(doctor.FullName, false));
-                }
+                var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
+                string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
+                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+                bool isLast = (day == daysInMonth);
+                RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }
         }
 
+        private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
-
-        public void PrevMonth()
-        {
-            if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); }
-            else SelectedMonthIndex -= 1;
-        }
-
-        public void NextMonth()
-        {
-            if (SelectedMonthIndex == 11) { SelectedMonthIndex = 0; NextYear(); }
-            else SelectedMonthIndex += 1;
-        }
-
-        private void EnsureYearInList(int year)
-        {
-            if (!Years.Contains(year))
-            {
-                int i = 0;
-                while (i < Years.Count && Years[i] < year) i++;
-                Years.Insert(i, year);
-            }
-        }
-
-        public void ApplyDoctorMonth(DoctorMonthDeclaration dm)
-        {
-            _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm;
-            var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor);
-            if (row != null) row.HasDeclarations = true;
-
-            OnPropertyChanged(nameof(_declByKey));
-        }
-
-        public (bool has, DayMode mode, string? full, string? day, string? night)
-            TryGetEntry(string doctor, int year, int monthIndex, int dayIndex)
-        {
-            if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) &&
-                 dayIndex >= 0 && dayIndex < dm.Days.Length)
-            {
-                var d = dm.Days[dayIndex];
-                return (true, d.Mode, d.Full, d.Day, d.Night);
-            }
-            return (false, DayMode.Full24, null, null, null);
-        }
+        public void PrevMonth() { if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); } else SelectedMonthIndex -= 1; }
+        public void NextMonth() { if (SelectedMonthIndex == 11) { SelectedMonthIndex = 0; NextYear(); } else SelectedMonthIndex += 1; }
+        private void EnsureYearInList(int year) { if (!Years.Contains(year)) { int i = 0; while (i < Years.Count && Years[i] < year) i++; Years.Insert(i, year); } }
+        public void ApplyDoctorMonth(DoctorMonthDeclaration dm) { _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm; var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor); if (row != null) row.HasDeclarations = true; OnPropertyChanged(nameof(_declByKey)); }
+        public (bool has, DayMode mode, string? full, string? day, string? night) TryGetEntry(string doctor, int year, int monthIndex, int dayIndex) { if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) && dayIndex >= 0 && dayIndex < dm.Days.Length) { var d = dm.Days[dayIndex]; return (true, d.Mode, d.Full, d.Day, d.Night); } return (false, DayMode.Full24, null, null, null); }
     }
 
     public class DoctorRow : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-
         public string Name { get; }
         private bool _has;
         public bool HasDeclarations { get => _has; set { if (_has != value) { _has = value; Raise(nameof(HasDeclarations)); } } }
-
         public DoctorRow(string name, bool hasDeclarations) { Name = name; _has = hasDeclarations; }
     }
 
+    // ZMIANA: Upraszczamy RosterRow, usuwając dynamiczne właściwości wysokości i czcionki
     public class RosterRow
     {
         public string DateLabel { get; }
         public string DutyLabel { get; }
-        public RosterRow(string dateLabel, string dutyLabel) { DateLabel = dateLabel; DutyLabel = dutyLabel; }
+        public bool IsDayOff { get; }
+        public bool IsLast { get; }
+
+        public RosterRow(string dateLabel, string dutyLabel, bool isDayOff, bool isLast)
+        {
+            DateLabel = dateLabel;
+            DutyLabel = dutyLabel;
+            IsDayOff = isDayOff;
+            IsLast = isLast;
+        }
     }
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml (2712 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml (5418 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DashboardView"
@@ -1680,62 +1804,105 @@ namespace GrafikoMat.ViewModels
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:controls="using:GrafikoMat.Controls"
     mc:Ignorable="d">
 
-	<Grid RowDefinitions="Auto,*" Padding="12">
-		<!-- Pasek: ROK / MIESIĄC -->
-		<Grid Grid.Row="0" ColumnSpacing="8"
-              ColumnDefinitions="Auto,Auto,Auto,Auto, 24, Auto,Auto,Auto,Auto"
-              VerticalAlignment="Center">
-			<TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
-			<Button   Grid.Column="1" Content="⟨" Width="32" Height="32" Click="OnYearPrev"/>
-			<ComboBox Grid.Column="2" Width="110"
-                      ItemsSource="{Binding Years}" SelectedItem="{Binding SelectedYear, Mode=TwoWay}"/>
-			<Button   Grid.Column="3" Content="⟩" Width="32" Height="32" Click="OnYearNext"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-			<TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
-			<Button   Grid.Column="6" Content="⟨" Width="32" Height="32" Click="OnMonthPrev"/>
-			<ComboBox Grid.Column="7" Width="180"
-                      ItemsSource="{Binding Months}" SelectedIndex="{Binding SelectedMonthIndex, Mode=TwoWay}"/>
-			<Button   Grid.Column="8" Content="⟩" Width="32" Height="32" Click="OnMonthNext"/>
-		</Grid>
+        <Grid Grid.Row="0" Padding="12" ColumnSpacing="8" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="24"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
 
-		<!-- Treść: lewa 3/4 (tabela), prawa 1/4 (grafik) -->
-		<Grid Grid.Row="1" ColumnDefinitions="3*,*" ColumnSpacing="12" Padding="0,8,0,0">
-			<Grid RowDefinitions="Auto,*">
-				<TextBlock Text="Deklaracje dyżurowe" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-					<Grid x:Name="LeftTableHost"/>
-				</Border>
-			</Grid>
+            <TextBlock Grid.Column="0" Text="Rok:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="1" Content="&#x27E8;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnYearPrev"/>
+            <ComboBox Grid.Column="2" Width="110" ItemsSource="{Binding Years}" SelectedItem="{Binding SelectedYear, Mode=TwoWay}"/>
+            <Button   Grid.Column="3" Content="&#x27E9;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnYearNext"/>
+            <TextBlock Grid.Column="5" Text="Miesiąc:" VerticalAlignment="Center" Opacity="0.85"/>
+            <Button   Grid.Column="6" Content="&#x27E8;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnMonthPrev"/>
+            <ComboBox Grid.Column="7" Width="180" ItemsSource="{Binding Months}" SelectedIndex="{Binding SelectedMonthIndex, Mode=TwoWay}"/>
+            <Button   Grid.Column="8" Content="&#x27E9;" FontFamily="Segoe UI Symbol" Width="32" Height="32" Click="OnMonthNext"/>
+        </Grid>
 
-			<Grid Grid.Column="1" RowDefinitions="Auto,*">
-				<TextBlock Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-				<Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-					<ScrollViewer>
-						<ListView ItemsSource="{Binding RosterRows}" SelectionMode="None" Padding="4">
-							<ListView.ItemTemplate>
-								<DataTemplate x:DataType="vm:RosterRow">
-									<Grid ColumnDefinitions="2*,3*" Padding="4,2">
-										<TextBlock Text="{x:Bind DateLabel}"/>
-										<TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"/>
-									</Grid>
-								</DataTemplate>
-							</ListView.ItemTemplate>
-						</ListView>
-					</ScrollViewer>
-				</Border>
-			</Grid>
-		</Grid>
-	</Grid>
+        <Grid Grid.Row="1" Padding="12,0,12,12" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Zestawienie deklaracji dyżurowych" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                    <Grid x:Name="LeftTableHost"/>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
+                <Border x:Name="RosterContainer" Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                    <ItemsControl ItemsSource="{Binding RosterRows}">
+
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:AutoEqualRowsGrid/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RosterRow">
+                                <Grid ColumnSpacing="12" Padding="8,0"
+                                      Background="{x:Bind IsDayOff, Converter={StaticResource BooleanToBrushConverter_DayOff}}"
+                                      BorderBrush="{ThemeResource CardStrokeColorDefault}"
+                                      BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
 </UserControl>
-
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (9130 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (7928 bytes)
 ----- BEGIN -----
 using System;
 using System.ComponentModel;
+using GrafikoMat.Common;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -1748,34 +1915,29 @@ namespace GrafikoMat.Views
     public sealed partial class DashboardView : UserControl
     {
         private const int NameColWidth = 220;
-        private const int DayColWidth = 40;
         private const int RowHeight = 32;
 
-        private Grid? _leftGrid;
         private MainViewModel? _vm;
-
         public DashboardView()
         {
             InitializeComponent();
-            LeftTableHost.SizeChanged += (_, __) => ApplyLeftTableScale();
+            LeftTableHost.SizeChanged += (s, e) => BuildLeftTable();
         }
 
         public void Attach(MainViewModel vm)
         {
             if (_vm != null)
                 _vm.PropertyChanged -= OnVmPropertyChanged;
-
             _vm = vm;
             this.DataContext = vm;
             _vm.PropertyChanged += OnVmPropertyChanged;
-
-            BuildLeftTable();
         }
 
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(MainViewModel.SelectedYear) ||
-                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex))
+                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex) ||
+                e.PropertyName.StartsWith("DoctorRows")) // Reagujemy też na zmiany w liście lekarzy
             {
                 BuildLeftTable();
             }
@@ -1786,55 +1948,55 @@ namespace GrafikoMat.Views
         private void OnMonthPrev(object sender, RoutedEventArgs e) => _vm?.PrevMonth();
         private void OnMonthNext(object sender, RoutedEventArgs e) => _vm?.NextMonth();
 
+        // ZMIANA: Wracamy do jednej, kompletnej i niezawodnej metody budującej
         private void BuildLeftTable()
         {
-            if (_vm is null) return;
+            if (_vm is null || LeftTableHost.ActualWidth == 0) return;
+
+            // Czyścimy wszystko przed rozpoczęciem
             LeftTableHost.Children.Clear();
 
             int year = _vm.SelectedYear;
-            int monthIndex = _vm.SelectedMonthIndex;
-            int month = monthIndex + 1;
+            int month = _vm.SelectedMonthIndex + 1;
             int daysInMonth = DateTime.DaysInMonth(year, month);
             int rowsCount = _vm.DoctorRows.Count + 1;
 
             var grid = new Grid();
-            _leftGrid = grid;
 
+            // --- Definicja Struktury ---
+            // Kolumny
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NameColWidth) });
             for (int d = 1; d <= daysInMonth; d++)
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(DayColWidth) });
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            }
 
-            for (int r = 0; r < rowsCount; r++)
+            // Wiersze
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            for (int r = 1; r < rowsCount; r++)
+            {
                 grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
+            }
 
-            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0x00, 0x00, 0x00));
-            var weekendFill = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
+            // --- Tworzenie i dodawanie komórek ---
+            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+            var dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 0, 0, 0));
 
             var hdrName = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
-            Grid.SetRow(hdrName, 0); Grid.SetColumn(hdrName, 0);
+            Grid.SetRow(hdrName, 0);
+            Grid.SetColumn(hdrName, 0);
             hdrName.Child = new TextBlock { Text = "Dyżurny", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
             grid.Children.Add(hdrName);
 
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-
-                var cell = new Border
-                {
-                    BorderBrush = borderBrush,
-                    BorderThickness = new Thickness(0, 0, 1, 1),
-                    Background = weekend ? weekendFill : null
-                };
-                Grid.SetRow(cell, 0); Grid.SetColumn(cell, d);
-                cell.Child = new TextBlock
-                {
-                    Text = $"{d:00}\n{DowPl(date.DayOfWeek)}",
-                    TextAlignment = TextAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    LineHeight = 14,
-                    Padding = new Thickness(0, 4, 0, 0)
-                };
+                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+                bool isLastColumn = (d == daysInMonth);
+                var cell = new Border { BorderBrush = borderBrush, BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1), Background = isDayOff ? dayOffFill : null };
+                Grid.SetRow(cell, 0);
+                Grid.SetColumn(cell, d);
+                cell.Child = new TextBlock { Text = $"{d:00}\n{DowPlShort(date.DayOfWeek)}", TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, LineHeight = 14, Padding = new Thickness(0, 4, 0, 4) };
                 grid.Children.Add(cell);
             }
 
@@ -1842,108 +2004,44 @@ namespace GrafikoMat.Views
             {
                 var doctor = _vm.DoctorRows[r];
                 int row = r + 1;
-
                 var nameCell = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
                 Grid.SetRow(nameCell, row); Grid.SetColumn(nameCell, 0);
-                nameCell.Child = new TextBlock
-                {
-                    Text = doctor.Name,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Margin = new Thickness(8, 0, 8, 0),
-                    Opacity = doctor.HasDeclarations ? 1.0 : 0.6
-                };
+                nameCell.Child = new TextBlock { Text = doctor.Name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Opacity = doctor.HasDeclarations ? 1.0 : 0.6 };
                 grid.Children.Add(nameCell);
-
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    bool weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-
-                    var cell = new Border
-                    {
-                        BorderBrush = borderBrush,
-                        BorderThickness = new Thickness(0, 0, 1, 1),
-                        Background = weekend ? weekendFill : null
-                    };
+                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+                    bool isLastColumn = (d == daysInMonth);
+                    var cell = new Border { BorderBrush = borderBrush, BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1), Background = isDayOff ? dayOffFill : null };
                     Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
-
-                    var entry = _vm.TryGetEntry(doctor.Name, year, monthIndex, d - 1);
+                    var entry = _vm.TryGetEntry(doctor.Name, year, _vm.SelectedMonthIndex, d - 1);
                     FrameworkElement content;
-
-                    if (!entry.has ||
-                        (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) ||
-                        (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
-                    {
-                        content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                    }
-                    else if (entry.mode == Models.DayMode.Full24)
-                    {
-                        content = new TextBlock { Text = entry.full, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
-                    }
+                    if (!entry.has || (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night))) { content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }; }
+                    else if (entry.mode == Models.DayMode.Full24) { content = new TextBlock { Text = entry.full, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 }; }
                     else
                     {
                         var g = new Grid();
-                        g.RowDefinitions.Add(new RowDefinition());
-                        g.RowDefinitions.Add(new RowDefinition());
-                        g.Children.Add(new Border
-                        {
-                            BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0x00, 0x00, 0x00)),
-                            BorderThickness = new Thickness(0, 0, 0, 1),
-                            VerticalAlignment = VerticalAlignment.Center
-                        });
+                        g.RowDefinitions.Add(new RowDefinition()); g.RowDefinitions.Add(new RowDefinition());
+                        g.Children.Add(new Border { BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)), BorderThickness = new Thickness(0, 0, 0, 1), VerticalAlignment = VerticalAlignment.Center });
                         var tb1 = new TextBlock { Text = entry.day, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                         var tb2 = new TextBlock { Text = entry.night, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                         Grid.SetRow(tb1, 0); Grid.SetRow(tb2, 1);
                         g.Children.Add(tb1); g.Children.Add(tb2);
                         content = g;
                     }
-
                     cell.Child = content;
                     grid.Children.Add(cell);
                 }
             }
 
+            // Na koniec, dodajemy gotową siatkę do hosta w XAML
             LeftTableHost.Children.Add(grid);
-            ApplyLeftTableScale();
         }
 
-        private void ApplyLeftTableScale()
-        {
-            if (_vm is null || _leftGrid is null) return;
-
-            int year = _vm.SelectedYear;
-            int month = _vm.SelectedMonthIndex + 1;
-            int days = DateTime.DaysInMonth(year, month);
-            int rowsCount = _vm.DoctorRows.Count + 1;
-
-            double requiredW = NameColWidth + days * DayColWidth;
-            double requiredH = rowsCount * RowHeight;
-
-            double availW = Math.Max(0, LeftTableHost.ActualWidth);
-            double availH = Math.Max(0, LeftTableHost.ActualHeight);
-
-            double scaleX = availW > 0 ? Math.Min(1.0, availW / requiredW) : 1.0;
-            double scaleY = availH > 0 ? Math.Min(1.0, availH / requiredH) : 1.0;
-            double scale = Math.Min(scaleX, scaleY);
-
-            _leftGrid.RenderTransform = new ScaleTransform { ScaleX = scale, ScaleY = scale };
-            _leftGrid.RenderTransformOrigin = new Point(0, 0);
-        }
-
-        private static string DowPl(DayOfWeek dow) => dow switch
-        {
-            DayOfWeek.Monday => "Pon",
-            DayOfWeek.Tuesday => "Wto",
-            DayOfWeek.Wednesday => "Śro",
-            DayOfWeek.Thursday => "Czw",
-            DayOfWeek.Friday => "Pią",
-            DayOfWeek.Saturday => "Sob",
-            DayOfWeek.Sunday => "Nie",
-            _ => ""
-        };
+        private static string DowPlShort(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Pon", DayOfWeek.Tuesday => "Wto", DayOfWeek.Wednesday => "Śro", DayOfWeek.Thursday => "Czw", DayOfWeek.Friday => "Pt", DayOfWeek.Saturday => "Sob", DayOfWeek.Sunday => "Nie", _ => "" };
     }
 }
-
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\DeclarationsView.xaml (4657 bytes)
@@ -2187,10 +2285,10 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml (2525 bytes)
+===== FILE: GrafikoMat\Views\Settings\ProfilesSettingsView.xaml (2843 bytes)
 ----- BEGIN -----
 <UserControl
-    x:Class="GrafikoMat.Views.SettingsView"
+    x:Class="GrafikoMat.Views.Settings.ProfilesSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -2198,16 +2296,16 @@ namespace GrafikoMat.Views
     xmlns:services="using:GrafikoMat.Services"
     mc:Ignorable="d">
 
-    <Grid Padding="24">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Ustawienia i Profile Jednostek" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,20"/>
+        <TextBlock Grid.Row="0" Text="Profile Jednostek" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20"/>
 
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="20">
-            
+
             <ListView x:Name="ProfilesListView"
                       ItemsSource="{x:Bind Profiles}"
                       SelectionMode="Single"
@@ -2218,7 +2316,14 @@ namespace GrafikoMat.Views
                     <DataTemplate x:DataType="services:UnitProfile">
                         <StackPanel Margin="12" Spacing="4">
                             <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
-                            <TextBlock Text="{x:Bind SupabaseUrl}" Opacity="0.7" FontSize="12"/>
+                            <TextBlock Opacity="0.7" FontSize="12">
+                                <Run Text="Szpital: "/>
+                                <Run Text="{x:Bind HospitalFullName}"/>
+                            </TextBlock>
+                            <TextBlock Opacity="0.7" FontSize="12">
+                                <Run Text="Oddział: "/>
+                                <Run Text="{x:Bind DepartmentName}"/>
+                            </TextBlock>
                         </StackPanel>
                     </DataTemplate>
                 </ListView.ItemTemplate>
@@ -2228,22 +2333,22 @@ namespace GrafikoMat.Views
                 <Button x:Name="AddButton" Content="Dodaj nowy..." HorizontalAlignment="Stretch" Click="AddButton_Click"/>
                 <Button x:Name="EditButton" Content="Edytuj..." HorizontalAlignment="Stretch" Click="EditButton_Click"/>
                 <Button x:Name="DeleteButton" Content="Usuń" HorizontalAlignment="Stretch" Click="DeleteButton_Click"/>
-                
+
                 <Border Height="20"/>
-                
+
                 <Button x:Name="SetActiveButton" 
                         Content="Ustaw jako aktywny" 
                         HorizontalAlignment="Stretch" 
                         Style="{StaticResource AccentButtonStyle}" 
                         Click="SetActiveButton_Click"/>
             </StackPanel>
-            
+
         </Grid>
     </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (5773 bytes)
+===== FILE: GrafikoMat\Views\Settings\ProfilesSettingsView.xaml.cs (6273 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
@@ -2253,9 +2358,9 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace GrafikoMat.Views
+namespace GrafikoMat.Views.Settings
 {
-    public sealed partial class SettingsView : UserControl
+    public sealed partial class ProfilesSettingsView : UserControl
     {
         public event Action? ReloadRequired;
 
@@ -2264,7 +2369,7 @@ namespace GrafikoMat.Views
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
 
-        public SettingsView()
+        public ProfilesSettingsView()
         {
             this.InitializeComponent();
         }
@@ -2349,11 +2454,13 @@ namespace GrafikoMat.Views
 
             bool isEditMode = existingProfile != null;
 
-            var nameTextBox = new TextBox { Header = "Nazwa jednostki", Text = existingProfile?.Name ?? "" };
+            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingProfile?.Name ?? "" };
+            var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingProfile?.HospitalFullName ?? "" };
+            var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingProfile?.DepartmentName ?? "" };
             var urlTextBox = new TextBox { Header = "Supabase URL", Text = existingProfile?.SupabaseUrl ?? "" };
             var keyTextBox = new TextBox { Header = "Supabase Anon Key", Text = existingProfile?.SupabaseApiKey ?? "" };
 
-            var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, urlTextBox, keyTextBox } };
+            var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, hospitalNameTextBox, departmentNameTextBox, urlTextBox, keyTextBox } };
 
             var dialog = new ContentDialog
             {
@@ -2372,6 +2479,8 @@ namespace GrafikoMat.Views
                 {
                     Id = existingProfile?.Id ?? Guid.NewGuid(),
                     Name = nameTextBox.Text,
+                    HospitalFullName = hospitalNameTextBox.Text,
+                    DepartmentName = departmentNameTextBox.Text,
                     SupabaseUrl = urlTextBox.Text,
                     SupabaseApiKey = keyTextBox.Text
                 };
@@ -2382,6 +2491,116 @@ namespace GrafikoMat.Views
 
                 await _settingsService.SaveSettingsAsync(_appSettings);
                 Initialize(_settingsService, _appSettings);
+            }
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\Views\SettingsView.xaml (1291 bytes)
+----- BEGIN -----
+<UserControl
+    x:Class="GrafikoMat.Views.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="280"/>
+			<ColumnDefinition Width="*"/>
+		</Grid.ColumnDefinitions>
+
+		<ListView x:Name="SettingsMenu"
+                  Grid.Column="0"
+                  SelectionMode="Single"
+                  SelectionChanged="SettingsMenu_SelectionChanged"
+                  Background="{ThemeResource LayerFillColorDefaultBrush}">
+			<ListView.ItemTemplate>
+				<DataTemplate>
+					<TextBlock Text="{Binding}" FontSize="16" Margin="12,8"/>
+				</DataTemplate>
+			</ListView.ItemTemplate>
+		</ListView>
+
+		<Border Grid.Column="1"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                Padding="24">
+			<ContentControl x:Name="SettingsDetailContent"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"/>
+		</Border>
+	</Grid>
+</UserControl>
+----- END -----
+
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (2651 bytes)
+----- BEGIN -----
+using GrafikoMat.Services;
+using GrafikoMat.Views.Settings; // ZMIANA: Dodajemy using do naszego nowego folderu
+using Microsoft.UI.Xaml.Controls;
+using System.Linq;
+
+namespace GrafikoMat.Views
+{
+    public sealed partial class SettingsView : UserControl
+    {
+        // ZMIANA: Dodajemy pola do przekazywania dalej
+        private SettingsService? _settingsService;
+        private AppSettings? _appSettings;
+        public event System.Action? ReloadRequired;
+
+        public SettingsView()
+        {
+            this.InitializeComponent();
+            SettingsMenu.ItemsSource = new[]
+            {
+                "Profile Jednostek",
+                "Lekarze i Użytkownicy",
+                "Silnik i Priorytety",
+                "Wygląd i Zachowanie"
+            };
+            SettingsMenu.SelectedIndex = 0;
+        }
+
+        // ZMIANA: Nowa metoda do inicjalizacji z MainWindow
+        public void Initialize(SettingsService service, AppSettings settings)
+        {
+            _settingsService = service;
+            _appSettings = settings;
+
+            // Odświeżamy widok po wejściu
+            LoadSubView(SettingsMenu.Items[0] as string);
+        }
+
+        private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.FirstOrDefault() is not string selectedItem) return;
+            LoadSubView(selectedItem);
+        }
+
+        // ZMIANA: Nowa, rozbudowana metoda do ładowania pod-widoków
+        private void LoadSubView(string? selectedItem)
+        {
+            if (_settingsService == null || _appSettings == null) return;
+
+            switch (selectedItem)
+            {
+                case "Profile Jednostek":
+                    var profilesView = new ProfilesSettingsView();
+                    // Przekazujemy serwisy i ustawienia oraz subskrybujemy event
+                    profilesView.Initialize(_settingsService, _appSettings);
+                    profilesView.ReloadRequired += () => ReloadRequired?.Invoke();
+                    SettingsDetailContent.Content = profilesView;
+                    break;
+                case "Lekarze i Użytkownicy":
+                    SettingsDetailContent.Content = new TextBlock { Text = "Tutaj będzie widok zarządzania lekarzami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
+                    break;
+                default:
+                    SettingsDetailContent.Content = null;
+                    break;
             }
         }
     }

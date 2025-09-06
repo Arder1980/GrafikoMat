@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:controls="using:GrafikoMat.Controls"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     mc:Ignorable="d">
 
     <Grid>
@@ -51,7 +52,7 @@
 
                 <TextBlock Text="Zestawienie deklaracji dyżurowych" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
                 <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
-                    <Grid x:Name="LeftTableHost"/>
+                    <Grid x:Name="DeclarationsGrid"/>
                 </Border>
             </Grid>
 
@@ -70,7 +71,7 @@
                                 <controls:AutoEqualRowsGrid/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-
+                        
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RosterRow">
                                 <Grid ColumnSpacing="12" Padding="8,0"
