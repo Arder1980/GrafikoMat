@@ -1,13 +1,9 @@
-﻿using Postgrest.Attributes;
-using Postgrest.Models;
+﻿using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
 using System;
 
 namespace GrafikoMat.Core.Data
 {
-    /// <summary>
-    /// Reprezentuje powiązanie między lekarzem a jednostką.
-    /// Mapuje się na tabelę 'unit_doctors' w bazie danych.
-    /// </summary>
     [Table("unit_doctors")]
     public class UnitDoctorAssignment : BaseModel
     {

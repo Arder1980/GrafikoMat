@@ -1,72 +1,57 @@
-﻿using Supabase.Gotrue;
-using Supabase.Gotrue.Interfaces;
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Windows.Storage;
+using Supabase.Gotrue;
+using Supabase.Gotrue.Interfaces;
 
 namespace GrafikoMat.Services
 {
     /// <summary>
-    /// Implementacja obsługi sesji, która zapisuje i odczytuje sesję z lokalnego pliku.
+    /// Plikowa trwałość sesji zgodna z interfejsem IGotrueSessionPersistence{Session}.
+    /// Zapis/odczyt do %LocalAppData%\GrafikoMat\supabase_session.json (synchronnie, by pasować do interfejsu).
     /// </summary>
-    public class FileSessionHandler : ISupabaseSessionHandler
+    public sealed class FileSessionHandler : IGotrueSessionPersistence<Session>
     {
-        private const string SESSION_FILENAME = "user_session.json";
-        private static readonly string _sessionPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SESSION_FILENAME);
+        private static readonly string AppDir =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GrafikoMat");
+        private static readonly string SessionPath = Path.Combine(AppDir, "supabase_session.json");
 
-        /// <summary>
-        /// Wywoływane przez klienta Supabase, gdy sesja (tokeny) zostanie pomyślnie pobrana.
-        /// </summary>
-        public async void SaveSession(Session session)
+        /// <summary>Zapisuje sesję (synchronnie).</summary>
+        public void SaveSession(Session session)
         {
-            try
-            {
-                var json = JsonSerializer.Serialize(session);
-                await File.WriteAllTextAsync(_sessionPath, json);
-            }
-            catch (Exception)
-            {
-                // W docelowej aplikacji warto tu dodać logowanie błędów
-            }
+            if (session == null) return;
+            Directory.CreateDirectory(AppDir);
+            var json = JsonSerializer.Serialize(session);
+            File.WriteAllText(SessionPath, json);
         }
 
-        /// <summary>
-        /// Wywoływane przez klienta Supabase przy starcie, aby spróbować wczytać istniejącą sesję.
-        /// </summary>
+        /// <summary>Ładuje sesję (synchronnie). Zwraca null, jeśli jej nie ma lub plik jest uszkodzony.</summary>
         public Session? LoadSession()
         {
             try
             {
-                if (File.Exists(_sessionPath))
-                {
-                    var json = File.ReadAllText(_sessionPath);
-                    return JsonSerializer.Deserialize<Session>(json);
-                }
+                if (!File.Exists(SessionPath)) return null;
+                var json = File.ReadAllText(SessionPath);
+                if (string.IsNullOrWhiteSpace(json)) return null;
+                return JsonSerializer.Deserialize<Session>(json);
             }
-            catch (Exception)
+            catch
             {
-                // Błąd odczytu - traktujemy jak brak sesji
+                return null;
             }
-            return null;
         }
 
-        /// <summary>
-        /// Wywoływane, gdy użytkownik się wyloguje.
-        /// </summary>
-        public void DeleteSession()
+        /// <summary>Usuwa zapisaną sesję (synchronnie).</summary>
+        public void DestroySession()
         {
             try
             {
-                if (File.Exists(_sessionPath))
-                {
-                    File.Delete(_sessionPath);
-                }
+                if (File.Exists(SessionPath))
+                    File.Delete(SessionPath);
             }
-            catch (Exception)
+            catch
             {
-                // Obsługa błędu
+                // Ignorujemy – brak sesji w pliku i tak jest stanem „wylogowany”.
             }
         }
     }

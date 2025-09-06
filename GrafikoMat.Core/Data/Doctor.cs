@@ -1,13 +1,9 @@
-﻿using Postgrest.Attributes;
-using Postgrest.Models;
+﻿using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
 using System;
 
 namespace GrafikoMat.Core.Data
 {
-    /// <summary>
-    /// Reprezentuje globalny profil dyżurnego w systemie.
-    /// Mapuje się na tabelę 'doctors' w bazie danych.
-    /// </summary>
     [Table("doctors")]
     public class DoctorProfile : BaseModel
     {

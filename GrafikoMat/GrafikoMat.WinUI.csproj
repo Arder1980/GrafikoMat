@@ -42,7 +42,8 @@
 		<PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.250402" />
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
-		<PackageReference Include="supabase-csharp" Version="0.16.2" />
+		<PackageReference Include="Supabase" Version="1.1.1" />
+		<PackageReference Include="Supabase.Postgrest" Version="4.1.0" />
 	</ItemGroup>
 
 	<ItemGroup>

@@ -1,13 +1,9 @@
-﻿using Postgrest.Attributes;
-using Postgrest.Models;
+﻿using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
 using System;
 
 namespace GrafikoMat.Core.Data
 {
-    /// <summary>
-    /// Reprezentuje pojedynczą jednostkę (szpital/oddział).
-    /// Mapuje się na tabelę 'units' w bazie danych.
-    /// </summary>
     [Table("units")]
     public class Unit : BaseModel
     {

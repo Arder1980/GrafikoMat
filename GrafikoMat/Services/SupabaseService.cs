@@ -1,26 +1,17 @@
 ﻿using GrafikoMat.Core.Repositories;
 using GrafikoMat.Repositories;
 using Supabase;
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Services
 {
-    /// <summary>
-    /// Centralny punkt dostępu do backendu Supabase.
-    /// </summary>
     public sealed class SupabaseService
     {
-        private Client? _client;
-
-        /// <summary>
-        /// Publiczna właściwość zapewniająca dostęp do klienta Supabase.
-        /// </summary>
-        public Client? Client => _client;
+        private SbClient? _client;
+        public SbClient? Client => _client;
 
         public IDoctorRepository? Doctors { get; private set; }
 
-        /// <summary>
-        /// Inicjalizuje serwis (i wszystkie repozytoria) dla globalnego połączenia.
-        /// </summary>
         public void Initialize(string url, string apiKey)
         {
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
@@ -33,12 +24,13 @@ namespace GrafikoMat.Services
             var options = new SupabaseOptions
             {
                 AutoRefreshToken = true,
-                AutoConnectRealtime = true,
-                // ZMIANA: Podajemy nasz nowy mechanizm obsługi sesji
-                SessionHandler = new FileSessionHandler()
+                // Uwaga: W Twojej wersji SDK nie ma właściwości SessionPersistence w SupabaseOptions.
+                // Trwałość sesji (FileSessionHandler) podpinamy/wywołujemy ręcznie w miejscach logowania/wylogowania.
             };
-            _client = new Client(url, apiKey, options);
 
+            _client = new SbClient(url, apiKey, options);
+
+            // Repozytoria korzystają z jednego klienta
             Doctors = new SupabaseDoctorRepository(_client);
         }
     }
