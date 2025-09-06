@@ -32,8 +32,7 @@
 
             <Button x:Name="PrevUnitButton"
                     Grid.Column="0"
-                    Content="&#xE0E2;"
-                    FontFamily="Segoe MDL2 Assets"
+                    Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets"
                     Style="{StaticResource SubtleButtonStyle}"
                     VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}"
@@ -43,7 +42,6 @@
                 <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}"
                            FontSize="20" FontWeight="SemiBold"
                            TextWrapping="Wrap" TextAlignment="Center"/>
-
                 <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}"
                            FontSize="18" 
                            FontWeight="SemiBold" 
@@ -55,8 +53,7 @@
 
             <Button x:Name="NextUnitButton"
                     Grid.Column="2"
-                    Content="&#xE0E3;"
-                    FontFamily="Segoe MDL2 Assets"
+                    Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets"
                     Style="{StaticResource SubtleButtonStyle}"
                     VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.SwitchToNextUnitCommand}"
@@ -78,6 +75,11 @@
             <ItemsControl x:Name="ActionButtons"
                           ItemsSource="{x:Bind Actions}"
                           VerticalAlignment="Center">
+
+                <ItemsControl.RenderTransform>
+                    <TranslateTransform/>
+                </ItemsControl.RenderTransform>
+
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -107,7 +109,6 @@
 
             <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12" VerticalAlignment="Center"/>
             <Border Grid.Column="1" Width="1" Background="#22000000"/>
-
             <TextBlock Grid.Column="2" 
                        Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" 
                        Opacity="0.9" 
@@ -116,5 +117,10 @@
                        Margin="0,2,0,0"
                        VerticalAlignment="Center"/>
         </Grid>
+
+        <ContentControl x:Name="LoginOverlay"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
+                        Grid.RowSpan="5"/>
     </Grid>
 </Window>

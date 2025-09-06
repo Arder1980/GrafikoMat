@@ -7,36 +7,31 @@ using System.Threading.Tasks;
 
 namespace GrafikoMat.Repositories
 {
-    // ZMIANA: Klasa DoctorDto została usunięta, ponieważ jest już niepotrzebna.
-
     public class SupabaseDoctorRepository : IDoctorRepository
     {
         private readonly Client _client;
-
         public SupabaseDoctorRepository(Client client)
         {
             _client = client;
         }
 
-        public async Task<IEnumerable<Doctor>> GetAllAsync()
+        public async Task<IEnumerable<DoctorProfile>> GetAllAsync()
         {
-            // ZMIANA: Używamy bezpośrednio klasy Doctor
-            var response = await _client.From<Doctor>().Get();
+            var response = await _client.From<DoctorProfile>().Get();
             return response.Models;
         }
 
-        public async Task AddAsync(Doctor doctor)
+        public async Task AddAsync(DoctorProfile doctor)
         {
-            // ZMIANA: Wstawiamy bezpośrednio obiekt Doctor
-            await _client.From<Doctor>().Insert(doctor);
+            await _client.From<DoctorProfile>().Insert(doctor);
         }
 
-        public Task<Doctor?> GetByIdAsync(Guid id)
+        public Task<DoctorProfile?> GetByIdAsync(Guid id)
         {
             throw new NotImplementedException();
         }
 
-        public Task UpdateAsync(Doctor doctor)
+        public Task UpdateAsync(DoctorProfile doctor)
         {
             throw new NotImplementedException();
         }

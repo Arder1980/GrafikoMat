@@ -1,5 +1,5 @@
 ﻿using GrafikoMat.Services;
-using GrafikoMat.Views.Settings; // ZMIANA: Dodajemy using do naszego nowego folderu
+using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
 using System.Linq;
 
@@ -7,7 +7,7 @@ namespace GrafikoMat.Views
 {
     public sealed partial class SettingsView : UserControl
     {
-        // ZMIANA: Dodajemy pola do przekazywania dalej
+        private DataService? _dataService;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
         public event System.Action? ReloadRequired;
@@ -15,23 +15,24 @@ namespace GrafikoMat.Views
         public SettingsView()
         {
             this.InitializeComponent();
+            // Zaktualizowana lista pozycji w menu
             SettingsMenu.ItemsSource = new[]
             {
-                "Profile Jednostek",
-                "Lekarze i Użytkownicy",
-                "Silnik i Priorytety",
-                "Wygląd i Zachowanie"
+                "Baza danych",
+                "Jednostki",
+                "Priorytety",
+                "Wybór silnika",
+                "Wygląd"
             };
             SettingsMenu.SelectedIndex = 0;
         }
 
-        // ZMIANA: Nowa metoda do inicjalizacji z MainWindow
-        public void Initialize(SettingsService service, AppSettings settings)
+        public void Initialize(DataService? dataService, SettingsService settingsService, AppSettings settings)
         {
-            _settingsService = service;
+            _dataService = dataService;
+            _settingsService = settingsService;
             _appSettings = settings;
 
-            // Odświeżamy widok po wejściu
             LoadSubView(SettingsMenu.Items[0] as string);
         }
 
@@ -41,23 +42,49 @@ namespace GrafikoMat.Views
             LoadSubView(selectedItem);
         }
 
-        // ZMIANA: Nowa, rozbudowana metoda do ładowania pod-widoków
         private void LoadSubView(string? selectedItem)
         {
             if (_settingsService == null || _appSettings == null) return;
 
             switch (selectedItem)
             {
-                case "Profile Jednostek":
-                    var profilesView = new ProfilesSettingsView();
-                    // Przekazujemy serwisy i ustawienia oraz subskrybujemy event
-                    profilesView.Initialize(_settingsService, _appSettings);
-                    profilesView.ReloadRequired += () => ReloadRequired?.Invoke();
-                    SettingsDetailContent.Content = profilesView;
+                case "Baza danych":
+                    var connectionView = new ConnectionSettingsView();
+                    connectionView.Initialize(_settingsService, _appSettings);
+                    connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
+                    SettingsDetailContent.Content = connectionView;
                     break;
-                case "Lekarze i Użytkownicy":
-                    SettingsDetailContent.Content = new TextBlock { Text = "Tutaj będzie widok zarządzania lekarzami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
+
+                case "Jednostki":
+                    if (_dataService != null)
+                    {
+                        var unitsView = new UnitsSettingsView();
+                        unitsView.Initialize(_dataService);
+                        SettingsDetailContent.Content = unitsView;
+                    }
+                    else
+                    {
+                        SettingsDetailContent.Content = new TextBlock
+                        {
+                            Text = "Skonfiguruj i zapisz połączenie z bazą danych, aby zarządzać jednostkami.",
+                            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center
+                        };
+                    }
                     break;
+
+                case "Priorytety":
+                    SettingsDetailContent.Content = new PrioritiesSettingsView();
+                    break;
+
+                case "Wybór silnika":
+                    SettingsDetailContent.Content = new EngineSettingsView();
+                    break;
+
+                case "Wygląd":
+                    SettingsDetailContent.Content = new AppearanceSettingsView();
+                    break;
+
                 default:
                     SettingsDetailContent.Content = null;
                     break;

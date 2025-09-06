@@ -1,4 +1,5 @@
 ﻿using GrafikoMat.Common;
+using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
 using System;
@@ -13,28 +14,40 @@ namespace GrafikoMat.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
-        // ... (górna część bez zmian) ...
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-        private readonly IDoctorRepository? _doctorRepository;
+
+        // ZMIANA: Usunięto 'readonly', aby umożliwić aktualizację
+        private IDoctorRepository? _doctorRepository;
+
         private string _activeUnitHospitalName = "GrafikoMat Dyżurowy";
         public string ActiveUnitHospitalName { get => _activeUnitHospitalName; set { if (_activeUnitHospitalName != value) { _activeUnitHospitalName = value; OnPropertyChanged(); } } }
+
         private string _activeUnitDepartmentName = "Proszę wybrać aktywny profil w ustawieniach";
         public string ActiveUnitDepartmentName { get => _activeUnitDepartmentName; set { if (_activeUnitDepartmentName != value) { _activeUnitDepartmentName = value; OnPropertyChanged(); } } }
+
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
+
         private int _selectedYear = DateTime.Today.Year;
         public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
+
         public string[] Months { get; } = new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" };
+
         private int _selectedMonthIndex = DateTime.Today.Month - 1;
         public int SelectedMonthIndex { get => _selectedMonthIndex; set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
+
         public ObservableCollection<DoctorRow> DoctorRows { get; } = new();
         public ObservableCollection<RosterRow> RosterRows { get; } = new();
+
         private string _engineName = "Silnik: Klasyczny";
         public string EngineName { get => _engineName; set { if (_engineName != value) { _engineName = value; OnPropertyChanged(); } } }
+
         private string _priorityOrder = "Priorytety: Dostępność > Sprawiedliwość > Preferencje";
         public string PriorityOrder { get => _priorityOrder; set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } } }
+
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
+
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
@@ -46,13 +59,31 @@ namespace GrafikoMat.ViewModels
             UpdateRosterForSelectedMonth();
         }
 
+        /// <summary>
+        /// NOWA METODA: Pozwala MainWindow na zaktualizowanie repozytorium po inicjalizacji Supabase.
+        /// </summary>
+        public void UpdateDoctorRepository(IDoctorRepository? doctorRepository)
+        {
+            _doctorRepository = doctorRepository;
+        }
+
         public async void LoadDoctorsAsync()
         {
-            if (_doctorRepository == null) { DoctorRows.Clear(); return; }
-            ;
+            if (_doctorRepository == null)
+            {
+                DoctorRows.Clear();
+                return;
+            }
+
             var doctors = await _doctorRepository.GetAllAsync();
             DoctorRows.Clear();
-            if (doctors != null) { foreach (var doctor in doctors.OrderBy(d => d.FullName)) { DoctorRows.Add(new DoctorRow(doctor.FullName, false)); } }
+            if (doctors != null)
+            {
+                foreach (var doctor in doctors.OrderBy(d => d.LastName))
+                {
+                    DoctorRows.Add(new DoctorRow($"{doctor.FirstName} {doctor.LastName}", false));
+                }
+            }
         }
 
         private void UpdateRosterForSelectedMonth()
@@ -89,7 +120,6 @@ namespace GrafikoMat.ViewModels
         public DoctorRow(string name, bool hasDeclarations) { Name = name; _has = hasDeclarations; }
     }
 
-    // ZMIANA: Upraszczamy RosterRow, usuwając dynamiczne właściwości wysokości i czcionki
     public class RosterRow
     {
         public string DateLabel { get; }

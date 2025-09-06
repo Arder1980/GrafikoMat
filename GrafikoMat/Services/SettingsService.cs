@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -7,34 +6,26 @@ using Windows.Storage;
 
 namespace GrafikoMat.Services
 {
-    public record UnitProfile
-    {
-        public Guid Id { get; init; } = Guid.NewGuid();
-        public string Name { get; init; } = "Nowa jednostka";
-
-        // ZMIANA: Dodajemy nowe pola dla profilu
-        public string HospitalFullName { get; init; } = string.Empty;
-        public string DepartmentName { get; init; } = string.Empty;
-
-        public string SupabaseUrl { get; init; } = string.Empty;
-        public string SupabaseApiKey { get; init; } = string.Empty;
-    }
-
+    /// <summary>
+    /// Przechowuje globalne ustawienia aplikacji.
+    /// W nowym, scentralizowanym modelu, zawiera jedno, główne połączenie do bazy Supabase.
+    /// </summary>
     public record AppSettings
     {
-        public List<UnitProfile> UnitProfiles { get; init; } = new();
-        public Guid? ActiveUnitProfileId { get; init; }
+        // Dane połączeniowe do jedynej, centralnej bazy danych
+        public string SupabaseUrl { get; init; } = string.Empty;
+        public string SupabaseAnonKey { get; init; } = string.Empty;
 
-        // ZMIANA: Przenosimy globalne ustawienia tutaj
+        // Pozostałe, globalne ustawienia aplikacji
         public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
-        public string EngineType { get; init; } = "Klasyczny";
-        public string PriorityOrder { get; init; } = "Dostępność > Sprawiedliwość > Preferencje";
-
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
     }
 
     public record WindowSize(int Width, int Height);
 
+    /// <summary>
+    /// Serwis odpowiedzialny za wczytywanie i zapisywanie pliku settings.json.
+    /// </summary>
     public sealed class SettingsService
     {
         private const string SETTINGS_FILENAME = "settings.json";
@@ -54,7 +45,11 @@ namespace GrafikoMat.Services
                     _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
                 }
             }
-            catch (Exception) { _currentSettings = null; }
+            catch (Exception)
+            {
+                // W przypadku błędu odczytu, tworzymy nowe, puste ustawienia
+                _currentSettings = null;
+            }
 
             _currentSettings ??= new AppSettings();
             return _currentSettings;

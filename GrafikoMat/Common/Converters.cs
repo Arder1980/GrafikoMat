@@ -31,4 +31,21 @@ namespace GrafikoMat.Common
             throw new NotImplementedException();
         }
     }
+    public class NullToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool isVisible = value != null;
+            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                isVisible = !isVisible;
+            }
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

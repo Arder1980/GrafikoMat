@@ -6,25 +6,25 @@ namespace GrafikoMat.Services
 {
     /// <summary>
     /// Centralny punkt dostępu do backendu Supabase.
-    /// TERAZ jest inicjalizowany dynamicznie na podstawie wybranego profilu.
     /// </summary>
     public sealed class SupabaseService
     {
         private Client? _client;
 
-        // ZMIANA: Repozytoria są teraz 'nullable', bo mogą nie być zainicjalizowane na starcie
+        /// <summary>
+        /// Publiczna właściwość zapewniająca dostęp do klienta Supabase.
+        /// </summary>
+        public Client? Client => _client;
+
         public IDoctorRepository? Doctors { get; private set; }
-        // public IDeclarationRepository? Declarations { get; private set; } // W przyszłości
 
         /// <summary>
-        /// Inicjalizuje serwis (i wszystkie repozytoria) dla konkretnego profilu jednostki.
-        /// Ta metoda będzie wywoływana przy starcie aplikacji i przy każdej zmianie jednostki.
+        /// Inicjalizuje serwis (i wszystkie repozytoria) dla globalnego połączenia.
         /// </summary>
-        public void Initialize(UnitProfile profile)
+        public void Initialize(string url, string apiKey)
         {
-            if (string.IsNullOrWhiteSpace(profile.SupabaseUrl) || string.IsNullOrWhiteSpace(profile.SupabaseApiKey))
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
             {
-                // Jeśli profil nie ma danych, de-inicjalizujemy serwis
                 _client = null;
                 Doctors = null;
                 return;
@@ -35,8 +35,7 @@ namespace GrafikoMat.Services
                 AutoRefreshToken = true,
                 AutoConnectRealtime = true
             };
-
-            _client = new Client(profile.SupabaseUrl, profile.SupabaseApiKey, options);
+            _client = new Client(url, apiKey, options);
 
             Doctors = new SupabaseDoctorRepository(_client);
         }

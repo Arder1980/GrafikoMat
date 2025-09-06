@@ -19,7 +19,7 @@
             <common:BooleanToBrushConverter_DayOff x:Key="BooleanToBrushConverter_DayOff"/>
 
             <common:BooleanToThicknessConverter_LastItemBorder x:Key="LastItemBorderConverter"/>
-
+            <common:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -1,25 +1,35 @@
-﻿using Postgrest.Models;
+﻿using Postgrest.Attributes;
+using Postgrest.Models;
 using System;
 
 namespace GrafikoMat.Core.Data
 {
     /// <summary>
-    /// Reprezentuje pojedynczego lekarza/dyżurnego w systemie.
-    /// To jest główny model danych, który będzie mapowany na tabelę w bazie danych.
+    /// Reprezentuje globalny profil dyżurnego w systemie.
+    /// Mapuje się na tabelę 'doctors' w bazie danych.
     /// </summary>
-    [Postgrest.Attributes.Table("doctors")] // ZMIANA: Pełna nazwa, aby usunąć niejednoznaczność
-    public class Doctor : BaseModel
+    [Table("doctors")]
+    public class DoctorProfile : BaseModel
     {
-        /// <summary>Klucz główny (UUID w Supabase).</summary>
-        [Postgrest.Attributes.PrimaryKey("id", false)] // ZMIANA: Pełna nazwa
+        [PrimaryKey("id")]
         public Guid Id { get; set; }
 
-        /// <summary>Pełne imię i nazwisko.</summary>
-        [Postgrest.Attributes.Column("full_name")] // ZMIANA: Pełna nazwa
-        public string FullName { get; set; } = string.Empty;
+        [Column("first_name")]
+        public string FirstName { get; set; } = string.Empty;
 
-        /// <summary>Email używany do logowania.</summary>
-        [Postgrest.Attributes.Column("email")] // ZMIANA: Pełna nazwa
+        [Column("last_name")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Column("abbreviation")]
+        public string Abbreviation { get; set; } = string.Empty;
+
+        [Column("email")]
         public string Email { get; set; } = string.Empty;
+
+        [Column("is_admin")]
+        public bool IsAdmin { get; set; } = false;
+
+        [Column("created_at")]
+        public DateTime CreatedAt { get; set; }
     }
 }
