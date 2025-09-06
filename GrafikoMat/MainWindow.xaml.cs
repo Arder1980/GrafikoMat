@@ -17,6 +17,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Diagnostics; // <= LOGI
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
@@ -68,7 +69,7 @@ namespace GrafikoMat
             InitAppWindow();
             SetupBackdrop();
 
-            RootGrid.Loaded += (s, e) => InitializeApplicationAsync();
+            RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
 
             _dashboardView.Attach(ViewModel);
 
@@ -87,30 +88,40 @@ namespace GrafikoMat
             this.Closed += OnWindowClosed;
         }
 
-        private async void InitializeApplicationAsync()
+        private async Task InitializeApplicationAsync()
         {
-            // Krok 1: Wczytaj ustawienia
+            // 1) Wczytaj ustawienia + zainicjalizuj klienta
             await ReloadSettingsAndServicesAsync();
 
-            // Krok 2: Jeśli nie ma konfiguracji, wymuś jej wprowadzenie
-            if (string.IsNullOrWhiteSpace(_appSettings?.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
+            // 2) Jeśli brak konfiguracji – wymuś jej wprowadzenie
+            if (string.IsNullOrWhiteSpace(_appSettings?.SupabaseUrl) ||
+                string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 await ShowFirstTimeSetupAsync();
-                await ReloadSettingsAndServicesAsync(); // Przeładuj po udanej konfiguracji
+                await ReloadSettingsAndServicesAsync(); // po zapisie ustawień
             }
 
-            // Krok 3: Jeśli jest konfiguracja, ale użytkownik nie jest zalogowany, wymuś logowanie
-            if (_supabaseService.Client?.Auth.CurrentUser == null)
+            // 3) *** KLUCZ *** spróbuj przywrócić sesję z dysku (FileSessionHandler)
+            Debug.WriteLine("[MainWindow] Init: RestoreSessionIfAnyAsync() AWAIT...");
+            var restored = await _supabaseService.RestoreSessionIfAnyAsync(); // <= naprawa: było TryRestoreSessionAsync()
+            Debug.WriteLine($"[MainWindow] Init: restored={restored}, IsAuthenticated={_supabaseService.IsAuthenticated}");
+
+            // 4) Jeśli nadal nieautoryzowani – pokaż logowanie
+            if (!restored && !_supabaseService.IsAuthenticated)
             {
+                Debug.WriteLine("[MainWindow] Init: brak sesji – pokazuję ekran logowania");
                 bool loggedIn = await ShowLoginScreenAsync();
-                if (!loggedIn) // Jeśli użytkownik anulował logowanie
+                Debug.WriteLine($"[MainWindow] Init: wynik logowania = {loggedIn}");
+
+                if (!loggedIn)
                 {
-                    this.Close(); // Zamknij aplikację
+                    this.Close();
                     return;
                 }
+                // Po udanym logowaniu sesja jest zapisywana ręcznie w LoginSuccess -> SaveCurrentSessionAsync()
             }
 
-            // Krok 4: Użytkownik jest zalogowany, załaduj dane i pokaż pulpit
+            // 5) Załaduj dane i pokaż dashboard
             await LoadDataAndShowDashboardAsync();
         }
 
@@ -123,6 +134,9 @@ namespace GrafikoMat
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 _dataService = new DataService(_supabaseService);
                 ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
+
+                // Opcjonalnie zostawiamy: wstępne przywrócenie tuż po inicjalizacji klienta
+                await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
             {
@@ -174,6 +188,10 @@ namespace GrafikoMat
 
         private async Task<bool> ShowLoginScreenAsync()
         {
+            // Jeśli już jesteśmy zalogowani (sesja przywrócona), pomijamy logowanie.
+            if (_supabaseService != null && _supabaseService.IsAuthenticated)
+                return true;
+
             var tcs = new TaskCompletionSource<bool>();
             var loginView = new LoginView(_supabaseService);
 
@@ -183,8 +201,11 @@ namespace GrafikoMat
                 tcs.TrySetResult(false);
             };
 
-            loginView.LoginSuccess += () =>
+            loginView.LoginSuccess += async () =>
             {
+                // po udanym logowaniu zapisz aktualną sesję (żeby przetrwała restart)
+                await _supabaseService.SaveCurrentSessionAsync();
+
                 LoginOverlay.Content = null;
                 tcs.TrySetResult(true);
             };

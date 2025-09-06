@@ -1,57 +1,97 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+using Windows.Storage;
 using Supabase.Gotrue;
-using Supabase.Gotrue.Interfaces;
 
 namespace GrafikoMat.Services
 {
     /// <summary>
-    /// Plikowa trwałość sesji zgodna z interfejsem IGotrueSessionPersistence{Session}.
-    /// Zapis/odczyt do %LocalAppData%\GrafikoMat\supabase_session.json (synchronnie, by pasować do interfejsu).
+    /// Zapis/odczyt sesji Supabase do pliku JSON w LocalFolder.
+    /// Bez implementowania interfejsów SDK – wywoływany ręcznie z SupabaseService.
     /// </summary>
-    public sealed class FileSessionHandler : IGotrueSessionPersistence<Session>
+    public sealed class FileSessionHandler
     {
-        private static readonly string AppDir =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GrafikoMat");
-        private static readonly string SessionPath = Path.Combine(AppDir, "supabase_session.json");
+        private const string FileName = "supabase_session.json";
+        private static readonly string SessionPath =
+            Path.Combine(ApplicationData.Current.LocalFolder.Path, FileName);
 
-        /// <summary>Zapisuje sesję (synchronnie).</summary>
-        public void SaveSession(Session session)
+        private static readonly JsonSerializerOptions JsonOpts = new()
         {
-            if (session == null) return;
-            Directory.CreateDirectory(AppDir);
-            var json = JsonSerializer.Serialize(session);
-            File.WriteAllText(SessionPath, json);
-        }
+            WriteIndented = false,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            PropertyNameCaseInsensitive = true
+        };
 
-        /// <summary>Ładuje sesję (synchronnie). Zwraca null, jeśli jej nie ma lub plik jest uszkodzony.</summary>
-        public Session? LoadSession()
+        public async Task SaveAsync(Session session)
+        {
+            if (session is null)
+            {
+                Debug.WriteLine("[FileSessionHandler] SaveAsync: brak sesji do zapisania.");
+                return;
+            }
+
+            try
+            {
+                var json = JsonSerializer.Serialize(session, JsonOpts);
+                await File.WriteAllTextAsync(SessionPath, json).ConfigureAwait(false);
+                Debug.WriteLine($"[FileSessionHandler] Sesja ZAPISANA do pliku: {SessionPath}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[FileSessionHandler] Błąd zapisu do {SessionPath}: {ex.Message}");
+            }
+        }
+        public static string SessionFilePath => SessionPath;
+
+        public async Task<Session?> LoadAsync()
         {
             try
             {
-                if (!File.Exists(SessionPath)) return null;
-                var json = File.ReadAllText(SessionPath);
-                if (string.IsNullOrWhiteSpace(json)) return null;
-                return JsonSerializer.Deserialize<Session>(json);
+                if (!File.Exists(SessionPath))
+                {
+                    Debug.WriteLine($"[FileSessionHandler] LoadAsync: brak pliku {SessionPath}");
+                    return null;
+                }
+
+                var json = await File.ReadAllTextAsync(SessionPath).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    Debug.WriteLine($"[FileSessionHandler] LoadAsync: plik {SessionPath} pusty.");
+                    return null;
+                }
+
+                var session = JsonSerializer.Deserialize<Session>(json, JsonOpts);
+                Debug.WriteLine($"[FileSessionHandler] Sesja WCZYTANA z pliku: {SessionPath}");
+                return session;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[FileSessionHandler] Błąd odczytu z {SessionPath}: {ex.Message}");
                 return null;
             }
         }
 
-        /// <summary>Usuwa zapisaną sesję (synchronnie).</summary>
-        public void DestroySession()
+        public void Delete()
         {
             try
             {
                 if (File.Exists(SessionPath))
+                {
                     File.Delete(SessionPath);
+                    Debug.WriteLine($"[FileSessionHandler] Sesja USUNIĘTA (plik {SessionPath})");
+                }
+                else
+                {
+                    Debug.WriteLine($"[FileSessionHandler] Delete: plik {SessionPath} nie istnieje.");
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorujemy – brak sesji w pliku i tak jest stanem „wylogowany”.
+                Debug.WriteLine($"[FileSessionHandler] Błąd usuwania {SessionPath}: {ex.Message}");
             }
         }
     }

@@ -42,8 +42,13 @@ namespace GrafikoMat.Views
                 var session = await _supabaseService.Client.Auth.SignIn(email, password);
                 if (session?.User != null)
                 {
+                    // ZAPISZ sesję do LocalFolder\supabase_session.json
+                    await _supabaseService.SaveCurrentSessionAsync();
+
+                    // Dopiero potem sygnalizuj sukces do okna głównego
                     LoginSuccess?.Invoke();
                 }
+
             }
             catch (Exception)
             {

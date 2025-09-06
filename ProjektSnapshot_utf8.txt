@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-06 20:11:34
+# Data:       2025-09-06 23:07:28
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -76,12 +76,11 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (878 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (827 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GrafikoMat.Core.Data
 {
@@ -110,6 +109,7 @@ namespace GrafikoMat.Core.Data
         public DateTime CreatedAt { get; set; }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat.Core\Data\DutyDeclaration.cs (1056 bytes)
@@ -145,12 +145,11 @@ namespace GrafikoMat.Core.Data
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Data\Unit.cs (706 bytes)
+===== FILE: GrafikoMat.Core\Data\Unit.cs (655 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GrafikoMat.Core.Data
 {
@@ -173,14 +172,14 @@ namespace GrafikoMat.Core.Data
         public DateTime CreatedAt { get; set; }
     }
 }
+
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Data\UnitDoctorAssignment.cs (528 bytes)
+===== FILE: GrafikoMat.Core\Data\UnitDoctorAssignment.cs (477 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GrafikoMat.Core.Data
 {
@@ -197,6 +196,7 @@ namespace GrafikoMat.Core.Data
         public bool IsActive { get; set; } = true;
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat.Core\Declarations.Models.cs (2177 bytes)
@@ -1159,7 +1159,7 @@ namespace GrafikoMat.Controls
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (26816 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (27616 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1231,7 +1231,7 @@ namespace GrafikoMat
             InitAppWindow();
             SetupBackdrop();
 
-            RootGrid.Loaded += (s, e) => InitializeApplicationAsync();
+            RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
 
             _dashboardView.Attach(ViewModel);
 
@@ -1250,30 +1250,36 @@ namespace GrafikoMat
             this.Closed += OnWindowClosed;
         }
 
-        private async void InitializeApplicationAsync()
+        private async Task InitializeApplicationAsync()
         {
-            // Krok 1: Wczytaj ustawienia
+            // 1) Wczytaj ustawienia + zainicjalizuj klienta
             await ReloadSettingsAndServicesAsync();
 
-            // Krok 2: Jeśli nie ma konfiguracji, wymuś jej wprowadzenie
-            if (string.IsNullOrWhiteSpace(_appSettings?.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
+            // 2) Jeśli brak konfiguracji – wymuś jej wprowadzenie
+            if (string.IsNullOrWhiteSpace(_appSettings?.SupabaseUrl) ||
+                string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 await ShowFirstTimeSetupAsync();
-                await ReloadSettingsAndServicesAsync(); // Przeładuj po udanej konfiguracji
+                await ReloadSettingsAndServicesAsync(); // po zapisie ustawień
             }
 
-            // Krok 3: Jeśli jest konfiguracja, ale użytkownik nie jest zalogowany, wymuś logowanie
-            if (_supabaseService.Client?.Auth.CurrentUser == null)
+            // 3) *** KLUCZ *** spróbuj przywrócić sesję z dysku (FileSessionHandler)
+            var restored = await _supabaseService.TryRestoreSessionAsync();
+
+            // 4) Jeśli nadal nieautoryzowani – pokaż logowanie
+            if (!restored && !_supabaseService.IsAuthenticated)
             {
                 bool loggedIn = await ShowLoginScreenAsync();
-                if (!loggedIn) // Jeśli użytkownik anulował logowanie
+                if (!loggedIn)
                 {
-                    this.Close(); // Zamknij aplikację
+                    this.Close();
                     return;
                 }
+                // Po udanym logowaniu GoTrue samo zapisze sesję przez SessionPersistence
+                // (FileSessionHandler), więc nie musisz tu nic dopisywać.
             }
 
-            // Krok 4: Użytkownik jest zalogowany, załaduj dane i pokaż pulpit
+            // 5) Załaduj dane i pokaż dashboard
             await LoadDataAndShowDashboardAsync();
         }
 
@@ -1286,6 +1292,9 @@ namespace GrafikoMat
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 _dataService = new DataService(_supabaseService);
                 ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
+
+                // NOWE: po zainicjalizowaniu klienta spróbuj od razu przywrócić sesję z pliku
+                await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
             {
@@ -1337,6 +1346,10 @@ namespace GrafikoMat
 
         private async Task<bool> ShowLoginScreenAsync()
         {
+            // NOWE: jeśli już jesteśmy zalogowani (sesja przywrócona), po prostu pomijamy ekran logowania
+            if (_supabaseService != null && _supabaseService.IsAuthenticated)
+                return true;
+
             var tcs = new TaskCompletionSource<bool>();
             var loginView = new LoginView(_supabaseService);
 
@@ -1346,8 +1359,11 @@ namespace GrafikoMat
                 tcs.TrySetResult(false);
             };
 
-            loginView.LoginSuccess += () =>
+            loginView.LoginSuccess += async () =>
             {
+                // po udanym logowaniu zapisz aktualną sesję (żeby przetrwała restart)
+                await _supabaseService.SaveCurrentSessionAsync();
+
                 LoginOverlay.Content = null;
                 tcs.TrySetResult(true);
             };
@@ -1471,6 +1487,7 @@ namespace GrafikoMat
         #endregion
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\Models\DeclarationsDto.cs (695 bytes)
@@ -1579,30 +1596,28 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\DataService.cs (4013 bytes)
+===== FILE: GrafikoMat\Services\DataService.cs (4126 bytes)
 ----- BEGIN -----
-using GrafikoMat.Core.Data;
-using GrafikoMat.ViewModels;
-using Supabase; // ZMIANA: Dodajemy dyrektywę using
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Windows.Media.Protection.PlayReady;
+using GrafikoMat.Core.Data;
+using GrafikoMat.ViewModels;
+using Supabase;
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Services
 {
     public class DataService
     {
-        private readonly Client _supabase;
+        private readonly SbClient _supabase;
 
-        // ... reszta kodu pliku (która jest już poprawna) ...
         public DataService(SupabaseService supabaseService)
         {
             if (supabaseService.Client is null)
-            {
                 throw new InvalidOperationException("Supabase client is not initialized.");
-            }
+
             _supabase = supabaseService.Client;
         }
 
@@ -1623,6 +1638,7 @@ namespace GrafikoMat.Services
             var response = await _supabase.From<UnitDoctorAssignment>()
                 .Where(x => x.DoctorId == doctorId)
                 .Get();
+
             return response.Models ?? new List<UnitDoctorAssignment>();
         }
 
@@ -1632,14 +1648,14 @@ namespace GrafikoMat.Services
 
             if (profile.Id == Guid.Empty)
             {
-                var session = await _supabase.Auth.SignUpAsync(profile.Email, "GrafikoMat#");
+                // W Twojej wersji SDK IGoTrueClient nie ma SignUpWithPasswordAsync – używamy SignUp(...)
+                await _supabase.Auth.SignUp(profile.Email, "GrafikoMat#");
 
-                if (session?.User?.Id == null)
-                {
-                    throw new Exception("Failed to create user in Supabase Auth.");
-                }
+                var userId = _supabase.Auth.CurrentUser?.Id;
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
 
-                profile.Id = new Guid(session.User.Id);
+                profile.Id = Guid.Parse(userId);
                 await _supabase.From<DoctorProfile>().Insert(profile);
             }
             else
@@ -1652,106 +1668,107 @@ namespace GrafikoMat.Services
 
             var assignmentsToAdd = desiredAssignments
                 .Where(d => d.IsAssigned && !currentAssignments.Any(c => c.UnitId == d.UnitId))
-                .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive })
+                .Select(d => new UnitDoctorAssignment
+                {
+                    DoctorId = profile.Id,
+                    UnitId = d.UnitId,
+                    IsActive = d.IsActive
+                })
                 .ToList();
 
             if (assignmentsToAdd.Any())
-            {
                 await _supabase.From<UnitDoctorAssignment>().Insert(assignmentsToAdd);
-            }
 
             var assignmentsToRemove = currentAssignments
                 .Where(c => !desiredAssignments.Any(d => d.UnitId == c.UnitId && d.IsAssigned));
 
             foreach (var toRemove in assignmentsToRemove)
-            {
                 await _supabase.From<UnitDoctorAssignment>().Delete(toRemove);
-            }
 
             var assignmentsToUpdate = desiredAssignments
-                .Where(d => d.IsAssigned && currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
-                .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive });
+                .Where(d => d.IsAssigned &&
+                            currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
+                .Select(d => new UnitDoctorAssignment
+                {
+                    DoctorId = profile.Id,
+                    UnitId = d.UnitId,
+                    IsActive = d.IsActive
+                });
 
             foreach (var toUpdate in assignmentsToUpdate)
-            {
                 await _supabase.From<UnitDoctorAssignment>().Update(toUpdate);
-            }
         }
 
-        public async Task SaveUnitAsync(Unit unit)
-        {
+        public async Task SaveUnitAsync(Unit unit) =>
             await _supabase.From<Unit>().Upsert(unit);
-        }
 
-        public async Task DeleteUnitAsync(Guid unitId)
-        {
+        public async Task DeleteUnitAsync(Guid unitId) =>
             await _supabase.From<Unit>().Where(u => u.Id == unitId).Delete();
-        }
     }
 }
+
 ----- END -----
 
-===== FILE: GrafikoMat\Services\FileSessionHandler.cs (1753 bytes)
+===== FILE: GrafikoMat\Services\FileSessionHandler.cs (1922 bytes)
 ----- BEGIN -----
-// ZMIANA: Poprawiamy dyrektywy using dla nowej biblioteki
-using Supabase.Gotrue;
-using Supabase.Interfaces;
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Windows.Storage;
-using static System.Collections.Specialized.BitVector32;
+using Supabase.Gotrue;
 
 namespace GrafikoMat.Services
 {
-    public class FileSessionHandler : ISupabaseSessionHandler
+    /// <summary>
+    /// Zapis/odczyt sesji Supabase do pliku JSON w LocalFolder.
+    /// Bez implementowania interfejsów SDK – wywoływany ręcznie z SupabaseService.
+    /// </summary>
+    public sealed class FileSessionHandler
     {
-        private const string SESSION_FILENAME = "user_session.json";
-        private static readonly string _sessionPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SESSION_FILENAME);
+        private const string FileName = "supabase_session.json";
+        private static readonly string SessionPath =
+            Path.Combine(ApplicationData.Current.LocalFolder.Path, FileName);
 
-        public async void SaveSession(Session session)
+        private static readonly JsonSerializerOptions JsonOpts = new()
+        {
+            WriteIndented = false,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            PropertyNameCaseInsensitive = true
+        };
+
+        public async Task SaveAsync(Session session)
+        {
+            if (session is null) return;
+            try
+            {
+                var json = JsonSerializer.Serialize(session, JsonOpts);
+                await File.WriteAllTextAsync(SessionPath, json).ConfigureAwait(false);
+            }
+            catch { /* log opcjonalny */ }
+        }
+
+        public async Task<Session?> LoadAsync()
         {
             try
             {
-                var json = JsonSerializer.Serialize(session);
-                await File.WriteAllTextAsync(_sessionPath, json);
+                if (!File.Exists(SessionPath)) return null;
+                var json = await File.ReadAllTextAsync(SessionPath).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(json)) return null;
+                return JsonSerializer.Deserialize<Session>(json, JsonOpts);
             }
-            catch (Exception) { /* log error */ }
+            catch { return null; }
         }
 
-        public Session? LoadSession()
+        public void Delete()
         {
-            try
-            {
-                if (File.Exists(_sessionPath))
-                {
-                    var json = File.ReadAllText(_sessionPath);
-                    return JsonSerializer.Deserialize<Session>(json);
-                }
-            }
-            catch (Exception) { /* log error */ }
-            return null;
-        }
-
-        public void DeleteSession()
-        {
-            try
-            {
-                if (File.Exists(_sessionPath))
-                {
-                    File.Delete(_sessionPath);
-                }
-            }
-            catch (Exception) { /* log error */ }
-        }
-
-        public Task<Session?> RefreshSessionAsync(Session session)
-        {
-            return Task.FromResult<Session?>(null);
+            try { if (File.Exists(SessionPath)) File.Delete(SessionPath); }
+            catch { /* ignorujemy */ }
         }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\Services\SettingsService.cs (2427 bytes)
@@ -1825,44 +1842,229 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SupabaseService.cs (1065 bytes)
+===== FILE: GrafikoMat\Services\SupabaseService.cs (9069 bytes)
 ----- BEGIN -----
+using System;
+using System.Diagnostics;
+using System.Reflection;
+using System.Threading.Tasks;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Repositories;
-using Supabase; // ZMIANA: Dodajemy dyrektywę using
+using Supabase;
+using Supabase.Gotrue;
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Services
 {
+    /// <summary>
+    /// Centralny serwis Supabase: inicjalizacja klienta, repozytoria oraz trwałość sesji (zapis/odczyt do pliku).
+    /// Nie polega na interfejsach sesji z SDK – zapis/odczyt realizujemy ręcznie przez FileSessionHandler.
+    /// </summary>
     public sealed class SupabaseService
     {
-        private Client? _client;
-        public Client? Client => _client;
+        private SbClient? _client;
+        public SbClient? Client => _client;
+
         public IDoctorRepository? Doctors { get; private set; }
 
+        /// <summary>
+        /// Prosta informacja: czy SDK widzi bieżącą sesję po swojej stronie.
+        /// </summary>
+        public bool IsAuthenticated => _client?.Auth?.CurrentSession != null;
+
+        /// <summary>
+        /// Tworzy klienta Supabase. Wywołuj przy starcie lub po zmianie ustawień.
+        /// </summary>
         public void Initialize(string url, string apiKey)
         {
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
             {
                 _client = null;
                 Doctors = null;
+                Debug.WriteLine("[SupabaseService] Initialize: brak URL/Key – klient wyłączony.");
                 return;
             }
 
             var options = new SupabaseOptions
             {
                 AutoRefreshToken = true,
-                AutoConnectRealtime = true,
-                SessionHandler = new FileSessionHandler()
+                AutoConnectRealtime = true
             };
-            _client = new Client(url, apiKey, options);
 
+            _client = new SbClient(url, apiKey, options);
+
+            // Użyj istniejącego repozytorium opartego o Supabase z Twojego projektu.
+            Doctors = new SupabaseDoctorRepository(_client);
+
+            Debug.WriteLine("[SupabaseService] Initialize: klient utworzony.");
+        }
+
+        /// <summary>
+        /// Alias dla RestoreSessionIfAnyAsync – tak, by MainWindow mógł wywołać starszą nazwę.
+        /// </summary>
+        public Task<bool> TryRestoreSessionAsync() => RestoreSessionIfAnyAsync();
+
+        /// <summary>
+        /// Próbuje wczytać sesję z pliku i wstrzyknąć ją do klienta Auth.
+        /// Zwraca true, jeśli po operacji jesteśmy zalogowani (Auth.CurrentSession != null).
+        /// </summary>
+        public async Task<bool> RestoreSessionIfAnyAsync()
+        {
+            if (_client is null)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: brak klienta.");
+                return false;
+            }
+
+            var fh = new FileSessionHandler();
+            var saved = await fh.LoadAsync().ConfigureAwait(false);
+            if (saved is null)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: brak zapisanego pliku sesji.");
+                return false;
+            }
+
+            var auth = _client.Auth;
+
+            // 1) Spróbuj wstrzyknąć sesję do SDK
+            var setSessionStrStr = auth.GetType().GetMethod(
+                "SetSession",
+                BindingFlags.Public | BindingFlags.Instance,
+                binder: null,
+                types: new[] { typeof(string), typeof(string) },
+                modifiers: null);
+
+            var setSessionSession = auth.GetType().GetMethod(
+                "SetSession",
+                BindingFlags.Public | BindingFlags.Instance,
+                binder: null,
+                types: new[] { typeof(Session) },
+                modifiers: null);
+
+            try
+            {
+                if (setSessionStrStr != null)
+                {
+                    setSessionStrStr.Invoke(auth, new object[] { saved.AccessToken, saved.RefreshToken });
+                    Debug.WriteLine("[SupabaseService] Restore: SetSession(string,string) wywołane.");
+                }
+                else if (setSessionSession != null)
+                {
+                    setSessionSession.Invoke(auth, new object[] { saved });
+                    Debug.WriteLine("[SupabaseService] Restore: SetSession(Session) wywołane.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: wyjątek SetSession(...): " + ex.Message);
+            }
+
+            // Jeśli już mamy sesję po SetSession – gotowe.
+            if (auth.CurrentSession != null)
+            {
+                await SaveCurrentSessionAsync().ConfigureAwait(false); // utrwal świeże tokeny
+                Debug.WriteLine("[SupabaseService] Restore: sesja ustawiona po SetSession.");
+                return true;
+            }
+
+            // 2) Jeśli nadal brak – odśwież sesję i POCZEKAJ na Task z refleksji
+            static async Task InvokeMaybeTask(MethodInfo mi, object target, params object[] args)
+            {
+                var result = mi.Invoke(target, args);
+                if (result is Task t) await t.ConfigureAwait(false);
+            }
+
+            var refreshNoArgs = auth.GetType().GetMethod(
+                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
+
+            var refreshWithSession = auth.GetType().GetMethod(
+                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(Session) }, null);
+
+            var refreshWithTokens = auth.GetType().GetMethod(
+                "RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string), typeof(string) }, null);
+
+            try
+            {
+                if (refreshWithTokens != null)
+                {
+                    await InvokeMaybeTask(refreshWithTokens, auth, saved.AccessToken, saved.RefreshToken);
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession(string,string) awaited.");
+                }
+                else if (refreshWithSession != null)
+                {
+                    await InvokeMaybeTask(refreshWithSession, auth, saved);
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession(Session) awaited.");
+                }
+                else if (refreshNoArgs != null)
+                {
+                    await InvokeMaybeTask(refreshNoArgs, auth);
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession() awaited.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: wyjątek RefreshSession(...): " + ex.Message);
+            }
+
+            var ok = auth.CurrentSession != null;
+            Debug.WriteLine("[SupabaseService] Restore: wynik końcowy = " + ok);
+
+            if (ok)
+                await SaveCurrentSessionAsync().ConfigureAwait(false); // utrwal odświeżone tokeny
+
+            return ok;
+        }
+
+        /// <summary>
+        /// Zapisuje bieżącą sesję do pliku (wołaj po udanym logowaniu oraz po odświeżeniu).
+        /// </summary>
+        public async Task SaveCurrentSessionAsync()
+        {
+            if (_client is null) return;
+            var session = _client.Auth.CurrentSession;
+            if (session is null)
+            {
+                Debug.WriteLine("[SupabaseService] SaveSession: brak bieżącej sesji.");
+                return;
+            }
+
+            await new FileSessionHandler().SaveAsync(session).ConfigureAwait(false);
+            Debug.WriteLine("[SupabaseService] SaveSession: sesja zapisana do pliku.");
+        }
+
+        /// <summary>
+        /// Wylogowuje z Supabase i usuwa lokalny plik sesji.
+        /// </summary>
+        public async Task SignOutAndClearAsync()
+        {
             if (_client != null)
             {
-                Doctors = new SupabaseDoctorRepository(_client);
+                try
+                {
+                    // W zależności od wersji SDK bywa SignOutAsync albo SignOut – obsłużmy obie.
+                    var signOutAsync = _client.Auth.GetType().GetMethod("SignOutAsync",
+                        BindingFlags.Public | BindingFlags.Instance, binder: null, types: Type.EmptyTypes, modifiers: null);
+
+                    var signOut = _client.Auth.GetType().GetMethod("SignOut",
+                        BindingFlags.Public | BindingFlags.Instance, binder: null, types: Type.EmptyTypes, modifiers: null);
+
+                    if (signOutAsync != null)
+                        await (Task)signOutAsync.Invoke(_client.Auth, null);
+                    else if (signOut != null)
+                        signOut.Invoke(_client.Auth, null);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[SupabaseService] SignOut: wyjątek: " + ex.Message);
+                }
             }
+
+            new FileSessionHandler().Delete();
+            Debug.WriteLine("[SupabaseService] SignOut: usunięto plik sesji.");
         }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (10445 bytes)
