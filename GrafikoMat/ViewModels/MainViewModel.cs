@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
@@ -17,7 +18,6 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        // ZMIANA: Usunięto 'readonly', aby umożliwić aktualizację
         private IDoctorRepository? _doctorRepository;
 
         private string _activeUnitHospitalName = "GrafikoMat Dyżurowy";
@@ -59,15 +59,13 @@ namespace GrafikoMat.ViewModels
             UpdateRosterForSelectedMonth();
         }
 
-        /// <summary>
-        /// NOWA METODA: Pozwala MainWindow na zaktualizowanie repozytorium po inicjalizacji Supabase.
-        /// </summary>
         public void UpdateDoctorRepository(IDoctorRepository? doctorRepository)
         {
             _doctorRepository = doctorRepository;
         }
 
-        public async void LoadDoctorsAsync()
+        // ZMIANA: Sygnatura zmieniona z 'async void' na 'async Task'
+        public async Task LoadDoctorsAsync()
         {
             if (_doctorRepository == null)
             {
@@ -101,12 +99,16 @@ namespace GrafikoMat.ViewModels
         }
 
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
+
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
         public void PrevMonth() { if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); } else SelectedMonthIndex -= 1; }
         public void NextMonth() { if (SelectedMonthIndex == 11) { SelectedMonthIndex = 0; NextYear(); } else SelectedMonthIndex += 1; }
+
         private void EnsureYearInList(int year) { if (!Years.Contains(year)) { int i = 0; while (i < Years.Count && Years[i] < year) i++; Years.Insert(i, year); } }
+
         public void ApplyDoctorMonth(DoctorMonthDeclaration dm) { _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm; var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor); if (row != null) row.HasDeclarations = true; OnPropertyChanged(nameof(_declByKey)); }
+
         public (bool has, DayMode mode, string? full, string? day, string? night) TryGetEntry(string doctor, int year, int monthIndex, int dayIndex) { if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) && dayIndex >= 0 && dayIndex < dm.Days.Length) { var d = dm.Days[dayIndex]; return (true, d.Mode, d.Full, d.Day, d.Night); } return (false, DayMode.Full24, null, null, null); }
     }
 

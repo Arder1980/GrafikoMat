@@ -17,7 +17,6 @@ namespace GrafikoMat.Services
         {
             if (supabaseService.Client is null)
                 throw new InvalidOperationException("Supabase client is not initialized.");
-
             _supabase = supabaseService.Client;
         }
 
@@ -38,24 +37,48 @@ namespace GrafikoMat.Services
             var response = await _supabase.From<UnitDoctorAssignment>()
                 .Where(x => x.DoctorId == doctorId)
                 .Get();
-
             return response.Models ?? new List<UnitDoctorAssignment>();
+        }
+
+        public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
+        {
+            if (_supabase.Auth.CurrentUser?.Id is null) return null;
+
+            var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
+            var response = await _supabase.From<DoctorProfile>()
+                .Where(d => d.Id == userId)
+                .Single();
+
+            return response;
+        }
+
+        // ZMIANA: Poprawiona metoda aktualizacji flagi, używająca instancji modelu.
+        public async Task ClearPasswordChangeFlagAsync(Guid doctorId)
+        {
+            var partialUpdate = new DoctorProfile
+            {
+                Id = doctorId,
+                RequiresPasswordChange = false
+            };
+
+            // Metoda Update() użyje atrybutu [PrimaryKey] z modelu DoctorProfile,
+            // aby poprawnie zidentyfikować wiersz do aktualizacji.
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
         public async Task SaveDoctorAsync(DoctorEditorViewModel editorViewModel)
         {
             var profile = editorViewModel.Profile;
-
             if (profile.Id == Guid.Empty)
             {
-                // W Twojej wersji SDK IGoTrueClient nie ma SignUpWithPasswordAsync – używamy SignUp(...)
-                await _supabase.Auth.SignUp(profile.Email, "GrafikoMat#");
+                await _supabase.Auth.SignUp(profile.Email, editorViewModel.Password);
 
                 var userId = _supabase.Auth.CurrentUser?.Id;
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
 
                 profile.Id = Guid.Parse(userId);
+
                 await _supabase.From<DoctorProfile>().Insert(profile);
             }
             else
@@ -68,12 +91,7 @@ namespace GrafikoMat.Services
 
             var assignmentsToAdd = desiredAssignments
                 .Where(d => d.IsAssigned && !currentAssignments.Any(c => c.UnitId == d.UnitId))
-                .Select(d => new UnitDoctorAssignment
-                {
-                    DoctorId = profile.Id,
-                    UnitId = d.UnitId,
-                    IsActive = d.IsActive
-                })
+                .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive })
                 .ToList();
 
             if (assignmentsToAdd.Any())
@@ -86,14 +104,8 @@ namespace GrafikoMat.Services
                 await _supabase.From<UnitDoctorAssignment>().Delete(toRemove);
 
             var assignmentsToUpdate = desiredAssignments
-                .Where(d => d.IsAssigned &&
-                            currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
-                .Select(d => new UnitDoctorAssignment
-                {
-                    DoctorId = profile.Id,
-                    UnitId = d.UnitId,
-                    IsActive = d.IsActive
-                });
+                .Where(d => d.IsAssigned && currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
+                .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive });
 
             foreach (var toUpdate in assignmentsToUpdate)
                 await _supabase.From<UnitDoctorAssignment>().Update(toUpdate);

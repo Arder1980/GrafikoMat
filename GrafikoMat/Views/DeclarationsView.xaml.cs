@@ -17,8 +17,6 @@ namespace GrafikoMat.Views
         public event Action? CloseRequested;
 
         public ObservableCollection<DayCell> CalendarItems { get; } = new();
-
-        // ZMIANA: Udostępniamy elementy UI na zewnątrz dla MainWindow
         public UIElement LeftColumn => LeftColumnGrid;
         public UIElement CalendarView => CalendarItemsControl;
 
@@ -35,9 +33,6 @@ namespace GrafikoMat.Views
             LoadContext(today.Year, today.Month - 1, testDoctors, 0);
         }
 
-        // ZMIANA: Metoda OnDeclarationsViewLoaded została usunięta.
-        // ZMIANA: Metoda AnimateCalendarIn została usunięta.
-
         public void LoadContext(int year, int monthIndex, string[] doctorNames, int selectedDoctorIndex)
         {
             _year = year;
@@ -47,7 +42,7 @@ namespace GrafikoMat.Views
 
             MonthRun.Text = $"{PolishMonth(_monthIndex)} {_year}";
             DoctorsCombo.ItemsSource = _doctorNames;
-            DoctorsCombo.SelectedIndex = selectedDoctorIndex; // Używamy przekazanego indeksu
+            DoctorsCombo.SelectedIndex = selectedDoctorIndex;
 
             BuildCalendarData();
         }
@@ -78,7 +73,6 @@ namespace GrafikoMat.Views
         private void OnDoctorSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _selectedDoctorIndex = DoctorsCombo.SelectedIndex;
-            // Tutaj w przyszłości można dodać logikę odświeżania danych dla wybranego lekarza
         }
 
         private void OnCellRightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -93,6 +87,7 @@ namespace GrafikoMat.Views
             int m = _monthIndex;
             if (y <= 0) { var t = DateTime.Today; y = t.Year; m = t.Month - 1; }
             int daysInMonth = DateTime.DaysInMonth(y, m + 1);
+
             var res = new DoctorMonthDeclaration
             {
                 Year = y,
@@ -100,6 +95,7 @@ namespace GrafikoMat.Views
                 Doctor = (_doctorNames.Length > 0 && _selectedDoctorIndex >= 0) ? _doctorNames[_selectedDoctorIndex] : string.Empty,
                 Days = new DayDeclaration[daysInMonth]
             };
+
             for (int i = 0; i < daysInMonth; i++) res.Days[i] = new DayDeclaration();
             return res;
         }
@@ -116,6 +112,11 @@ namespace GrafikoMat.Views
         {
             Date = date;
             InMonth = inMonth;
+
+            // ZMIANA: Inicjalizujemy pola, aby usunąć ostrzeżenia kompilatora.
+            this.Background = new SolidColorBrush(Colors.Transparent);
+            this.BorderBrush = new SolidColorBrush(Colors.Transparent);
+
             UpdateBrushes();
         }
 
@@ -130,11 +131,13 @@ namespace GrafikoMat.Views
             bool isToday = (Date.Date == DateTime.Today);
             Color bgColor = InMonth ? Colors.Transparent : Color.FromArgb(0x10, 0x80, 0x80, 0x80);
             Color borderColor = InMonth ? Color.FromArgb(0x30, 0, 0, 0) : Color.FromArgb(0x25, 0x60, 0x60, 0x60);
+
             if (isToday)
             {
                 bgColor = Color.FromArgb(0x22, 0x1E, 0x90, 0xFF);
                 borderColor = Color.FromArgb(0xAA, 0x1E, 0x90, 0xFF);
             }
+
             Background = new SolidColorBrush(bgColor);
             BorderBrush = new SolidColorBrush(borderColor);
         }

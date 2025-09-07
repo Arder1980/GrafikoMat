@@ -1,5 +1,6 @@
-﻿using GrafikoMat.Services; // Dodaj using
+﻿using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
+using Microsoft.UI.Dispatching; // ZMIANA: Dodajemy ten using
 using Microsoft.UI.Xaml.Controls;
 
 namespace GrafikoMat.Views
@@ -8,11 +9,12 @@ namespace GrafikoMat.Views
     {
         public ManagementViewModel ViewModel { get; }
 
-        // Zmieniamy konstruktor
-        public ManagementView(DataService dataService)
+        // ZMIANA: Konstruktor przyjmuje DispatcherQueue.
+        public ManagementView(DataService dataService, DispatcherQueue dispatcher)
         {
             this.InitializeComponent();
-            ViewModel = new ManagementViewModel(dataService);
+            // ZMIANA: Przekazujemy dispatcher dalej do ViewModelu.
+            ViewModel = new ManagementViewModel(dataService, dispatcher);
             this.DataContext = ViewModel;
         }
     }

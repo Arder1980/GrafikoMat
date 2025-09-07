@@ -25,6 +25,10 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
+        // NOWOŚĆ: Dodajemy właściwość dla nowej kolumny w bazie danych.
+        [Column("requires_password_change")]
+        public bool RequiresPasswordChange { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
     }

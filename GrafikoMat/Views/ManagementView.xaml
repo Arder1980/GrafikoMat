@@ -45,8 +45,7 @@
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                         Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
                 <FontIcon Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego."
-                           Margin="0,12,0,0"
+                <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0"
                            Style="{ThemeResource BodyStrongTextBlockStyle}"/>
             </StackPanel>
 
@@ -55,7 +54,7 @@
                 <StackPanel Spacing="16">
                     <TextBlock Text="Dane Główne" Style="{ThemeResource TitleTextBlockStyle}"/>
 
-                    <Grid ColumnSpacing="12" RowSpacing="12">
+                    <Grid ColumnSpacing="12" RowSpacing="4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -65,19 +64,29 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Imię:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay}"/>
 
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="Nazwisko:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay}"/>
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Email:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
+                        <TextBlock Grid.Row="2" Grid.Column="1"
+                                   Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}"
+                                   Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
+
                         <TextBlock Grid.Row="1" Grid.Column="2" Text="Skrót:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="1" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="3"
+                                   Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}"
+                                   Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
                     </Grid>
 
                     <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}"/>

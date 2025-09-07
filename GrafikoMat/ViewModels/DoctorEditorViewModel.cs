@@ -13,6 +13,9 @@ namespace GrafikoMat.ViewModels
     {
         public DoctorProfile Profile { get; }
         public ObservableCollection<UnitAssignmentViewModel> Assignments { get; } = new();
+        private readonly HashSet<string> _existingAbbreviations;
+
+        public bool IsNewDoctor => Profile.Id == Guid.Empty;
 
         #region Właściwości-opakowania z logiką
 
@@ -21,11 +24,12 @@ namespace GrafikoMat.ViewModels
             get => Profile.FirstName;
             set
             {
-                if (Profile.FirstName != value)
+                var sanitizedValue = SanitizeName(value);
+                if (Profile.FirstName != sanitizedValue)
                 {
-                    Profile.FirstName = SanitizeName(value);
+                    Profile.FirstName = sanitizedValue;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsValid)); // Do walidacji
+                    OnPropertyChanged(nameof(IsValid));
                 }
             }
         }
@@ -35,12 +39,16 @@ namespace GrafikoMat.ViewModels
             get => Profile.LastName;
             set
             {
-                if (Profile.LastName != value)
+                var sanitizedValue = SanitizeName(value);
+                if (Profile.LastName != sanitizedValue)
                 {
-                    Profile.LastName = SanitizeName(value);
+                    Profile.LastName = sanitizedValue;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsValid)); // Do walidacji
-                    GenerateAbbreviation();
+                    OnPropertyChanged(nameof(IsValid));
+                    if (!string.IsNullOrWhiteSpace(sanitizedValue))
+                    {
+                        GenerateAbbreviation();
+                    }
                 }
             }
         }
@@ -52,9 +60,10 @@ namespace GrafikoMat.ViewModels
             {
                 if (Profile.Email != value)
                 {
-                    Profile.Email = value.Trim(); // Tylko czyscimy spacje
+                    Profile.Email = value.Trim();
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsValid)); // Do walidacji
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(EmailErrorMessage));
                 }
             }
         }
@@ -64,20 +73,78 @@ namespace GrafikoMat.ViewModels
             get => Profile.Abbreviation;
             set
             {
-                if (Profile.Abbreviation != value)
+                var upperValue = value.Trim().ToUpper();
+                if (Profile.Abbreviation != upperValue)
                 {
-                    Profile.Abbreviation = value.Trim().ToUpper();
+                    Profile.Abbreviation = upperValue;
                     OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsValid)); // Do walidacji
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(AbbreviationErrorMessage));
+                }
+            }
+        }
+
+        private string _password = string.Empty;
+        public string Password
+        {
+            get => _password;
+            set
+            {
+                if (SetProperty(ref _password, value))
+                {
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(PasswordErrorMessage));
                 }
             }
         }
 
         #endregion
 
-        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments)
+        #region Właściwości dla komunikatów o błędach
+
+        public string AbbreviationErrorMessage
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Abbreviation)) return "Skrót jest wymagany.";
+                if (Abbreviation.Length != 3) return "Skrót musi mieć 3 znaki.";
+                if (_existingAbbreviations.Contains(Abbreviation)) return "Ten skrót jest już używany.";
+                return string.Empty;
+            }
+        }
+
+        public string EmailErrorMessage
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Email)) return "Email jest wymagany.";
+                if (!IsValidEmail(Email)) return "Niepoprawny format adresu email.";
+                return string.Empty;
+            }
+        }
+
+        public string PasswordErrorMessage
+        {
+            get
+            {
+                if (!IsNewDoctor) return string.Empty;
+                if (string.IsNullOrWhiteSpace(Password)) return "Hasło jest wymagane.";
+                if (Password.Length < 8) return "Hasło musi mieć min. 8 znaków.";
+                return string.Empty;
+            }
+        }
+
+        #endregion
+
+        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations)
         {
             Profile = profile;
+            _existingAbbreviations = new HashSet<string>(existingAbbreviations, StringComparer.OrdinalIgnoreCase);
+
+            if (IsNewDoctor)
+            {
+                Password = "GrafikoMat123!";
+            }
 
             foreach (var unit in allUnits.OrderBy(u => u.Name))
             {
@@ -89,47 +156,49 @@ namespace GrafikoMat.ViewModels
         private string SanitizeName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-            var sb = new StringBuilder();
-            var parts = name.Trim().Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < parts.Length; i++)
+            var cleaned = Regex.Replace(Regex.Replace(name.Trim(), @"\s*-\s*", "-"), @"\s+", " ");
+            var parts = cleaned.Split(' ');
+            var resultParts = parts.Select(part =>
             {
-                var part = parts[i];
-                if (part.Length > 0)
+                var subParts = part.Split('-');
+                var resultSubParts = subParts.Select(subPart =>
                 {
-                    sb.Append(char.ToUpper(part[0]) + part.Substring(1).ToLower());
-                }
-                // Logika do odtworzenia myślników (uproszczona)
-                if (i < parts.Length - 1 && name.Contains(parts[i] + "-"))
-                {
-                    sb.Append('-');
-                }
-                else if (i < parts.Length - 1)
-                {
-                    sb.Append(' ');
-                }
-            }
-            return sb.ToString();
+                    if (string.IsNullOrEmpty(subPart)) return "";
+                    return char.ToUpper(subPart[0]) + subPart.Substring(1).ToLower();
+                });
+                return string.Join("-", resultSubParts);
+            });
+            return string.Join(" ", resultParts);
         }
 
         private void GenerateAbbreviation()
         {
-            if (LastName.Length >= 3)
+            if (string.IsNullOrWhiteSpace(LastName)) return;
+            var baseName = LastName.Split(new[] { ' ', '-' })[0];
+            string newAbbreviation;
+            if (baseName.Length >= 3)
             {
-                Abbreviation = LastName.Substring(0, 3).ToUpper();
+                newAbbreviation = baseName.Substring(0, 3).ToUpper();
             }
             else
             {
-                Abbreviation = LastName.ToUpper().PadRight(3, 'X');
+                newAbbreviation = baseName.ToUpper().PadRight(3, 'X');
             }
+            Abbreviation = newAbbreviation;
         }
 
-        // Właściwość do walidacji (użyjemy w punkcie 3 i 5)
-        public bool IsValid =>
-            !string.IsNullOrWhiteSpace(FirstName) &&
-            !string.IsNullOrWhiteSpace(LastName) &&
-            !string.IsNullOrWhiteSpace(Abbreviation) &&
-            Abbreviation.Length == 3 &&
-            IsValidEmail(Email);
+        // ZMIANA: Dodano wywołanie OnPropertyChanged dla IsValid
+        public bool IsValid
+        {
+            get
+            {
+                return !string.IsNullOrWhiteSpace(FirstName)
+                    && !string.IsNullOrWhiteSpace(LastName)
+                    && string.IsNullOrEmpty(AbbreviationErrorMessage)
+                    && string.IsNullOrEmpty(EmailErrorMessage)
+                    && string.IsNullOrEmpty(PasswordErrorMessage);
+            }
+        }
 
         private bool IsValidEmail(string email)
         {
@@ -137,7 +206,7 @@ namespace GrafikoMat.ViewModels
             try
             {
                 return Regex.IsMatch(email,
-                    @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+                    @"^(?!\.)(""([^""\r\\]|\\[""\r\\])*""|([-a-z0-9!#$%&'*+/=?^_`{|}~]|(?<!\.)\.)*)(?<!\.)@[a-z0-9][\w\.-]*[a-z0-9]\.[a-z][a-z\.]*[a-z]$",
                     RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
             }
             catch (RegexMatchTimeoutException)

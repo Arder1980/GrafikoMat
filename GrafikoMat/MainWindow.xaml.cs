@@ -6,6 +6,7 @@ using GrafikoMat.ViewModels;
 using GrafikoMat.Views;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,7 +15,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics; // <= LOGI
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -32,7 +33,6 @@ namespace GrafikoMat
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
-
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
         private readonly SettingsView _settingsView = new();
@@ -63,14 +63,13 @@ namespace GrafikoMat
             InitializeComponent();
 
             this.ExtendsContentIntoTitleBar = true;
-            this.SetTitleBar(DragBar); // przycisk poza strefą przeciągania
+            this.SetTitleBar(DragBar);
 
             InitAppWindow();
             SetupBackdrop();
-            ApplyTitleBarMenuStyling(); // dociśnięcie do prawej + kolory
+            ApplyTitleBarMenuStyling();
 
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
-
             _dashboardView.Attach(ViewModel);
 
             _evtDeclSave = dm => OnDeclSave(dm);
@@ -90,29 +89,19 @@ namespace GrafikoMat
 
         private async Task InitializeApplicationAsync()
         {
-            // 1) Wczytaj ustawienia + zainicjalizuj klienta
             await ReloadSettingsAndServicesAsync();
 
-            // 2) Jeśli brak konfiguracji – wymuś jej wprowadzenie
-            if (string.IsNullOrWhiteSpace(_appSettings?.SupabaseUrl) ||
-                string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
+            if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 await ShowFirstTimeSetupAsync();
-                await ReloadSettingsAndServicesAsync(); // po zapisie ustawień
+                await ReloadSettingsAndServicesAsync();
             }
 
-            // 3) Przywracanie sesji
-            Debug.WriteLine("[MainWindow] Init: RestoreSessionIfAnyAsync() AWAIT...");
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
-            Debug.WriteLine($"[MainWindow] Init: restored={restored}, IsAuthenticated={_supabaseService.IsAuthenticated}");
 
-            // 4) Jeśli nadal nieautoryzowani – pokaż logowanie
             if (!restored && !_supabaseService.IsAuthenticated)
             {
-                Debug.WriteLine("[MainWindow] Init: brak sesji – pokazuję ekran logowania");
                 bool loggedIn = await ShowLoginScreenAsync();
-                Debug.WriteLine($"[MainWindow] Init: wynik logowania = {loggedIn}");
-
                 if (!loggedIn)
                 {
                     this.Close();
@@ -120,21 +109,43 @@ namespace GrafikoMat
                 }
             }
 
-            // 5) Załaduj dane i pokaż dashboard
+            if (_dataService != null && _supabaseService.IsAuthenticated)
+            {
+                try
+                {
+                    var profile = await _dataService.GetCurrentDoctorProfileAsync();
+                    if (profile != null && profile.RequiresPasswordChange)
+                    {
+                        bool passwordChanged = await ShowForcePasswordChangeAsync();
+                        if (!passwordChanged)
+                        {
+                            await _supabaseService.SignOutAsync();
+                            this.Close();
+                            return;
+                        }
+                        await _dataService.ClearPasswordChangeFlagAsync(profile.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await ShowInfo("Błąd krytyczny", $"Nie można wczytać profilu użytkownika: {ex.Message}");
+                    await _supabaseService.SignOutAsync();
+                    this.Close();
+                    return;
+                }
+            }
+
             await LoadDataAndShowDashboardAsync();
         }
 
         private async Task ReloadSettingsAndServicesAsync()
         {
             _appSettings = await _settingsService.LoadSettingsAsync();
-
-            if (!string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) && !string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
+            if (_appSettings != null && !string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) && !string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 _dataService = new DataService(_supabaseService);
                 ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
-
-                // opcjonalne wstępne przywrócenie
                 await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
@@ -157,7 +168,10 @@ namespace GrafikoMat
         private async Task ShowFirstTimeSetupAsync()
         {
             var setupView = new Views.Settings.ConnectionSettingsView();
-            setupView.Initialize(_settingsService, _appSettings);
+            if (_appSettings != null)
+            {
+                setupView.Initialize(_settingsService, _appSettings);
+            }
 
             var dialog = new ContentDialog
             {
@@ -191,7 +205,7 @@ namespace GrafikoMat
                 return true;
 
             var tcs = new TaskCompletionSource<bool>();
-            var loginView = new LoginView(_supabaseService);
+            var loginView = new LoginView(_supabaseService!);
 
             loginView.CancelRequested += () =>
             {
@@ -210,23 +224,41 @@ namespace GrafikoMat
             return await tcs.Task;
         }
 
+        private async Task<bool> ShowForcePasswordChangeAsync()
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var changePasswordView = new ChangePasswordView(_supabaseService);
+
+            changePasswordView.PasswordChangeSuccess += () =>
+            {
+                LoginOverlay.Content = null;
+                tcs.TrySetResult(true);
+            };
+
+            changePasswordView.PasswordChangeCancelled += () =>
+            {
+                LoginOverlay.Content = null;
+                tcs.TrySetResult(false);
+            };
+
+            LoginOverlay.Content = changePasswordView;
+            return await tcs.Task;
+        }
+
         private async Task LoadDataForAuthenticatedUserAsync()
         {
             if (_dataService == null) return;
-
-            ViewModel.LoadDoctorsAsync();
+            await ViewModel.LoadDoctorsAsync();
             ViewModel.ActiveUnitHospitalName = "Centralna Baza Danych";
             ViewModel.ActiveUnitDepartmentName = "Zarządzanie Globalne";
-            await Task.CompletedTask;
         }
 
         private async Task LoadDataAndShowDashboardAsync()
         {
             await LoadDataForAuthenticatedUserAsync();
-
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
-            ResetViewportState(); // <== metoda jest niżej w tej klasie
+            ResetViewportState();
         }
 
         private async void SwitchToSettings(bool forceRefresh = false)
@@ -237,7 +269,7 @@ namespace GrafikoMat
 
             if (!forceRefresh)
             {
-                await AnimateToAsync(_settingsView, forward: true); // <== metoda jest niżej
+                await AnimateToAsync(_settingsView, forward: true);
             }
             BuildActionsForSettings();
         }
@@ -252,8 +284,7 @@ namespace GrafikoMat
                 return;
             }
 
-            _managementView = new ManagementView(_dataService);
-
+            _managementView = new ManagementView(_dataService, this.DispatcherQueue);
             await AnimateToAsync(_managementView, forward: true);
             BuildActionsForManage();
         }
@@ -347,10 +378,8 @@ namespace GrafikoMat
 
             ActionButtons.Opacity = 0;
             ActionButtons.RenderTransform = new TranslateTransform { X = -30 };
-
             var sbEnter = new Storyboard();
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
-
             var newButtonsOpacity = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(250)), EasingFunction = easeIn };
             Storyboard.SetTarget(newButtonsOpacity, ActionButtons);
             Storyboard.SetTargetProperty(newButtonsOpacity, "Opacity");
@@ -365,14 +394,12 @@ namespace GrafikoMat
             sbEnter.Completed += (_, _) => tcsEnter.TrySetResult();
             sbEnter.Begin();
             await tcsEnter.Task;
-
             _isAnimating = false;
         }
 
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
-
             if (_supabaseService.Client == null)
             {
                 await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację, aby dodać deklaracje.");
@@ -380,7 +407,6 @@ namespace GrafikoMat
             }
 
             _isAnimating = true;
-
             var names = ViewModel.DoctorRows.Select(d => d.Name).ToArray();
             _declarationsView.LoadContext(ViewModel.SelectedYear, ViewModel.SelectedMonthIndex, names, 0);
 
@@ -398,10 +424,8 @@ namespace GrafikoMat
 
             ViewportCurrent.Content = _declarationsView;
             BuildActionsForDeclarations();
-
             var sb = new Storyboard();
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             var buttonsOpacityAnim = new DoubleAnimation { To = 1, Duration = new Duration(TimeSpan.FromMilliseconds(300)), EasingFunction = ease };
             Storyboard.SetTarget(buttonsOpacityAnim, ActionButtons);
             Storyboard.SetTargetProperty(buttonsOpacityAnim, "Opacity");
@@ -441,7 +465,6 @@ namespace GrafikoMat
             sb.Completed += (_, _) => tcs.TrySetResult();
             sb.Begin();
             await tcs.Task;
-
             _isAnimating = false;
         }
 
@@ -525,13 +548,11 @@ namespace GrafikoMat
 
             var curTransform = (curPresenter.RenderTransform as TranslateTransform)!;
             var nxtTransform = (nxtPresenter.RenderTransform as TranslateTransform)!;
-
             var curHeader = TryGetHeader(curPresenter.Content);
             var nxtHeader = TryGetHeader(nextView);
 
             TranslateTransform? curHeaderTransform = null;
             TranslateTransform? nxtHeaderTransform = null;
-
             if (curHeader != null)
             {
                 curHeaderTransform = (curHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform();
@@ -561,7 +582,6 @@ namespace GrafikoMat
 
             var sb = new Storyboard();
             _activeStoryboard = sb;
-
             var dur = TimeSpan.FromMilliseconds(280);
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -644,7 +664,6 @@ namespace GrafikoMat
             this.Closed -= OnWindowClosed;
 
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
-
             if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
             if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
@@ -655,30 +674,24 @@ namespace GrafikoMat
             try { RootGrid.Background = GetLightFallbackBrush(); } catch { }
         }
 
-        private void OnDeclSave(DoctorMonthDeclaration dm)
-        { if (!string.IsNullOrWhiteSpace(dm.Doctor)) ViewModel.ApplyDoctorMonth(dm); }
+        private void OnDeclSave(DoctorMonthDeclaration dm) { if (!string.IsNullOrWhiteSpace(dm.Doctor)) ViewModel.ApplyDoctorMonth(dm); }
 
-        private void OnDeclSaveAndClose(DoctorMonthDeclaration dm)
-        { OnDeclSave(dm); SwitchToDashboard(); }
+        private void OnDeclSaveAndClose(DoctorMonthDeclaration dm) { OnDeclSave(dm); SwitchToDashboard(); }
 
         private void OnDeclCloseOnly() => SwitchToDashboard();
-
-        private async void GenerateRosterPlaceholder()
-        => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
-
-        private async void ExportPlaceholder()
-        => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
+        private async void GenerateRosterPlaceholder() => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
+        private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
 
         private async void TitleBarSignOutAndClose_Click(object sender, RoutedEventArgs e)
         {
-            try { await _supabaseService.SignOutAsync(); } catch { /* cicho */ }
+            try { await _supabaseService.SignOutAsync(); } catch { }
 
             try
             {
                 _dataService = null;
                 ViewModel.UpdateDoctorRepository(null);
             }
-            catch { /* cicho */ }
+            catch { }
 
             Application.Current.Exit();
         }
@@ -689,23 +702,21 @@ namespace GrafikoMat
             await dlg.ShowAsync();
         }
 
-        // ====== Stylowanie i dociśnięcie hamburgera do pola przycisków okna ======
+
+
         private void ApplyTitleBarMenuStyling()
         {
             if (_appWindow is null) return;
             var tb = _appWindow.TitleBar;
             if (tb is null) return;
 
-            // 1) Dociśnij do prawej (uwzględnij RightInset)
             var pad = TopBarRow.Padding;
             TopBarRow.Padding = new Thickness(pad.Left, pad.Top, tb.RightInset, pad.Bottom);
 
-            // 2) Prostokątny kształt i wymiary jak przyciski okna
-            TitleBarMenuButton.Height = TopBarRow.Height; // zwykle 32
+            TitleBarMenuButton.Height = TopBarRow.Height;
             TitleBarMenuButton.MinWidth = 46;
             TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
 
-            // 3) Kolory jak w systemowej belce (fallback hover = seledyn)
             Color fallbackHover = Color.FromArgb(0xFF, 0x96, 0xF5, 0xE1);
             var bgBase = tb.ButtonBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonBackgroundColor.Value) : new SolidColorBrush(Colors.Transparent);
             var fgBase = tb.ButtonForegroundColor.HasValue ? new SolidColorBrush(tb.ButtonForegroundColor.Value) : new SolidColorBrush(Colors.White);
@@ -772,7 +783,6 @@ namespace GrafikoMat
         private void SetupBackdrop()
         {
             if (_isClosing) return;
-
             bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
 
             if (!isMaximized)
@@ -799,7 +809,6 @@ namespace GrafikoMat
         {
             if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b)
                 return b;
-
             return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
         }
 
@@ -839,13 +848,10 @@ namespace GrafikoMat
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
         [DllImport("user32.dll")]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
-
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hWnd);
-
         #endregion
     }
 }
