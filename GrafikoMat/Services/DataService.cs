@@ -43,16 +43,13 @@ namespace GrafikoMat.Services
         public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
             if (_supabase.Auth.CurrentUser?.Id is null) return null;
-
             var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
             var response = await _supabase.From<DoctorProfile>()
                 .Where(d => d.Id == userId)
                 .Single();
-
             return response;
         }
 
-        // ZMIANA: Poprawiona metoda aktualizacji flagi, używająca instancji modelu.
         public async Task ClearPasswordChangeFlagAsync(Guid doctorId)
         {
             var partialUpdate = new DoctorProfile
@@ -60,9 +57,6 @@ namespace GrafikoMat.Services
                 Id = doctorId,
                 RequiresPasswordChange = false
             };
-
-            // Metoda Update() użyje atrybutu [PrimaryKey] z modelu DoctorProfile,
-            // aby poprawnie zidentyfikować wiersz do aktualizacji.
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
@@ -72,12 +66,14 @@ namespace GrafikoMat.Services
             if (profile.Id == Guid.Empty)
             {
                 await _supabase.Auth.SignUp(profile.Email, editorViewModel.Password);
-
                 var userId = _supabase.Auth.CurrentUser?.Id;
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
 
                 profile.Id = Guid.Parse(userId);
+
+                // ZMIANA: Ustawiamy flagę wymuszającą zmianę hasła dla nowego użytkownika.
+                profile.RequiresPasswordChange = true;
 
                 await _supabase.From<DoctorProfile>().Insert(profile);
             }

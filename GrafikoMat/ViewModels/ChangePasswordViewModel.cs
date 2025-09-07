@@ -2,13 +2,13 @@
 using GrafikoMat.Services;
 using System;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten using
 
 namespace GrafikoMat.ViewModels
 {
     public class ChangePasswordViewModel : ObservableObject
     {
         private readonly SupabaseService _supabaseService;
-
         public event Action<string>? OnError;
         public event Action? OnSuccess;
 
@@ -20,7 +20,8 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _newPassword, value))
                 {
-                    SavePasswordCommand.RaiseCanExecuteChanged();
+                    // ZMIANA: Odwołujemy się do nowej komendy
+                    SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -33,23 +34,27 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _confirmPassword, value))
                 {
-                    SavePasswordCommand.RaiseCanExecuteChanged();
+                    // ZMIANA: Odwołujemy się do nowej komendy
+                    SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
 
-        public RelayCommand SavePasswordCommand { get; }
+        // ZMIANA: Używamy AsyncRelayCommand, ponieważ operacja zapisu jest asynchroniczna
+        public AsyncRelayCommand SavePasswordCommand { get; }
 
         public ChangePasswordViewModel(SupabaseService supabaseService)
         {
             _supabaseService = supabaseService;
-            SavePasswordCommand = new RelayCommand(
-                async _ => await SavePasswordAsync(),
-                _ => CanSavePassword());
+            // ZMIANA: Inicjalizujemy AsyncRelayCommand
+            SavePasswordCommand = new AsyncRelayCommand(
+                SavePasswordAsync,
+                CanSavePassword);
         }
 
         private bool CanSavePassword()
         {
+            // Ta metoda jest teraz używana przez CanExecute komendy
             return !string.IsNullOrEmpty(NewPassword) && !string.IsNullOrEmpty(ConfirmPassword);
         }
 

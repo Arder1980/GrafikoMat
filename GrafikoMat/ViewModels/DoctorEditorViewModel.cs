@@ -14,8 +14,15 @@ namespace GrafikoMat.ViewModels
         public DoctorProfile Profile { get; }
         public ObservableCollection<UnitAssignmentViewModel> Assignments { get; } = new();
         private readonly HashSet<string> _existingAbbreviations;
-
         public bool IsNewDoctor => Profile.Id == Guid.Empty;
+
+        // ZMIANA: Nowa właściwość kontrolująca widoczność sekcji hasła
+        private bool _showPasswordSection;
+        public bool ShowPasswordSection
+        {
+            get => _showPasswordSection;
+            set => SetProperty(ref _showPasswordSection, value);
+        }
 
         #region Właściwości-opakowania z logiką
 
@@ -93,7 +100,8 @@ namespace GrafikoMat.ViewModels
                 if (SetProperty(ref _password, value))
                 {
                     OnPropertyChanged(nameof(IsValid));
-                    OnPropertyChanged(nameof(PasswordErrorMessage));
+                    // PasswordErrorMessage już nie jest potrzebne, bo hasło jest generowane
+                    // OnPropertyChanged(nameof(PasswordErrorMessage)); 
                 }
             }
         }
@@ -123,16 +131,17 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        public string PasswordErrorMessage
-        {
-            get
-            {
-                if (!IsNewDoctor) return string.Empty;
-                if (string.IsNullOrWhiteSpace(Password)) return "Hasło jest wymagane.";
-                if (Password.Length < 8) return "Hasło musi mieć min. 8 znaków.";
-                return string.Empty;
-            }
-        }
+        // ZMIANA: PasswordErrorMessage już nie jest potrzebne, hasło jest generowane, nie wpisywane.
+        // public string PasswordErrorMessage
+        // {
+        //     get
+        //     {
+        //         if (!IsNewDoctor) return string.Empty;
+        //         if (string.IsNullOrWhiteSpace(Password)) return "Hasło jest wymagane.";
+        //         if (Password.Length < 8) return "Hasło musi mieć min. 8 znaków.";
+        //         return string.Empty;
+        //     }
+        // }
 
         #endregion
 
@@ -143,7 +152,12 @@ namespace GrafikoMat.ViewModels
 
             if (IsNewDoctor)
             {
-                Password = "GrafikoMat123!";
+                Password = PasswordGenerator.GenerateInitialPassword();
+                ShowPasswordSection = true; // ZMIANA: Pokazujemy sekcję hasła dla nowego doktora
+            }
+            else
+            {
+                ShowPasswordSection = false; // ZMIANA: Ukrywamy dla istniejących (chyba że resetujemy)
             }
 
             foreach (var unit in allUnits.OrderBy(u => u.Name))
@@ -151,6 +165,13 @@ namespace GrafikoMat.ViewModels
                 var assignment = currentAssignments.FirstOrDefault(a => a.UnitId == unit.Id);
                 Assignments.Add(new UnitAssignmentViewModel(unit, assignment != null, assignment?.IsActive ?? true));
             }
+        }
+
+        // ZMIANA: Dodana metoda do ustawiania nowego hasła i pokazywania sekcji
+        public void SetNewGeneratedPassword(string newPassword)
+        {
+            Password = newPassword;
+            ShowPasswordSection = true;
         }
 
         private string SanitizeName(string name)
@@ -187,7 +208,6 @@ namespace GrafikoMat.ViewModels
             Abbreviation = newAbbreviation;
         }
 
-        // ZMIANA: Dodano wywołanie OnPropertyChanged dla IsValid
         public bool IsValid
         {
             get
@@ -195,8 +215,8 @@ namespace GrafikoMat.ViewModels
                 return !string.IsNullOrWhiteSpace(FirstName)
                     && !string.IsNullOrWhiteSpace(LastName)
                     && string.IsNullOrEmpty(AbbreviationErrorMessage)
-                    && string.IsNullOrEmpty(EmailErrorMessage)
-                    && string.IsNullOrEmpty(PasswordErrorMessage);
+                    && string.IsNullOrEmpty(EmailErrorMessage);
+                // ZMIANA: Usunięte sprawdzanie PasswordErrorMessage
             }
         }
 

@@ -1,5 +1,5 @@
 ﻿using Microsoft.UI;
-using Microsoft.UI.Xaml; // ZMIANA: Dodajemy ten using
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -7,6 +7,28 @@ using Windows.UI;
 
 namespace GrafikoMat.Common
 {
+    // ZMIANA: Dodajemy nową, brakującą klasę konwertera
+    public class BooleanToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool isVisible = value is bool b && b;
+
+            // Obsługa parametru "Inverse", aby można było odwrócić logikę
+            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                isVisible = !isVisible;
+            }
+
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     public class BooleanToBrushConverter_DayOff : IValueConverter
     {
         public Brush DayOffBrush { get; set; } = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
@@ -15,12 +37,10 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    // ZMIANA: Nowy konwerter do ukrywania dolnej ramki ostatniego elementu
     public class BooleanToThicknessConverter_LastItemBorder : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            // Jeśli 'value' to 'true' (czyli IsLast == true), zwróć grubość 0. W przeciwnym razie 1.
             return (value is bool isLast && isLast)
                 ? new Thickness(0, 0, 0, 0)
                 : new Thickness(0, 0, 0, 1);

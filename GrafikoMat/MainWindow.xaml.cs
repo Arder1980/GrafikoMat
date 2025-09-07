@@ -23,6 +23,7 @@ using System.Windows.Input;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
+using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten kluczowy using
 
 namespace GrafikoMat
 {
@@ -53,7 +54,6 @@ namespace GrafikoMat
         private readonly SupabaseService _supabaseService;
         private DataService? _dataService;
         private AppSettings? _appSettings;
-
         public MainWindow()
         {
             _settingsService = new SettingsService();
@@ -68,7 +68,6 @@ namespace GrafikoMat
             InitAppWindow();
             SetupBackdrop();
             ApplyTitleBarMenuStyling();
-
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
@@ -90,7 +89,6 @@ namespace GrafikoMat
         private async Task InitializeApplicationAsync()
         {
             await ReloadSettingsAndServicesAsync();
-
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 await ShowFirstTimeSetupAsync();
@@ -98,7 +96,6 @@ namespace GrafikoMat
             }
 
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
-
             if (!restored && !_supabaseService.IsAuthenticated)
             {
                 bool loggedIn = await ShowLoginScreenAsync();
@@ -181,7 +178,6 @@ namespace GrafikoMat
                 IsPrimaryButtonEnabled = false,
                 XamlRoot = this.Content.XamlRoot
             };
-
             var tcs = new TaskCompletionSource();
             setupView.ReloadRequired += () =>
             {
@@ -203,10 +199,8 @@ namespace GrafikoMat
         {
             if (_supabaseService != null && _supabaseService.IsAuthenticated)
                 return true;
-
             var tcs = new TaskCompletionSource<bool>();
             var loginView = new LoginView(_supabaseService!);
-
             loginView.CancelRequested += () =>
             {
                 LoginOverlay.Content = null;
@@ -264,7 +258,6 @@ namespace GrafikoMat
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
-
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -277,7 +270,6 @@ namespace GrafikoMat
         private async void SwitchToManagement()
         {
             if (_isClosing) return;
-
             if (_dataService == null)
             {
                 await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację połączenia w ustawieniach.");
@@ -294,32 +286,33 @@ namespace GrafikoMat
         private void BuildActionsForDashboard()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings())));
-            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations())));
-            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManagement())));
-            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder())));
-            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder())));
+            // ZMIANA: Wszystkie 'new RelayCommand' poniżej teraz wskazują na wersję z CommunityToolkit
+            Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
+            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
+            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
+            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(GenerateRosterPlaceholder)));
+            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
         private void BuildActionsForDeclarations()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(_ => _declarationsView.TriggerClearSelection())));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave())));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => _declarationsView.TriggerClearSelection())));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => _declarationsView.TriggerSave())));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(() => _declarationsView.TriggerSaveAndClose())));
         }
 
         private void BuildActionsForSettings()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private void BuildActionsForManage()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         #endregion
@@ -333,7 +326,6 @@ namespace GrafikoMat
 
             var sbExit = new Storyboard();
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             if (ViewportCurrent.Content == _declarationsView)
             {
                 var leftCol = _declarationsView.LeftColumn;
@@ -497,7 +489,6 @@ namespace GrafikoMat
 
             cur.Opacity = 1;
             nxt.Opacity = 0;
-
             var ch = TryGetHeader(cur.Content);
             var nh = TryGetHeader(nxt.Content);
 
@@ -526,7 +517,6 @@ namespace GrafikoMat
             }
 
             if (ReferenceEquals(ViewportCurrent.Content, nextView)) return;
-
             if (_isAnimating)
             {
                 DetachFromParent(nextView);
@@ -585,7 +575,6 @@ namespace GrafikoMat
             var dur = TimeSpan.FromMilliseconds(280);
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
             Storyboard.SetTarget(curX, curPresenter);
             Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
@@ -637,7 +626,6 @@ namespace GrafikoMat
             catch { }
 
             if (_isClosing) return;
-
             ViewportNext.Content = null;
             ViewportCurrent.Content = nextView;
             ResetViewportState();
@@ -681,7 +669,6 @@ namespace GrafikoMat
         private void OnDeclCloseOnly() => SwitchToDashboard();
         private async void GenerateRosterPlaceholder() => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-
         private async void TitleBarSignOutAndClose_Click(object sender, RoutedEventArgs e)
         {
             try { await _supabaseService.SignOutAsync(); } catch { }
@@ -712,7 +699,6 @@ namespace GrafikoMat
 
             var pad = TopBarRow.Padding;
             TopBarRow.Padding = new Thickness(pad.Left, pad.Top, tb.RightInset, pad.Bottom);
-
             TitleBarMenuButton.Height = TopBarRow.Height;
             TitleBarMenuButton.MinWidth = 46;
             TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
@@ -722,7 +708,6 @@ namespace GrafikoMat
             var fgBase = tb.ButtonForegroundColor.HasValue ? new SolidColorBrush(tb.ButtonForegroundColor.Value) : new SolidColorBrush(Colors.White);
             var bgHover = tb.ButtonHoverBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonHoverBackgroundColor.Value) : new SolidColorBrush(fallbackHover);
             var bgPress = tb.ButtonPressedBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonPressedBackgroundColor.Value) : bgHover;
-
             TitleBarMenuButton.Background = bgBase;
             TitleBarMenuButton.Foreground = fgBase;
             TitleBarMenuButton.Resources["ButtonBackground"] = bgBase;
@@ -784,7 +769,6 @@ namespace GrafikoMat
         {
             if (_isClosing) return;
             bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-
             if (!isMaximized)
             {
                 try

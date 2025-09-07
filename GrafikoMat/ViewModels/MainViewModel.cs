@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten using
 
 namespace GrafikoMat.ViewModels
 {
@@ -48,14 +49,16 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
 
+        // ZMIANA: Używamy nowej komendy
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
         public MainViewModel(IDoctorRepository? doctorRepository = null)
         {
             _doctorRepository = doctorRepository;
-            SwitchToPreviousUnitCommand = new RelayCommand(_ => { });
-            SwitchToNextUnitCommand = new RelayCommand(_ => { });
+            // ZMIANA: Te wywołania teraz jednoznacznie wskazują na RelayCommand z CommunityToolkit
+            SwitchToPreviousUnitCommand = new RelayCommand(() => { });
+            SwitchToNextUnitCommand = new RelayCommand(() => { });
             UpdateRosterForSelectedMonth();
         }
 
@@ -64,7 +67,6 @@ namespace GrafikoMat.ViewModels
             _doctorRepository = doctorRepository;
         }
 
-        // ZMIANA: Sygnatura zmieniona z 'async void' na 'async Task'
         public async Task LoadDoctorsAsync()
         {
             if (_doctorRepository == null)
