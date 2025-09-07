@@ -78,14 +78,16 @@
                         </Grid.RowDefinitions>
 
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Imię:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
 
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="Nazwisko:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
 
                         <TextBlock Grid.Row="0" Grid.Column="4" Text="Skrót:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="0" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Grid.Row="1" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{x:Bind ViewModel.EditorViewModel.NameErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="E-mail:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -109,6 +111,7 @@
                                     HorizontalAlignment="Left"/>
                         </Grid>
                     </Grid>
+
                     <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
 
                     <TextBlock Text="Przypisania i Aktywność w Jednostkach" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>

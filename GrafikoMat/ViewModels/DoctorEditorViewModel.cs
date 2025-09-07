@@ -16,36 +16,98 @@ namespace GrafikoMat.ViewModels
         public bool IsNewDoctor => Profile.Id == Guid.Empty;
 
         private bool _showPasswordSection;
-        public bool ShowPasswordSection
-        {
-            get => _showPasswordSection;
-            set => SetProperty(ref _showPasswordSection, value);
-        }
+        public bool ShowPasswordSection { get => _showPasswordSection; set => SetProperty(ref _showPasswordSection, value); }
 
-        // ZMIANA: Nowa właściwość do kontrolowania widoczności przycisku resetowania
         private bool _showResetButton;
-        public bool ShowResetButton
-        {
-            get => _showResetButton;
-            set => SetProperty(ref _showResetButton, value);
-        }
-
+        public bool ShowResetButton { get => _showResetButton; set => SetProperty(ref _showResetButton, value); }
 
         #region Właściwości-opakowania z logiką
-        public string FirstName { get => Profile.FirstName; set { if (Profile.FirstName != value) { Profile.FirstName = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); } } }
-        public string LastName { get => Profile.LastName; set { if (Profile.LastName != value) { Profile.LastName = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); if (!string.IsNullOrWhiteSpace(value)) { GenerateAbbreviation(); } } } }
-        public string Email { get => Profile.Email; set { if (Profile.Email != value) { Profile.Email = value.Trim(); OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); OnPropertyChanged(nameof(EmailErrorMessage)); } } }
-        public string Abbreviation { get => Profile.Abbreviation; set { var upperValue = value.Trim().ToUpper(); if (Profile.Abbreviation != upperValue) { Profile.Abbreviation = upperValue; OnPropertyChanged(); OnPropertyChanged(nameof(IsValid)); OnPropertyChanged(nameof(AbbreviationErrorMessage)); } } }
+
+        public string FirstName
+        {
+            get => Profile.FirstName;
+            set
+            {
+                if (Profile.FirstName != value)
+                {
+                    Profile.FirstName = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(NameErrorMessage));
+                }
+            }
+        }
+
+        public string LastName
+        {
+            get => Profile.LastName;
+            set
+            {
+                if (Profile.LastName != value)
+                {
+                    Profile.LastName = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsValid));
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        // Generowanie skrótu zostawiamy w trybie rzeczywistym
+                        GenerateAbbreviation();
+                    }
+                    OnPropertyChanged(nameof(NameErrorMessage));
+                }
+            }
+        }
+
+        public string Email
+        {
+            get => Profile.Email;
+            set
+            {
+                if (Profile.Email != value)
+                {
+                    Profile.Email = value.Trim();
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(EmailErrorMessage));
+                }
+            }
+        }
+
+        public string Abbreviation
+        {
+            get => Profile.Abbreviation;
+            set
+            {
+                var upperValue = value.Trim().ToUpper();
+                if (Profile.Abbreviation != upperValue)
+                {
+                    Profile.Abbreviation = upperValue;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(AbbreviationErrorMessage));
+                }
+            }
+        }
 
         private string _password = string.Empty;
-        public string Password
-        {
-            get => _password;
-            set => SetProperty(ref _password, value);
-        }
+        public string Password { get => _password; set => SetProperty(ref _password, value); }
         #endregion
 
         #region Właściwości dla komunikatów o błędach
+
+        public string NameErrorMessage
+        {
+            get
+            {
+                var validNameRegex = new Regex(@"^[\p{L}\s-]*$");
+                if (!validNameRegex.IsMatch(FirstName) || !validNameRegex.IsMatch(LastName))
+                {
+                    return "Imię i nazwisko mogą zawierać tylko litery, spacje i myślniki.";
+                }
+                return string.Empty;
+            }
+        }
+
         public string AbbreviationErrorMessage
         {
             get
@@ -77,13 +139,11 @@ namespace GrafikoMat.ViewModels
             {
                 Password = PasswordGenerator.GenerateInitialPassword();
                 ShowPasswordSection = true;
-                // ZMIANA: Ukrywamy przycisk resetowania dla nowego lekarza
                 ShowResetButton = false;
             }
             else
             {
                 ShowPasswordSection = false;
-                // ZMIANA: Pokazujemy przycisk resetowania dla istniejącego lekarza
                 ShowResetButton = true;
             }
 
@@ -98,8 +158,32 @@ namespace GrafikoMat.ViewModels
         {
             Password = newPassword;
             ShowPasswordSection = true;
-            // ZMIANA: Po wygenerowaniu nowego hasła (w wyniku resetu), ukrywamy przycisk
             ShowResetButton = false;
+        }
+
+        // ZMIANA: Zmieniamy modyfikator dostępu z 'private' na 'public'
+        public string SanitizeName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+
+            var cleaned = name.Trim();
+            cleaned = Regex.Replace(cleaned, @"\s+", " ");
+            cleaned = Regex.Replace(cleaned, @"\s*-\s*", "-");
+            cleaned = Regex.Replace(cleaned, "-+", "-");
+
+            var parts = cleaned.Split(' ');
+            var resultParts = parts.Select(part =>
+            {
+                var subParts = part.Split('-');
+                var resultSubParts = subParts.Select(subPart =>
+                {
+                    if (string.IsNullOrEmpty(subPart)) return "";
+                    return char.ToUpper(subPart[0]) + subPart.Substring(1).ToLower();
+                });
+                return string.Join("-", resultSubParts);
+            });
+
+            return string.Join(" ", resultParts);
         }
 
         private void GenerateAbbreviation()
@@ -124,6 +208,7 @@ namespace GrafikoMat.ViewModels
             {
                 return !string.IsNullOrWhiteSpace(FirstName)
                     && !string.IsNullOrWhiteSpace(LastName)
+                    && string.IsNullOrEmpty(NameErrorMessage)
                     && string.IsNullOrEmpty(AbbreviationErrorMessage)
                     && string.IsNullOrEmpty(EmailErrorMessage);
             }
