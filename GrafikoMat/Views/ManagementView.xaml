@@ -24,7 +24,6 @@
             <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
                 <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
                 <AppBarButton Icon="Delete" Label="Usuń"/>
-                <AppBarButton Icon="Redo" Label="Resetuj hasło" Command="{x:Bind ViewModel.ResetPasswordCommand}" IsEnabled="{x:Bind ViewModel.IsDoctorSelectedAndNotNew, Mode=OneWay}"/>
             </CommandBar>
 
             <ListView Grid.Row="1"
@@ -62,14 +61,14 @@
                 <StackPanel Spacing="16">
                     <TextBlock Text="Dane Główne" Style="{ThemeResource TitleTextBlockStyle}"/>
 
-                    <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="1*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="1*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="120"/>
+                            <ColumnDefinition Width="0.7*"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -86,24 +85,31 @@
 
                         <TextBlock Grid.Row="0" Grid.Column="4" Text="Skrót:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="0" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
-
+                        <TextBlock Grid.Row="1" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
 
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="E-mail:" VerticalAlignment="Center"/>
                         <TextBox Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
 
-                        <TextBlock Grid.Row="2" Grid.Column="2" Text="Hasło startowe:" VerticalAlignment="Center" Visibility="{x:Bind ViewModel.EditorViewModel.ShowPasswordSection, Mode=OneWay}"/>
-                        <Grid Grid.Row="2" Grid.Column="3" ColumnSpacing="8" Visibility="{x:Bind ViewModel.EditorViewModel.ShowPasswordSection, Mode=OneWay}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox Grid.Column="0" Text="{x:Bind ViewModel.EditorViewModel.Password, Mode=OneWay}" IsReadOnly="True"/>
-                            <Button Grid.Column="1" Content="Kopiuj" Click="CopyPassword_Click"/>
+                        <Grid Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4">
+                            <Grid Visibility="{x:Bind ViewModel.EditorViewModel.ShowPasswordSection, Mode=OneWay}" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Hasło startowe:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Password, Mode=OneWay}" IsReadOnly="True"/>
+                                <Button Grid.Column="2" Content="Kopiuj" Click="CopyPassword_Click"/>
+                            </Grid>
+
+                            <Button Content="Resetuj hasło użytkownika..."
+                                    Command="{x:Bind ViewModel.ResetPasswordCommand}"
+                                    Visibility="{x:Bind ViewModel.EditorViewModel.ShowResetButton, Mode=OneWay}"
+                                    HorizontalAlignment="Left"/>
                         </Grid>
                     </Grid>
-                    <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}"/>
+                    <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
 
                     <TextBlock Text="Przypisania i Aktywność w Jednostkach" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments}">
@@ -114,7 +120,6 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-
                                     <CheckBox Grid.Column="0" Content="{x:Bind UnitName}" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"/>
                                     <ToggleSwitch Grid.Column="1" Header="Aktywny" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
                                 </Grid>
@@ -136,7 +141,6 @@
                             Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Right"
                             Margin="0,24,0,0"/>
-
                 </StackPanel>
             </ScrollViewer>
         </Grid>

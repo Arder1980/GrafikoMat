@@ -60,6 +60,35 @@ namespace GrafikoMat.Services
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
+        // ===============================================================
+        // ZMIANA: Dodajemy dwie nowe metody do resetowania hasła
+
+        /// <summary>
+        /// Wywołuje funkcję RPC w Supabase w celu zresetowania hasła użytkownika.
+        /// </summary>
+        public async Task ResetPasswordAsync(Guid doctorId, string newPassword)
+        {
+            await _supabase.Rpc("admin_reset_user_password", new
+            {
+                user_id = doctorId,
+                password_to_set = newPassword
+            });
+        }
+
+        /// <summary>
+        /// Ustawia w profilu lekarza flagę wymuszającą zmianę hasła.
+        /// </summary>
+        public async Task SetPasswordChangeFlagAsync(Guid doctorId)
+        {
+            var partialUpdate = new DoctorProfile
+            {
+                Id = doctorId,
+                RequiresPasswordChange = true
+            };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
+        // ===============================================================
+
         public async Task SaveDoctorAsync(DoctorEditorViewModel editorViewModel)
         {
             var profile = editorViewModel.Profile;
@@ -71,8 +100,6 @@ namespace GrafikoMat.Services
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
 
                 profile.Id = Guid.Parse(userId);
-
-                // ZMIANA: Ustawiamy flagę wymuszającą zmianę hasła dla nowego użytkownika.
                 profile.RequiresPasswordChange = true;
 
                 await _supabase.From<DoctorProfile>().Insert(profile);

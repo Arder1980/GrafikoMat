@@ -105,7 +105,8 @@ namespace GrafikoMat.ViewModels
 
             AddNewDoctorCommand = new RelayCommand(AddNewDoctor);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
-            ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew);
+            // ZMIANA: Uściślamy warunek, kiedy przycisk resetu jest aktywny
+            ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
 
             if (_dataService != null)
             {
@@ -118,6 +119,11 @@ namespace GrafikoMat.ViewModels
             if (e.PropertyName == nameof(EditorViewModel.IsValid))
             {
                 SaveDoctorCommand.NotifyCanExecuteChanged();
+            }
+            // ZMIANA: Dodajemy powiadomienie dla przycisku resetowania
+            if (e.PropertyName == nameof(EditorViewModel.ShowResetButton))
+            {
+                ResetPasswordCommand.NotifyCanExecuteChanged();
             }
         }
 
@@ -152,7 +158,6 @@ namespace GrafikoMat.ViewModels
             }
             finally
             {
-                // ZMIANA: Używamy Dispatchera, aby mieć pewność, że zmiana nastąpi w wątku UI
                 _dispatcher?.TryEnqueue(() => IsLoading = false);
             }
         }
@@ -176,7 +181,6 @@ namespace GrafikoMat.ViewModels
                 await _dataService.SaveDoctorAsync(EditorViewModel);
                 await LoadInitialDataAsync();
 
-                // Przywracamy zaznaczenie
                 _dispatcher?.TryEnqueue(() =>
                 {
                     SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == savedProfileId);
@@ -190,14 +194,14 @@ namespace GrafikoMat.ViewModels
             }
             finally
             {
-                // ZMIANA: Używamy Dispatchera
                 _dispatcher?.TryEnqueue(() => IsLoading = false);
             }
         }
 
+        // ZMIANA: Pełna implementacja logiki resetowania hasła
         private async Task ResetPassword()
         {
-            if (SelectedDoctor == null || EditorViewModel == null) return;
+            if (SelectedDoctor == null || EditorViewModel == null || _dataService == null) return;
 
             var confirmDialog = new ContentDialog
             {
@@ -212,7 +216,32 @@ namespace GrafikoMat.ViewModels
 
             if (result == ContentDialogResult.Primary)
             {
-                // Logika resetowania hasła...
+                IsLoading = true;
+                HideStatusMessage();
+                try
+                {
+                    // 1. Wygeneruj nowe hasło
+                    var newPassword = PasswordGenerator.GenerateInitialPassword();
+
+                    // 2. Wywołaj RPC, aby zresetować hasło w Supabase Auth
+                    await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
+
+                    // 3. Ustaw flagę wymuszającą zmianę hasła w profilu lekarza
+                    await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
+
+                    // 4. Zaktualizuj UI, aby pokazać nowe hasło
+                    EditorViewModel.SetNewGeneratedPassword(newPassword);
+
+                    ShowStatusMessage("Sukces!", $"Hasło zostało zresetowane. Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success);
+                }
+                catch (Exception ex)
+                {
+                    ShowStatusMessage("Błąd resetowania hasła", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
+                }
+                finally
+                {
+                    _dispatcher?.TryEnqueue(() => IsLoading = false);
+                }
             }
         }
 
@@ -244,7 +273,6 @@ namespace GrafikoMat.ViewModels
             }
             finally
             {
-                // ZMIANA: Używamy Dispatchera
                 _dispatcher?.TryEnqueue(() => IsLoading = false);
             }
         }
