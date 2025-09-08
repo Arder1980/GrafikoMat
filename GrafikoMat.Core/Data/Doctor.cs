@@ -25,13 +25,16 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
+        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
+        [Column("is_archived")]
+        public bool IsArchived { get; set; } = false;
+
         [Column("requires_password_change")]
         public bool RequiresPasswordChange { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // ZMIANA: Dodajemy nową, wygodną właściwość
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()

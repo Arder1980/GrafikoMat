@@ -7,12 +7,32 @@ using Windows.UI;
 
 namespace GrafikoMat.Common
 {
+    // NOWY KONWERTER: Zmienia bool na wartość krycia (Opacity)
+    public class BooleanToOpacityConverter : IValueConverter
+    {
+        public double TrueValue { get; set; } = 0.5;
+        public double FalseValue { get; set; } = 1.0;
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool b)
+            {
+                return b ? TrueValue : FalseValue;
+            }
+            return FalseValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;

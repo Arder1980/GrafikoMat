@@ -7,7 +7,12 @@
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+    </UserControl.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -19,12 +24,20 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
                 <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
-                <AppBarButton Icon="Delete" Label="Usuń"/>
+
+                <AppBarButton Label="Archiwizuj" Command="{x:Bind ViewModel.ArchiveDoctorCommand}" IsEnabled="{x:Bind ViewModel.CanArchive, Mode=OneWay}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE7B8;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+
+                <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </CommandBar>
 
             <TextBox Grid.Row="1" 
@@ -32,7 +45,11 @@
                      PlaceholderText="Filtruj listę..."
                      Margin="8,0,8,8"/>
 
-            <ListView Grid.Row="2"
+            <CheckBox Grid.Row="2" Content="Pokaż zarchiwizowanych" 
+                      IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}"
+                      Margin="8,0,8,8"/>
+
+            <ListView Grid.Row="3"
                       BorderThickness="0,1,1,0"
                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                       ItemsSource="{x:Bind ViewModel.FilteredDoctors}"
@@ -42,7 +59,8 @@
                         <TextBlock Margin="12,10" 
                                    Style="{ThemeResource BaseTextBlockStyle}"
                                    FontWeight="SemiBold"
-                                   Text="{x:Bind FullName}"/>
+                                   Text="{x:Bind FullName}"
+                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>

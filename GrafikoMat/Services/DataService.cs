@@ -29,9 +29,7 @@ namespace GrafikoMat.Services
 
         public async Task<List<Unit>> GetAllUnitsAsync()
         {
-            // ZMIANA: Poprawiamy błędny zapis na ostatecznie poprawny: _supabase.Postgrest.BaseUrl
             Debug.WriteLine($"[DataService.GetAllUnitsAsync] Stan klienta: {(_supabase == null ? "NULL" : "OK")}, Auth: {(_supabase?.Auth?.CurrentUser == null ? "Brak" : "OK")}, URL: {_supabase?.Postgrest.BaseUrl}");
-
             var response = await _supabase.From<Unit>().Get();
             return response.Models ?? new List<Unit>();
         }
@@ -83,6 +81,17 @@ namespace GrafikoMat.Services
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
+        // NOWA METODA: Do archiwizacji i przywracania lekarzy
+        public async Task SetDoctorArchiveStatusAsync(Guid doctorId, bool isArchived)
+        {
+            var partialUpdate = new DoctorProfile
+            {
+                Id = doctorId,
+                IsArchived = isArchived
+            };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
+
         public async Task SaveDoctorAsync(DoctorEditorViewModel editorViewModel)
         {
             var profile = editorViewModel.Profile;
@@ -92,7 +101,6 @@ namespace GrafikoMat.Services
                 var userId = _supabase.Auth.CurrentUser?.Id;
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
-
                 profile.Id = Guid.Parse(userId);
                 profile.RequiresPasswordChange = true;
 
@@ -130,7 +138,6 @@ namespace GrafikoMat.Services
 
         public async Task SaveUnitAsync(Unit unit) =>
             await _supabase.From<Unit>().Upsert(unit);
-
         public async Task DeleteUnitAsync(Guid unitId) =>
             await _supabase.From<Unit>().Where(u => u.Id == unitId).Delete();
     }
