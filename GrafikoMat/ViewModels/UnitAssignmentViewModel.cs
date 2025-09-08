@@ -8,8 +8,13 @@ namespace GrafikoMat.ViewModels
     {
         public Guid UnitId { get; }
         public string UnitName { get; }
-        // ZMIANA: Dodajemy nową właściwość na nazwę oddziału
         public string DepartmentName { get; }
+
+        // NOWA WŁAŚCIWOŚĆ: przechowuje informację, czy przypisanie istnieje w bazie
+        public bool IsPersisted { get; }
+
+        // NOWA WŁAŚCIWOŚĆ: na jej podstawie UI zablokuje checkbox
+        public bool CanBeChanged => !IsPersisted;
 
         private bool _isAssigned;
         public bool IsAssigned
@@ -25,13 +30,13 @@ namespace GrafikoMat.ViewModels
             set => SetProperty(ref _isActive, value);
         }
 
-        public UnitAssignmentViewModel(Unit unit, bool isAssigned, bool isActive)
+        // ZMIANA: Zaktualizowany konstruktor przyjmujący nowy parametr
+        public UnitAssignmentViewModel(Unit unit, bool isAssigned, bool isActive, bool isPersisted)
         {
             UnitId = unit.Id;
             UnitName = unit.Name;
-            // ZMIANA: Inicjalizujemy nową właściwość
             DepartmentName = unit.DepartmentName;
-
+            IsPersisted = isPersisted; // Zapamiętujemy stan początkowy
             _isAssigned = isAssigned;
             _isActive = isActive;
         }

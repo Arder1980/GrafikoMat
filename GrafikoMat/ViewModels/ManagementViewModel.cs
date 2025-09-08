@@ -3,7 +3,7 @@ using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls; // ZMIANA: Dodana dyrektywa using
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -18,10 +18,7 @@ namespace GrafikoMat.ViewModels
         private readonly DataService? _dataService;
         private readonly DispatcherQueue? _dispatcher;
 
-        // ZMIANA: Ta kolekcja będzie teraz przechowywać pełną, niefiltrowaną listę lekarzy
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
-
-        // ZMIANA: Nowa kolekcja, powiązana z UI, przechowująca odfiltrowane wyniki
         public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
 
         private List<Unit> _allUnits = new();
@@ -40,7 +37,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Nowa właściwość dla pola wyszukiwania
         private string _searchText = string.Empty;
         public string SearchText
         {
@@ -152,8 +148,7 @@ namespace GrafikoMat.ViewModels
                 {
                     _allDoctorsMasterList.Clear();
                     _allDoctorsMasterList.AddRange(doctors.OrderBy(d => d.LastName));
-
-                    FilterDoctors(); // ZMIANA: Zamiast ładować do AllDoctors, filtrujemy
+                    FilterDoctors();
 
                     if (previouslySelectedId != null)
                     {
@@ -171,7 +166,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Nowa metoda filtrująca
         private void FilterDoctors()
         {
             FilteredDoctors.Clear();
@@ -188,7 +182,6 @@ namespace GrafikoMat.ViewModels
                 var filtered = _allDoctorsMasterList.Where(d =>
                     d.LastName.ToLowerInvariant().Contains(searchTextLower) ||
                     d.FirstName.ToLowerInvariant().Contains(searchTextLower));
-
                 foreach (var doctor in filtered)
                 {
                     FilteredDoctors.Add(doctor);
@@ -214,12 +207,42 @@ namespace GrafikoMat.ViewModels
             );
         }
 
+        // ZMIANA: CAŁA PONIŻSZA METODA ZOSTAŁA ZASTĄPIONA NOWĄ WERSJĄ
         private async Task SaveDoctor()
         {
             if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
-            IsLoading = true;
+
             HideStatusMessage();
 
+            // KROK 1: Sprawdź, czy są jakieś NOWE, jeszcze niezapisane przypisania.
+            var newAssignments = EditorViewModel.Assignments
+                .Where(a => a.IsAssigned && !a.IsPersisted)
+                .ToList();
+
+            // KROK 2: Jeśli są nowe przypisania, wyświetl dialog ostrzegawczy.
+            if (newAssignments.Any())
+            {
+                var confirmDialog = new ContentDialog
+                {
+                    Title = "Potwierdzenie Operacji Nieodwracalnej",
+                    Content = "Przypisanie lekarza do nowej jednostki jest operacją trwałą i nie będzie można jej cofnąć w przyszłości.\n\nCzy na pewno chcesz kontynuować?",
+                    PrimaryButtonText = "Tak, zapisz przypisanie",
+                    CloseButtonText = "Anuluj",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = App.MainWindow.Content.XamlRoot
+                };
+
+                var result = await confirmDialog.ShowAsync();
+
+                // KROK 3: Jeśli użytkownik anulował, przerwij całą operację zapisu.
+                if (result != ContentDialogResult.Primary)
+                {
+                    return; // Przerwij dalsze wykonywanie metody.
+                }
+            }
+
+            // KROK 4: Jeśli użytkownik potwierdził (lub nie było nowych przypisań), kontynuuj.
+            IsLoading = true;
             try
             {
                 var savedProfileId = EditorViewModel.Profile.Id;
@@ -293,7 +316,6 @@ namespace GrafikoMat.ViewModels
             try
             {
                 if (_dataService == null) return;
-
                 await EnsureUnitsLoadedAsync();
                 if (_allUnits.Count == 0)
                 {
@@ -312,7 +334,7 @@ namespace GrafikoMat.ViewModels
                     new List<Unit>(_allUnits),
                     currentAssignments,
                     existingAbbreviations
-                );
+                 );
             }
             catch (Exception ex)
             {

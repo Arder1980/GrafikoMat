@@ -134,7 +134,9 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}">
+                                    <CheckBox Grid.Column="0" 
+                                              IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanBeChanged, Mode=OneWay}">
                                         <StackPanel Spacing="2">
                                             <TextBlock Text="{x:Bind UnitName}" FontWeight="SemiBold"/>
                                             <TextBlock Text="{x:Bind DepartmentName}" FontSize="12" Opacity="0.8"/>

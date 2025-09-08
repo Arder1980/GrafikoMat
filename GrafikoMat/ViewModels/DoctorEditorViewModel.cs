@@ -149,7 +149,13 @@ namespace GrafikoMat.ViewModels
             foreach (var unit in allUnits.OrderBy(u => u.Name))
             {
                 var assignment = currentAssignments.FirstOrDefault(a => a.UnitId == unit.Id);
-                Assignments.Add(new UnitAssignmentViewModel(unit, assignment != null, assignment?.IsActive ?? true));
+
+                // ZMIANA: Przekazujemy 'assignment != null' jako informację,
+                // że powiązanie już istnieje w bazie danych.
+                Assignments.Add(new UnitAssignmentViewModel(unit,
+                    isAssigned: assignment != null,
+                    isActive: assignment?.IsActive ?? true,
+                    isPersisted: assignment != null));
             }
         }
 
@@ -163,12 +169,10 @@ namespace GrafikoMat.ViewModels
         public string SanitizeName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-
             var cleaned = name.Trim();
             cleaned = Regex.Replace(cleaned, @"\s+", " ");
             cleaned = Regex.Replace(cleaned, @"\s*-\s*", "-");
             cleaned = Regex.Replace(cleaned, "-+", "-");
-
             var parts = cleaned.Split(' ');
             var resultParts = parts.Select(part =>
             {
@@ -180,7 +184,6 @@ namespace GrafikoMat.ViewModels
                 });
                 return string.Join("-", resultSubParts);
             });
-
             return string.Join(" ", resultParts);
         }
 
