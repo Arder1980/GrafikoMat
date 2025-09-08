@@ -133,7 +133,14 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <CheckBox Grid.Column="0" Content="{x:Bind UnitName}" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"/>
+
+                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{x:Bind UnitName}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{x:Bind DepartmentName}" FontSize="12" Opacity="0.8"/>
+                                        </StackPanel>
+                                    </CheckBox>
+
                                     <ToggleSwitch Grid.Column="1" Header="Aktywna" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
                                 </Grid>
                             </DataTemplate>

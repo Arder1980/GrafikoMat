@@ -1,5 +1,5 @@
 ﻿using GrafikoMat.Common;
-using GrafikoMat.Core.Data; // <-- Dodana dyrektywa
+using GrafikoMat.Core.Data;
 using System;
 
 namespace GrafikoMat.ViewModels
@@ -8,6 +8,8 @@ namespace GrafikoMat.ViewModels
     {
         public Guid UnitId { get; }
         public string UnitName { get; }
+        // ZMIANA: Dodajemy nową właściwość na nazwę oddziału
+        public string DepartmentName { get; }
 
         private bool _isAssigned;
         public bool IsAssigned
@@ -27,6 +29,9 @@ namespace GrafikoMat.ViewModels
         {
             UnitId = unit.Id;
             UnitName = unit.Name;
+            // ZMIANA: Inicjalizujemy nową właściwość
+            DepartmentName = unit.DepartmentName;
+
             _isAssigned = isAssigned;
             _isActive = isActive;
         }
