@@ -50,7 +50,6 @@ namespace GrafikoMat.ViewModels
                     OnPropertyChanged(nameof(IsValid));
                     if (!string.IsNullOrWhiteSpace(value))
                     {
-                        // Generowanie skrótu zostawiamy w trybie rzeczywistym
                         GenerateAbbreviation();
                     }
                     OnPropertyChanged(nameof(NameErrorMessage));
@@ -161,7 +160,6 @@ namespace GrafikoMat.ViewModels
             ShowResetButton = false;
         }
 
-        // ZMIANA: Zmieniamy modyfikator dostępu z 'private' na 'public'
         public string SanitizeName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;

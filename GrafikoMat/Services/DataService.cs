@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using GrafikoMat.Core.Data;
@@ -28,6 +29,9 @@ namespace GrafikoMat.Services
 
         public async Task<List<Unit>> GetAllUnitsAsync()
         {
+            // ZMIANA: Poprawiamy błędny zapis na ostatecznie poprawny: _supabase.Postgrest.BaseUrl
+            Debug.WriteLine($"[DataService.GetAllUnitsAsync] Stan klienta: {(_supabase == null ? "NULL" : "OK")}, Auth: {(_supabase?.Auth?.CurrentUser == null ? "Brak" : "OK")}, URL: {_supabase?.Postgrest.BaseUrl}");
+
             var response = await _supabase.From<Unit>().Get();
             return response.Models ?? new List<Unit>();
         }
@@ -60,12 +64,6 @@ namespace GrafikoMat.Services
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
-        // ===============================================================
-        // ZMIANA: Dodajemy dwie nowe metody do resetowania hasła
-
-        /// <summary>
-        /// Wywołuje funkcję RPC w Supabase w celu zresetowania hasła użytkownika.
-        /// </summary>
         public async Task ResetPasswordAsync(Guid doctorId, string newPassword)
         {
             await _supabase.Rpc("admin_reset_user_password", new
@@ -75,9 +73,6 @@ namespace GrafikoMat.Services
             });
         }
 
-        /// <summary>
-        /// Ustawia w profilu lekarza flagę wymuszającą zmianę hasła.
-        /// </summary>
         public async Task SetPasswordChangeFlagAsync(Guid doctorId)
         {
             var partialUpdate = new DoctorProfile
@@ -87,7 +82,6 @@ namespace GrafikoMat.Services
             };
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
-        // ===============================================================
 
         public async Task SaveDoctorAsync(DoctorEditorViewModel editorViewModel)
         {

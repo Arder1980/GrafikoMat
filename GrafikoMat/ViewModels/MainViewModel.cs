@@ -10,7 +10,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten using
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -49,14 +49,12 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
 
-        // ZMIANA: Używamy nowej komendy
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
         public MainViewModel(IDoctorRepository? doctorRepository = null)
         {
             _doctorRepository = doctorRepository;
-            // ZMIANA: Te wywołania teraz jednoznacznie wskazują na RelayCommand z CommunityToolkit
             SwitchToPreviousUnitCommand = new RelayCommand(() => { });
             SwitchToNextUnitCommand = new RelayCommand(() => { });
             UpdateRosterForSelectedMonth();
@@ -101,7 +99,6 @@ namespace GrafikoMat.ViewModels
         }
 
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
-
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
         public void PrevMonth() { if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); } else SelectedMonthIndex -= 1; }

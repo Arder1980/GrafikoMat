@@ -18,6 +18,7 @@
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -26,40 +27,48 @@
                 <AppBarButton Icon="Delete" Label="Usuń"/>
             </CommandBar>
 
-            <ListView Grid.Row="1"
+            <TextBox Grid.Row="1" 
+                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="Filtruj listę..."
+                     Margin="8,0,8,8"/>
+
+            <ListView Grid.Row="2"
                       BorderThickness="0,1,1,0"
                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                      ItemsSource="{x:Bind ViewModel.AllDoctors}"
+                      ItemsSource="{x:Bind ViewModel.FilteredDoctors}"
                       SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="data:DoctorProfile">
-                        <StackPanel Margin="12,8">
-                            <TextBlock FontWeight="SemiBold"><Run Text="{x:Bind LastName}"/><Run Text=" "/><Run Text="{x:Bind FirstName}"/></TextBlock>
-                            <TextBlock Text="{x:Bind Email}" Opacity="0.8" FontSize="12"/>
-                        </StackPanel>
+                        <TextBlock Margin="12,10" 
+                                   Style="{ThemeResource BaseTextBlockStyle}"
+                                   FontWeight="SemiBold"
+                                   Text="{x:Bind FullName}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
         </Grid>
 
         <Grid Grid.Column="1" Padding="24">
-            <Grid Background="{ThemeResource SystemControlAcrylicElementBrush}"
-                  Opacity="0.8"
-                  Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
-                <ProgressRing IsActive="True" Width="80" Height="80"/>
+            <Grid>
+                <Grid Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
+                    <ProgressRing IsActive="True" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0"
+                               Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                </StackPanel>
             </Grid>
 
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
-                <FontIcon Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0"
-                           Style="{ThemeResource BodyStrongTextBlockStyle}"/>
-            </StackPanel>
+            <ScrollViewer Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                <StackPanel Spacing="12">
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="Dane Główne" Style="{ThemeResource TitleTextBlockStyle}"/>
+                    <TextBlock Text="Dane dyżurnego" Style="{ThemeResource TitleTextBlockStyle}"/>
 
                     <Grid ColumnSpacing="12" RowSpacing="8">
                         <Grid.ColumnDefinitions>
@@ -114,8 +123,9 @@
 
                     <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
 
-                    <TextBlock Text="Przypisania i Aktywność w Jednostkach" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments}">
+                    <TextBlock Text="Przypisania i Aktywność" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
+
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:UnitAssignmentViewModel">
                                 <Grid Margin="0,8" Padding="12" CornerRadius="4" Background="{ThemeResource LayerFillColorDefaultBrush}">
@@ -124,7 +134,7 @@
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <CheckBox Grid.Column="0" Content="{x:Bind UnitName}" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"/>
-                                    <ToggleSwitch Grid.Column="1" Header="Aktywny" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
+                                    <ToggleSwitch Grid.Column="1" Header="Aktywna" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

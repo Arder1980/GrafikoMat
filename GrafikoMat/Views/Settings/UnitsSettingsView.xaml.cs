@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -22,13 +23,15 @@ namespace GrafikoMat.Views.Settings
         public async void Initialize(DataService service)
         {
             _dataService = service;
+
+            // ZMIANA: Dodajemy logowanie diagnostyczne
+            Debug.WriteLine("[UnitsSettingsView] Inicjalizacja i próba załadowania jednostek...");
             await LoadUnitsAsync();
         }
 
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
-
             Units.Clear();
             var unitsFromDb = await _dataService.GetAllUnitsAsync();
             foreach (var unit in unitsFromDb.OrderBy(u => u.Name))
@@ -80,7 +83,6 @@ namespace GrafikoMat.Views.Settings
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
-
             var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, hospitalNameTextBox, departmentNameTextBox } };
 
             var dialog = new ContentDialog
@@ -91,7 +93,6 @@ namespace GrafikoMat.Views.Settings
                 CloseButtonText = "Anuluj",
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = this.XamlRoot,
-                // ZMIANA: Ustawiamy stałą, większą szerokość okna
                 MinWidth = 700,
                 MaxWidth = 700
             };
@@ -106,7 +107,6 @@ namespace GrafikoMat.Views.Settings
                     HospitalFullName = hospitalNameTextBox.Text,
                     DepartmentName = departmentNameTextBox.Text
                 };
-
                 await _dataService.SaveUnitAsync(unitToSave);
                 await LoadUnitsAsync();
             }

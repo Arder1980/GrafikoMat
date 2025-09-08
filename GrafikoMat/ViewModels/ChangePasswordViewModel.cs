@@ -2,7 +2,7 @@
 using GrafikoMat.Services;
 using System;
 using System.Threading.Tasks;
-using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten using
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -20,7 +20,6 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _newPassword, value))
                 {
-                    // ZMIANA: Odwołujemy się do nowej komendy
                     SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
@@ -34,19 +33,16 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _confirmPassword, value))
                 {
-                    // ZMIANA: Odwołujemy się do nowej komendy
                     SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
 
-        // ZMIANA: Używamy AsyncRelayCommand, ponieważ operacja zapisu jest asynchroniczna
         public AsyncRelayCommand SavePasswordCommand { get; }
 
         public ChangePasswordViewModel(SupabaseService supabaseService)
         {
             _supabaseService = supabaseService;
-            // ZMIANA: Inicjalizujemy AsyncRelayCommand
             SavePasswordCommand = new AsyncRelayCommand(
                 SavePasswordAsync,
                 CanSavePassword);
@@ -54,13 +50,12 @@ namespace GrafikoMat.ViewModels
 
         private bool CanSavePassword()
         {
-            // Ta metoda jest teraz używana przez CanExecute komendy
             return !string.IsNullOrEmpty(NewPassword) && !string.IsNullOrEmpty(ConfirmPassword);
         }
 
         private async Task SavePasswordAsync()
         {
-            OnError?.Invoke(string.Empty); // Clear previous errors
+            OnError?.Invoke(string.Empty);
 
             if (NewPassword.Length < 8)
             {

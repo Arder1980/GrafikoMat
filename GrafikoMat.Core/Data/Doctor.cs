@@ -31,7 +31,9 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // Implementacja ICloneable
+        // ZMIANA: Dodajemy nową, wygodną właściwość
+        public string FullName => $"{LastName} {FirstName}";
+
         public object Clone()
         {
             return this.MemberwiseClone();

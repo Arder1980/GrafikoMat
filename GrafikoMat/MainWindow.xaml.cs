@@ -23,7 +23,7 @@ using System.Windows.Input;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
-using CommunityToolkit.Mvvm.Input; // ZMIANA: Dodajemy ten kluczowy using
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat
 {
@@ -286,7 +286,6 @@ namespace GrafikoMat
         private void BuildActionsForDashboard()
         {
             Actions.Clear();
-            // ZMIANA: Wszystkie 'new RelayCommand' poniżej teraz wskazują na wersję z CommunityToolkit
             Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
             Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
             Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));

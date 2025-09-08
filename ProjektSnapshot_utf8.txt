@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-07 20:23:54
+# Data:       2025-09-08 20:46:45
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -12,6 +12,7 @@ DIR  GrafikoMat.Core\Data
 DIR  GrafikoMat.Core\Repositories
 DIR  GrafikoMat\Common
 DIR  GrafikoMat\Controls
+DIR  GrafikoMat\Converters
 DIR  GrafikoMat\Models
 DIR  GrafikoMat\Properties
 DIR  GrafikoMat\Repositories
@@ -20,7 +21,7 @@ DIR  GrafikoMat\ViewModels
 DIR  GrafikoMat\Views
 DIR  GrafikoMat\Views\Settings
 
-## FILES (liczba): 57
+## FILES (liczba): 59
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
@@ -35,10 +36,12 @@ FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
 FILE GrafikoMat\Common\Converters.cs
 FILE GrafikoMat\Common\ObservableObject.cs
+FILE GrafikoMat\Common\PasswordGenerator.cs
 FILE GrafikoMat\Common\PolishHolidays.cs
-FILE GrafikoMat\Common\RelayCommand.cs
 FILE GrafikoMat\Controls\AutoEqualRowsGrid.cs
 FILE GrafikoMat\Controls\CalendarUniformGridPanel.cs
+FILE GrafikoMat\Converters\BooleanToVisibilityConverter.cs
+FILE GrafikoMat\Converters\NullToVisibilityConverter.cs
 FILE GrafikoMat\GrafikoMat.WinUI.csproj
 FILE GrafikoMat\MainWindow.xaml
 FILE GrafikoMat\MainWindow.xaml.cs
@@ -79,7 +82,7 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (1011 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (1042 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
@@ -88,7 +91,7 @@ using System;
 namespace GrafikoMat.Core.Data
 {
     [Table("doctors")]
-    public class DoctorProfile : BaseModel
+    public class DoctorProfile : BaseModel, ICloneable
     {
         [PrimaryKey("id")]
         public Guid Id { get; set; }
@@ -108,12 +111,16 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
-        // NOWOŚĆ: Dodajemy właściwość dla nowej kolumny w bazie danych.
         [Column("requires_password_change")]
         public bool RequiresPasswordChange { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
+
+        public object Clone()
+        {
+            return this.MemberwiseClone();
+        }
     }
 }
 ----- END -----
@@ -270,7 +277,7 @@ namespace GrafikoMat.Core.Declarations
 
 ----- END -----
 
-===== FILE: GrafikoMat.Core\GrafikoMat.Core.csproj (365 bytes)
+===== FILE: GrafikoMat.Core\GrafikoMat.Core.csproj (437 bytes)
 ----- BEGIN -----
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
@@ -279,6 +286,7 @@ namespace GrafikoMat.Core.Declarations
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="Supabase" Version="1.1.1" />
 		<PackageReference Include="Supabase.Postgrest" Version="4.1.0" />
 	</ItemGroup>
@@ -557,7 +565,7 @@ EndGlobal
 
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml (1124 bytes)
+===== FILE: GrafikoMat\App.xaml (1216 bytes)
 ----- BEGIN -----
 <Application
     x:Class="GrafikoMat.App"
@@ -578,15 +586,17 @@ EndGlobal
             </Style>
 
             <common:BooleanToBrushConverter_DayOff x:Key="BooleanToBrushConverter_DayOff"/>
-
             <common:BooleanToThicknessConverter_LastItemBorder x:Key="LastItemBorderConverter"/>
             <common:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+
+            <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (388 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (455 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml;
 
@@ -594,6 +604,8 @@ namespace GrafikoMat
 {
     public partial class App : Application
     {
+        public static Window MainWindow { get; private set; }
+
         public App()
         {
             this.InitializeComponent();
@@ -601,18 +613,17 @@ namespace GrafikoMat
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            var window = new GrafikoMat.MainWindow();
-            window.Activate();
+            MainWindow = new GrafikoMat.MainWindow();
+            MainWindow.Activate();
         }
     }
 }
-
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (2168 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (2629 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
-using Microsoft.UI.Xaml; // ZMIANA: Dodajemy ten using
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -620,6 +631,26 @@ using Windows.UI;
 
 namespace GrafikoMat.Common
 {
+    public class BooleanToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool isVisible = value is bool b && b;
+
+            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                isVisible = !isVisible;
+            }
+
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     public class BooleanToBrushConverter_DayOff : IValueConverter
     {
         public Brush DayOffBrush { get; set; } = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
@@ -628,12 +659,10 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    // ZMIANA: Nowy konwerter do ukrywania dolnej ramki ostatniego elementu
     public class BooleanToThicknessConverter_LastItemBorder : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            // Jeśli 'value' to 'true' (czyli IsLast == true), zwróć grubość 0. W przeciwnym razie 1.
             return (value is bool isLast && isLast)
                 ? new Thickness(0, 0, 0, 0)
                 : new Thickness(0, 0, 0, 1);
@@ -699,6 +728,35 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
+===== FILE: GrafikoMat\Common\PasswordGenerator.cs (903 bytes)
+----- BEGIN -----
+using System;
+
+namespace GrafikoMat.Common
+{
+    /// <summary>
+    /// Pomocnik do generowania haseł startowych.
+    /// </summary>
+    public static class PasswordGenerator
+    {
+        // Używamy jednej instancji Random dla lepszej losowości,
+        // aby uniknąć problemu tworzenia wielu instancji w krótkim czasie,
+        // co mogłoby skutkować takimi samymi "losowymi" liczbami.
+        private static readonly Random _random = new Random();
+
+        /// <summary>
+        /// Generuje nowe, losowe hasło startowe w formacie 'GrafikoMat!xxxx'.
+        /// </summary>
+        /// <returns>Nowe hasło startowe jako string.</returns>
+        public static string GenerateInitialPassword()
+        {
+            int randomNumber = _random.Next(1000, 10000); // Generuje liczbę od 1000 do 9999
+            return $"GrafikoMat!{randomNumber}";
+        }
+    }
+}
+----- END -----
+
 ===== FILE: GrafikoMat\Common\PolishHolidays.cs (1546 bytes)
 ----- BEGIN -----
 using System;
@@ -745,35 +803,6 @@ namespace GrafikoMat.Common
 
             return false;
         }
-    }
-}
------ END -----
-
-===== FILE: GrafikoMat\Common\RelayCommand.cs (825 bytes)
------ BEGIN -----
-using System;
-using System.Windows.Input;
-
-namespace GrafikoMat.Common
-{
-    public sealed class RelayCommand : ICommand
-    {
-        private readonly Action<object?> _execute;
-        private readonly Predicate<object?>? _canExecute;
-
-        public RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute;
-        }
-
-        public event EventHandler? CanExecuteChanged;
-
-        public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
-
-        public void Execute(object? parameter) => _execute(parameter);
-
-        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 }
 ----- END -----
@@ -932,7 +961,72 @@ namespace GrafikoMat.Controls
 }
 ----- END -----
 
-===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (3925 bytes)
+===== FILE: GrafikoMat\Converters\BooleanToVisibilityConverter.cs (786 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
+using System;
+
+namespace GrafikoMat.Converters
+{
+    public class BooleanToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool flag)
+            {
+                return flag ? Visibility.Visible : Visibility.Collapsed;
+            }
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            if (value is Visibility visibility)
+            {
+                return visibility == Visibility.Visible;
+            }
+            return false;
+        }
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\Converters\NullToVisibilityConverter.cs (1002 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
+using System;
+
+namespace GrafikoMat.Converters
+{
+    /// <summary>
+    /// Zwraca Visible, gdy wartość NIE jest null (domyślnie),
+    /// oraz Collapsed, gdy jest null. Można odwrócić logikę przez Invert=true.
+    /// </summary>
+    public class NullToVisibilityConverter : IValueConverter
+    {
+        public bool Invert { get; set; } = false;
+
+        public Visibility NullState { get; set; } = Visibility.Collapsed;
+        public Visibility NotNullState { get; set; } = Visibility.Visible;
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool isNull = value is null;
+            if (Invert) isNull = !isNull;
+            return isNull ? NullState : NotNullState;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotSupportedException();
+    }
+}
+
+----- END -----
+
+===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (3997 bytes)
 ----- BEGIN -----
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
@@ -976,6 +1070,7 @@ namespace GrafikoMat.Controls
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
 		<PackageReference Include="CommunityToolkit.WinUI.Controls.Primitives" Version="8.2.250402" />
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4948" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
@@ -1213,7 +1308,7 @@ namespace GrafikoMat.Controls
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (36334 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (36329 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1240,6 +1335,7 @@ using System.Windows.Input;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT.Interop;
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat
 {
@@ -1270,7 +1366,6 @@ namespace GrafikoMat
         private readonly SupabaseService _supabaseService;
         private DataService? _dataService;
         private AppSettings? _appSettings;
-
         public MainWindow()
         {
             _settingsService = new SettingsService();
@@ -1285,7 +1380,6 @@ namespace GrafikoMat
             InitAppWindow();
             SetupBackdrop();
             ApplyTitleBarMenuStyling();
-
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
@@ -1307,7 +1401,6 @@ namespace GrafikoMat
         private async Task InitializeApplicationAsync()
         {
             await ReloadSettingsAndServicesAsync();
-
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 await ShowFirstTimeSetupAsync();
@@ -1315,7 +1408,6 @@ namespace GrafikoMat
             }
 
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
-
             if (!restored && !_supabaseService.IsAuthenticated)
             {
                 bool loggedIn = await ShowLoginScreenAsync();
@@ -1398,7 +1490,6 @@ namespace GrafikoMat
                 IsPrimaryButtonEnabled = false,
                 XamlRoot = this.Content.XamlRoot
             };
-
             var tcs = new TaskCompletionSource();
             setupView.ReloadRequired += () =>
             {
@@ -1420,10 +1511,8 @@ namespace GrafikoMat
         {
             if (_supabaseService != null && _supabaseService.IsAuthenticated)
                 return true;
-
             var tcs = new TaskCompletionSource<bool>();
             var loginView = new LoginView(_supabaseService!);
-
             loginView.CancelRequested += () =>
             {
                 LoginOverlay.Content = null;
@@ -1481,7 +1570,6 @@ namespace GrafikoMat
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
-
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -1494,7 +1582,6 @@ namespace GrafikoMat
         private async void SwitchToManagement()
         {
             if (_isClosing) return;
-
             if (_dataService == null)
             {
                 await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację połączenia w ustawieniach.");
@@ -1511,32 +1598,32 @@ namespace GrafikoMat
         private void BuildActionsForDashboard()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Ustawienia", new RelayCommand(_ => SwitchToSettings())));
-            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(_ => SwitchToDeclarations())));
-            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(_ => SwitchToManagement())));
-            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(_ => GenerateRosterPlaceholder())));
-            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(_ => ExportPlaceholder())));
+            Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
+            Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
+            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
+            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(GenerateRosterPlaceholder)));
+            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
         private void BuildActionsForDeclarations()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(_ => _declarationsView.TriggerClearSelection())));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(_ => _declarationsView.TriggerSave())));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(_ => _declarationsView.TriggerSaveAndClose())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => _declarationsView.TriggerClearSelection())));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => _declarationsView.TriggerSave())));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(() => _declarationsView.TriggerSaveAndClose())));
         }
 
         private void BuildActionsForSettings()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private void BuildActionsForManage()
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(_ => SwitchToDashboard())));
+            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         #endregion
@@ -1550,7 +1637,6 @@ namespace GrafikoMat
 
             var sbExit = new Storyboard();
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             if (ViewportCurrent.Content == _declarationsView)
             {
                 var leftCol = _declarationsView.LeftColumn;
@@ -1714,7 +1800,6 @@ namespace GrafikoMat
 
             cur.Opacity = 1;
             nxt.Opacity = 0;
-
             var ch = TryGetHeader(cur.Content);
             var nh = TryGetHeader(nxt.Content);
 
@@ -1743,7 +1828,6 @@ namespace GrafikoMat
             }
 
             if (ReferenceEquals(ViewportCurrent.Content, nextView)) return;
-
             if (_isAnimating)
             {
                 DetachFromParent(nextView);
@@ -1802,7 +1886,6 @@ namespace GrafikoMat
             var dur = TimeSpan.FromMilliseconds(280);
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
-
             var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
             Storyboard.SetTarget(curX, curPresenter);
             Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
@@ -1854,7 +1937,6 @@ namespace GrafikoMat
             catch { }
 
             if (_isClosing) return;
-
             ViewportNext.Content = null;
             ViewportCurrent.Content = nextView;
             ResetViewportState();
@@ -1898,7 +1980,6 @@ namespace GrafikoMat
         private void OnDeclCloseOnly() => SwitchToDashboard();
         private async void GenerateRosterPlaceholder() => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-
         private async void TitleBarSignOutAndClose_Click(object sender, RoutedEventArgs e)
         {
             try { await _supabaseService.SignOutAsync(); } catch { }
@@ -1929,7 +2010,6 @@ namespace GrafikoMat
 
             var pad = TopBarRow.Padding;
             TopBarRow.Padding = new Thickness(pad.Left, pad.Top, tb.RightInset, pad.Bottom);
-
             TitleBarMenuButton.Height = TopBarRow.Height;
             TitleBarMenuButton.MinWidth = 46;
             TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
@@ -1939,7 +2019,6 @@ namespace GrafikoMat
             var fgBase = tb.ButtonForegroundColor.HasValue ? new SolidColorBrush(tb.ButtonForegroundColor.Value) : new SolidColorBrush(Colors.White);
             var bgHover = tb.ButtonHoverBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonHoverBackgroundColor.Value) : new SolidColorBrush(fallbackHover);
             var bgPress = tb.ButtonPressedBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonPressedBackgroundColor.Value) : bgHover;
-
             TitleBarMenuButton.Background = bgBase;
             TitleBarMenuButton.Foreground = fgBase;
             TitleBarMenuButton.Resources["ButtonBackground"] = bgBase;
@@ -2001,7 +2080,6 @@ namespace GrafikoMat
         {
             if (_isClosing) return;
             bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-
             if (!isMaximized)
             {
                 try
@@ -2180,10 +2258,11 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\DataService.cs (4784 bytes)
+===== FILE: GrafikoMat\Services\DataService.cs (5554 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using GrafikoMat.Core.Data;
@@ -2212,6 +2291,9 @@ namespace GrafikoMat.Services
 
         public async Task<List<Unit>> GetAllUnitsAsync()
         {
+            // ZMIANA: Poprawiamy błędny zapis na ostatecznie poprawny: _supabase.Postgrest.BaseUrl
+            Debug.WriteLine($"[DataService.GetAllUnitsAsync] Stan klienta: {(_supabase == null ? "NULL" : "OK")}, Auth: {(_supabase?.Auth?.CurrentUser == null ? "Brak" : "OK")}, URL: {_supabase?.Postgrest.BaseUrl}");
+
             var response = await _supabase.From<Unit>().Get();
             return response.Models ?? new List<Unit>();
         }
@@ -2227,16 +2309,13 @@ namespace GrafikoMat.Services
         public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
             if (_supabase.Auth.CurrentUser?.Id is null) return null;
-
             var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
             var response = await _supabase.From<DoctorProfile>()
                 .Where(d => d.Id == userId)
                 .Single();
-
             return response;
         }
 
-        // ZMIANA: Poprawiona metoda aktualizacji flagi, używająca instancji modelu.
         public async Task ClearPasswordChangeFlagAsync(Guid doctorId)
         {
             var partialUpdate = new DoctorProfile
@@ -2244,9 +2323,25 @@ namespace GrafikoMat.Services
                 Id = doctorId,
                 RequiresPasswordChange = false
             };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
 
-            // Metoda Update() użyje atrybutu [PrimaryKey] z modelu DoctorProfile,
-            // aby poprawnie zidentyfikować wiersz do aktualizacji.
+        public async Task ResetPasswordAsync(Guid doctorId, string newPassword)
+        {
+            await _supabase.Rpc("admin_reset_user_password", new
+            {
+                user_id = doctorId,
+                password_to_set = newPassword
+            });
+        }
+
+        public async Task SetPasswordChangeFlagAsync(Guid doctorId)
+        {
+            var partialUpdate = new DoctorProfile
+            {
+                Id = doctorId,
+                RequiresPasswordChange = true
+            };
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
@@ -2256,12 +2351,12 @@ namespace GrafikoMat.Services
             if (profile.Id == Guid.Empty)
             {
                 await _supabase.Auth.SignUp(profile.Email, editorViewModel.Password);
-
                 var userId = _supabase.Auth.CurrentUser?.Id;
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
 
                 profile.Id = Guid.Parse(userId);
+                profile.RequiresPasswordChange = true;
 
                 await _supabase.From<DoctorProfile>().Insert(profile);
             }
@@ -2641,19 +2736,19 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ChangePasswordViewModel.cs (2413 bytes)
+===== FILE: GrafikoMat\ViewModels\ChangePasswordViewModel.cs (2408 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Services;
 using System;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat.ViewModels
 {
     public class ChangePasswordViewModel : ObservableObject
     {
         private readonly SupabaseService _supabaseService;
-
         public event Action<string>? OnError;
         public event Action? OnSuccess;
 
@@ -2665,7 +2760,7 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _newPassword, value))
                 {
-                    SavePasswordCommand.RaiseCanExecuteChanged();
+                    SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
@@ -2678,19 +2773,19 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _confirmPassword, value))
                 {
-                    SavePasswordCommand.RaiseCanExecuteChanged();
+                    SavePasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
 
-        public RelayCommand SavePasswordCommand { get; }
+        public AsyncRelayCommand SavePasswordCommand { get; }
 
         public ChangePasswordViewModel(SupabaseService supabaseService)
         {
             _supabaseService = supabaseService;
-            SavePasswordCommand = new RelayCommand(
-                async _ => await SavePasswordAsync(),
-                _ => CanSavePassword());
+            SavePasswordCommand = new AsyncRelayCommand(
+                SavePasswordAsync,
+                CanSavePassword);
         }
 
         private bool CanSavePassword()
@@ -2700,7 +2795,7 @@ namespace GrafikoMat.ViewModels
 
         private async Task SavePasswordAsync()
         {
-            OnError?.Invoke(string.Empty); // Clear previous errors
+            OnError?.Invoke(string.Empty);
 
             if (NewPassword.Length < 8)
             {
@@ -3012,7 +3107,7 @@ namespace GrafikoMat.ViewModels
 
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DoctorEditorViewModel.cs (7521 bytes)
+===== FILE: GrafikoMat\ViewModels\DoctorEditorViewModel.cs (8107 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -3020,7 +3115,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace GrafikoMat.ViewModels
@@ -3030,8 +3124,13 @@ namespace GrafikoMat.ViewModels
         public DoctorProfile Profile { get; }
         public ObservableCollection<UnitAssignmentViewModel> Assignments { get; } = new();
         private readonly HashSet<string> _existingAbbreviations;
-
         public bool IsNewDoctor => Profile.Id == Guid.Empty;
+
+        private bool _showPasswordSection;
+        public bool ShowPasswordSection { get => _showPasswordSection; set => SetProperty(ref _showPasswordSection, value); }
+
+        private bool _showResetButton;
+        public bool ShowResetButton { get => _showResetButton; set => SetProperty(ref _showResetButton, value); }
 
         #region Właściwości-opakowania z logiką
 
@@ -3040,12 +3139,12 @@ namespace GrafikoMat.ViewModels
             get => Profile.FirstName;
             set
             {
-                var sanitizedValue = SanitizeName(value);
-                if (Profile.FirstName != sanitizedValue)
+                if (Profile.FirstName != value)
                 {
-                    Profile.FirstName = sanitizedValue;
+                    Profile.FirstName = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsValid));
+                    OnPropertyChanged(nameof(NameErrorMessage));
                 }
             }
         }
@@ -3055,16 +3154,16 @@ namespace GrafikoMat.ViewModels
             get => Profile.LastName;
             set
             {
-                var sanitizedValue = SanitizeName(value);
-                if (Profile.LastName != sanitizedValue)
+                if (Profile.LastName != value)
                 {
-                    Profile.LastName = sanitizedValue;
+                    Profile.LastName = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsValid));
-                    if (!string.IsNullOrWhiteSpace(sanitizedValue))
+                    if (!string.IsNullOrWhiteSpace(value))
                     {
                         GenerateAbbreviation();
                     }
+                    OnPropertyChanged(nameof(NameErrorMessage));
                 }
             }
         }
@@ -3101,22 +3200,23 @@ namespace GrafikoMat.ViewModels
         }
 
         private string _password = string.Empty;
-        public string Password
-        {
-            get => _password;
-            set
-            {
-                if (SetProperty(ref _password, value))
-                {
-                    OnPropertyChanged(nameof(IsValid));
-                    OnPropertyChanged(nameof(PasswordErrorMessage));
-                }
-            }
-        }
-
+        public string Password { get => _password; set => SetProperty(ref _password, value); }
         #endregion
 
         #region Właściwości dla komunikatów o błędach
+
+        public string NameErrorMessage
+        {
+            get
+            {
+                var validNameRegex = new Regex(@"^[\p{L}\s-]*$");
+                if (!validNameRegex.IsMatch(FirstName) || !validNameRegex.IsMatch(LastName))
+                {
+                    return "Imię i nazwisko mogą zawierać tylko litery, spacje i myślniki.";
+                }
+                return string.Empty;
+            }
+        }
 
         public string AbbreviationErrorMessage
         {
@@ -3138,18 +3238,6 @@ namespace GrafikoMat.ViewModels
                 return string.Empty;
             }
         }
-
-        public string PasswordErrorMessage
-        {
-            get
-            {
-                if (!IsNewDoctor) return string.Empty;
-                if (string.IsNullOrWhiteSpace(Password)) return "Hasło jest wymagane.";
-                if (Password.Length < 8) return "Hasło musi mieć min. 8 znaków.";
-                return string.Empty;
-            }
-        }
-
         #endregion
 
         public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations)
@@ -3159,7 +3247,14 @@ namespace GrafikoMat.ViewModels
 
             if (IsNewDoctor)
             {
-                Password = "GrafikoMat123!";
+                Password = PasswordGenerator.GenerateInitialPassword();
+                ShowPasswordSection = true;
+                ShowResetButton = false;
+            }
+            else
+            {
+                ShowPasswordSection = false;
+                ShowResetButton = true;
             }
 
             foreach (var unit in allUnits.OrderBy(u => u.Name))
@@ -3169,10 +3264,22 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private string SanitizeName(string name)
+        public void SetNewGeneratedPassword(string newPassword)
+        {
+            Password = newPassword;
+            ShowPasswordSection = true;
+            ShowResetButton = false;
+        }
+
+        public string SanitizeName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-            var cleaned = Regex.Replace(Regex.Replace(name.Trim(), @"\s*-\s*", "-"), @"\s+", " ");
+
+            var cleaned = name.Trim();
+            cleaned = Regex.Replace(cleaned, @"\s+", " ");
+            cleaned = Regex.Replace(cleaned, @"\s*-\s*", "-");
+            cleaned = Regex.Replace(cleaned, "-+", "-");
+
             var parts = cleaned.Split(' ');
             var resultParts = parts.Select(part =>
             {
@@ -3184,6 +3291,7 @@ namespace GrafikoMat.ViewModels
                 });
                 return string.Join("-", resultSubParts);
             });
+
             return string.Join(" ", resultParts);
         }
 
@@ -3203,16 +3311,15 @@ namespace GrafikoMat.ViewModels
             Abbreviation = newAbbreviation;
         }
 
-        // ZMIANA: Dodano wywołanie OnPropertyChanged dla IsValid
         public bool IsValid
         {
             get
             {
                 return !string.IsNullOrWhiteSpace(FirstName)
                     && !string.IsNullOrWhiteSpace(LastName)
+                    && string.IsNullOrEmpty(NameErrorMessage)
                     && string.IsNullOrEmpty(AbbreviationErrorMessage)
-                    && string.IsNullOrEmpty(EmailErrorMessage)
-                    && string.IsNullOrEmpty(PasswordErrorMessage);
+                    && string.IsNullOrEmpty(EmailErrorMessage);
             }
         }
 
@@ -3234,7 +3341,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (7514 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (7479 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -3248,6 +3355,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -3292,8 +3400,8 @@ namespace GrafikoMat.ViewModels
         public MainViewModel(IDoctorRepository? doctorRepository = null)
         {
             _doctorRepository = doctorRepository;
-            SwitchToPreviousUnitCommand = new RelayCommand(_ => { });
-            SwitchToNextUnitCommand = new RelayCommand(_ => { });
+            SwitchToPreviousUnitCommand = new RelayCommand(() => { });
+            SwitchToNextUnitCommand = new RelayCommand(() => { });
             UpdateRosterForSelectedMonth();
         }
 
@@ -3302,7 +3410,6 @@ namespace GrafikoMat.ViewModels
             _doctorRepository = doctorRepository;
         }
 
-        // ZMIANA: Sygnatura zmieniona z 'async void' na 'async Task'
         public async Task LoadDoctorsAsync()
         {
             if (_doctorRepository == null)
@@ -3337,7 +3444,6 @@ namespace GrafikoMat.ViewModels
         }
 
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
-
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
         public void PrevMonth() { if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); } else SelectedMonthIndex -= 1; }
@@ -3378,31 +3484,31 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (6193 bytes)
+===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (12213 bytes)
 ----- BEGIN -----
+using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
     public class ManagementViewModel : ObservableObject
     {
         private readonly DataService? _dataService;
-        private readonly DispatcherQueue? _dispatcherQueue;
-
-        // ZMIANA: Flaga do ostatecznego przerwania pętli rekurencji.
-        private bool _isSelectionChanging = false;
+        private readonly DispatcherQueue? _dispatcher;
 
         public ObservableCollection<DoctorProfile> AllDoctors { get; } = new();
+
         private List<Unit> _allUnits = new();
 
         private DoctorProfile? _selectedDoctor;
@@ -3411,35 +3517,15 @@ namespace GrafikoMat.ViewModels
             get => _selectedDoctor;
             set
             {
-                // Jeśli jesteśmy w trakcie zmiany, ignorujemy wszystkie przychodzące wywołania.
-                if (_isSelectionChanging) return;
-
-                // Sprawdzamy, czy nowa wartość faktycznie się różni od starej, aby uniknąć zbędnej pracy.
-                if (object.ReferenceEquals(_selectedDoctor, value)) return;
-
-                _isSelectionChanging = true;
-
-                // Używamy SetProperty do aktualizacji pola i powiadomienia UI.
-                SetProperty(ref _selectedDoctor, value);
-
-                if (_selectedDoctor != null)
+                if (SetProperty(ref _selectedDoctor, value))
                 {
-                    // Jeśli wybrano istniejącego lekarza, ładujemy jego dane.
-                    LoadEditorFor(_selectedDoctor);
+                    LoadEditorFor(value);
+                    ResetPasswordCommand.NotifyCanExecuteChanged();
                 }
-                else
-                {
-                    // Jeśli odznaczono lekarza, upewniamy się, że edytor jest pusty,
-                    // chyba że jest to edytor dla nowego lekarza.
-                    if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
-                    {
-                        EditorViewModel = null;
-                    }
-                }
-
-                _isSelectionChanging = false;
             }
         }
+
+        public bool IsDoctorSelectedAndNotNew => SelectedDoctor != null && (EditorViewModel != null && !EditorViewModel.IsNewDoctor);
 
         private DoctorEditorViewModel? _editorViewModel;
         public DoctorEditorViewModel? EditorViewModel
@@ -3451,108 +3537,272 @@ namespace GrafikoMat.ViewModels
                 {
                     _editorViewModel.PropertyChanged -= Editor_PropertyChanged;
                 }
-
                 if (SetProperty(ref _editorViewModel, value))
                 {
                     if (_editorViewModel != null)
                     {
                         _editorViewModel.PropertyChanged += Editor_PropertyChanged;
                     }
-                    SaveDoctorCommand.RaiseCanExecuteChanged();
+                    SaveDoctorCommand.NotifyCanExecuteChanged();
+                    ResetPasswordCommand.NotifyCanExecuteChanged();
                 }
             }
         }
 
-        public ICommand AddNewDoctorCommand { get; }
-        public RelayCommand SaveDoctorCommand { get; }
+        private bool _isLoading;
+        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
+
+        private bool _isStatusMessageOpen;
+        public bool IsStatusMessageOpen { get => _isStatusMessageOpen; set => SetProperty(ref _isStatusMessageOpen, value); }
+
+        private string _statusMessageTitle = string.Empty;
+        public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
+
+        private string _statusMessage = string.Empty;
+        public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+
+        private InfoBarSeverity _statusMessageSeverity;
+        public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set => SetProperty(ref _statusMessageSeverity, value); }
+
+        // FIX: zmieniamy na AsyncRelayCommand, bo AddNewDoctor musi awaitować dogranie jednostek
+        public AsyncRelayCommand AddNewDoctorCommand { get; }
+        public AsyncRelayCommand SaveDoctorCommand { get; }
+        public AsyncRelayCommand ResetPasswordCommand { get; }
 
         public ManagementViewModel(DataService? dataService, DispatcherQueue? dispatcher)
         {
             _dataService = dataService;
-            _dispatcherQueue = dispatcher;
+            _dispatcher = dispatcher;
 
-            AddNewDoctorCommand = new RelayCommand(AddNewDoctor);
-            SaveDoctorCommand = new RelayCommand(
-                execute: _ => { _ = SaveDoctorAsync(); },
-                canExecute: _ => EditorViewModel?.IsValid ?? false);
+            // FIX: AsyncRelayCommand zamiast RelayCommand
+            AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
+            SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
+            ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
+        }
 
-            if (_dataService != null)
-            {
-                Task.Run(LoadInitialDataAsync);
-            }
+        public async Task InitializeAsync()
+        {
+            await LoadInitialDataAsync();
         }
 
         private void Editor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            SaveDoctorCommand.RaiseCanExecuteChanged();
+            if (e.PropertyName == nameof(EditorViewModel.IsValid))
+            {
+                SaveDoctorCommand.NotifyCanExecuteChanged();
+            }
+            if (e.PropertyName == nameof(EditorViewModel.ShowResetButton))
+            {
+                ResetPasswordCommand.NotifyCanExecuteChanged();
+            }
+        }
+
+        private async Task EnsureUnitsLoadedAsync()
+        {
+            if (_allUnits.Count > 0 || _dataService == null)
+                return;
+
+            _dispatcher?.TryEnqueue(() => IsLoading = true);
+            try
+            {
+                // nie mieszamy tu lekarzy, ładujemy tylko jednostki, by było szybciej
+                _allUnits = await _dataService.GetAllUnitsAsync();
+            }
+            finally
+            {
+                _dispatcher?.TryEnqueue(() => IsLoading = false);
+            }
         }
 
         private async Task LoadInitialDataAsync()
         {
             if (_dataService == null) return;
-
             var previouslySelectedId = SelectedDoctor?.Id;
 
-            _dispatcherQueue?.TryEnqueue(() =>
+            _dispatcher?.TryEnqueue(() => IsLoading = true);
+            try
             {
-                AllDoctors.Clear();
-            });
+                var doctors = await _dataService.GetAllDoctorsAsync();
+                _allUnits = await _dataService.GetAllUnitsAsync();
 
-            var doctors = await _dataService.GetAllDoctorsAsync();
-            var units = await _dataService.GetAllUnitsAsync();
+                _dispatcher?.TryEnqueue(() =>
+                {
+                    AllDoctors.Clear();
+                    foreach (var doctor in doctors.OrderBy(d => d.LastName))
+                    {
+                        AllDoctors.Add(doctor);
+                    }
 
-            _allUnits = units;
-
-            _dispatcherQueue?.TryEnqueue(() =>
+                    if (previouslySelectedId != null)
+                    {
+                        SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
+                    }
+                });
+            }
+            catch (Exception ex)
             {
-                foreach (var doctor in doctors.OrderBy(d => d.LastName))
-                {
-                    AllDoctors.Add(doctor);
-                }
-
-                if (previouslySelectedId != null)
-                {
-                    SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
-                }
-            });
+                ShowStatusMessage("Błąd ładowania danych", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
+            }
+            finally
+            {
+                _dispatcher?.TryEnqueue(() => IsLoading = false);
+            }
         }
 
-        private async void LoadEditorFor(DoctorProfile doctorProfile)
+        // FIX: async + upewniamy się, że mamy listę jednostek
+        private async Task AddNewDoctorAsync()
         {
-            if (_dataService == null) return;
+            await EnsureUnitsLoadedAsync();
+            if (_allUnits.Count == 0)
+            {
+                ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
+                return;
+            }
 
-            var existingAbbreviations = AllDoctors
-                .Where(d => d.Id != doctorProfile.Id)
-                .Select(d => d.Abbreviation);
-
-            var currentAssignments = await _dataService.GetAssignmentsForDoctorAsync(doctorProfile.Id);
-
-            EditorViewModel = new DoctorEditorViewModel(doctorProfile, _allUnits, currentAssignments, existingAbbreviations);
-        }
-
-        private void AddNewDoctor(object? obj)
-        {
-            // ZMIANA: Uproszczona i bezpieczna logika.
-            // Najpierw odznaczamy cokolwiek jest na liście. Setter SelectedDoctor
-            // bezpiecznie wyczyści edytor.
             SelectedDoctor = null;
-
-            // Dopiero teraz tworzymy edytor dla nowego użytkownika.
-            var newProfile = new DoctorProfile { Id = Guid.Empty };
-            var existingAbbreviations = AllDoctors.Select(d => d.Abbreviation);
-            EditorViewModel = new DoctorEditorViewModel(newProfile, _allUnits, new List<UnitDoctorAssignment>(), existingAbbreviations);
+            EditorViewModel = new DoctorEditorViewModel(
+                new DoctorProfile { Id = Guid.Empty },
+                new List<Unit>(_allUnits),
+                new List<UnitDoctorAssignment>(),
+                AllDoctors.Select(d => d.Abbreviation)
+            );
         }
 
-        private async Task SaveDoctorAsync()
+        private async Task SaveDoctor()
         {
-            if (_dataService == null || EditorViewModel == null) return;
-            if (!EditorViewModel.IsValid) return;
+            if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
+            IsLoading = true;
+            HideStatusMessage();
 
-            await _dataService.SaveDoctorAsync(EditorViewModel);
-            await LoadInitialDataAsync();
+            try
+            {
+                var savedProfileId = EditorViewModel.Profile.Id;
+                await _dataService.SaveDoctorAsync(EditorViewModel);
+                await LoadInitialDataAsync();
+
+                _dispatcher?.TryEnqueue(() =>
+                {
+                    SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == savedProfileId);
+                });
+                ShowStatusMessage("Sukces!", "Dane zostały pomyślnie zapisane.", InfoBarSeverity.Success);
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage("Błąd zapisu", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
+            }
+            finally
+            {
+                _dispatcher?.TryEnqueue(() => IsLoading = false);
+            }
+        }
+
+        private async Task ResetPassword()
+        {
+            if (SelectedDoctor == null || EditorViewModel == null || _dataService == null) return;
+            var confirmDialog = new ContentDialog
+            {
+                Title = "Potwierdź resetowanie hasła",
+                Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.FirstName} {SelectedDoctor.LastName}?",
+                PrimaryButtonText = "Resetuj",
+                CloseButtonText = "Anuluj",
+                XamlRoot = App.MainWindow.Content.XamlRoot
+            };
+            var result = await confirmDialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                IsLoading = true;
+                HideStatusMessage();
+                try
+                {
+                    var newPassword = PasswordGenerator.GenerateInitialPassword();
+                    await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
+                    await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
+                    EditorViewModel.SetNewGeneratedPassword(newPassword);
+                    ShowStatusMessage("Sukces!", $"Hasło zostało zresetowane. Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success);
+                }
+                catch (Exception ex)
+                {
+                    ShowStatusMessage("Błąd resetowania hasła", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
+                }
+                finally
+                {
+                    _dispatcher?.TryEnqueue(() => IsLoading = false);
+                }
+            }
+        }
+
+        private async void LoadEditorFor(DoctorProfile? doctorProfile)
+        {
+            if (doctorProfile == null)
+            {
+                if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
+                {
+                    EditorViewModel = null;
+                }
+                return;
+            }
+
+            IsLoading = true;
+            try
+            {
+                if (_dataService == null) return;
+
+                // FIX: dopilnuj, że mamy jednostki przed zbudowaniem edytora
+                await EnsureUnitsLoadedAsync();
+                if (_allUnits.Count == 0)
+                {
+                    ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
+                    EditorViewModel = null;
+                    return;
+                }
+
+                var existingAbbreviations = AllDoctors
+                    .Where(d => d.Id != doctorProfile.Id)
+                    .Select(d => d.Abbreviation);
+                var currentAssignments = await _dataService.GetAssignmentsForDoctorAsync(doctorProfile.Id);
+
+                EditorViewModel = new DoctorEditorViewModel(
+                    (DoctorProfile)doctorProfile.Clone(),
+                    new List<Unit>(_allUnits),
+                    currentAssignments,
+                    existingAbbreviations
+                );
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage("Błąd ładowania edytora", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
+                EditorViewModel = null;
+            }
+            finally
+            {
+                _dispatcher?.TryEnqueue(() => IsLoading = false);
+            }
+        }
+
+        private void ShowStatusMessage(string title, string message, InfoBarSeverity severity)
+        {
+            _dispatcher?.TryEnqueue(() =>
+            {
+                StatusMessageTitle = title;
+                StatusMessage = message;
+                StatusMessageSeverity = severity;
+                IsStatusMessageOpen = true;
+            });
+        }
+
+        public void HideStatusMessage()
+        {
+            _dispatcher?.TryEnqueue(() =>
+            {
+                IsStatusMessageOpen = false;
+                StatusMessage = string.Empty;
+                StatusMessageTitle = string.Empty;
+            });
         }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\ViewModels\UnitAssignmentViewModel.cs (890 bytes)
@@ -4316,7 +4566,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ManagementView.xaml (7266 bytes)
+===== FILE: GrafikoMat\Views\ManagementView.xaml (8984 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.ManagementView"
@@ -4326,7 +4576,15 @@ namespace GrafikoMat.Views
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:data="using:GrafikoMat.Core.Data"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:conv="using:GrafikoMat.Converters"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+    </UserControl.Resources>
+
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -4334,6 +4592,7 @@ namespace GrafikoMat.Views
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
+        <!-- LEWA KOLUMNA: lista lekarzy + akcje -->
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -4352,102 +4611,136 @@ namespace GrafikoMat.Views
                       SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="data:DoctorProfile">
-                        <StackPanel Margin="12,8">
-                            <TextBlock FontWeight="SemiBold"><Run Text="{x:Bind LastName}"/><Run Text=" "/><Run Text="{x:Bind FirstName}"/></TextBlock>
-                            <TextBlock Text="{x:Bind Email}" Opacity="0.8" FontSize="12"/>
+                        <StackPanel Margin="8,6" Spacing="2">
+                            <TextBlock Text="{x:Bind LastName}" Style="{ThemeResource BaseTextBlockStyle}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{x:Bind FirstName}" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                            <TextBlock Text="{x:Bind Abbreviation}" Style="{ThemeResource CaptionTextBlockStyle}" Opacity="0.7"/>
                         </StackPanel>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
         </Grid>
 
+        <!-- PRAWA KOLUMNA: edytor lekarza -->
         <Grid Grid.Column="1" Padding="24">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
-                <FontIcon Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0"
-                           Style="{ThemeResource BodyStrongTextBlockStyle}"/>
-            </StackPanel>
+            <Grid>
+                <!-- Nakładka ładowania -->
+                <Grid Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
+                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
+                    <ProgressRing IsActive="True" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="Dane Główne" Style="{ThemeResource TitleTextBlockStyle}"/>
+                <!-- Pusty stan: nic nie wybrano -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                    <!-- Uwaga: jeśli nie masz ObjectToVisibilityConverter, możesz zamienić na Bind do boola ShowEmptyState -->
+                </StackPanel>
+            </Grid>
 
-                    <Grid ColumnSpacing="12" RowSpacing="4">
+            <ScrollViewer>
+                <StackPanel Spacing="12">
+
+                    <!-- Główne nagłówki / dane -->
+                    <TextBlock Text="Dane dyżurnego" Style="{ThemeResource TitleTextBlockStyle}"/>
+
+                    <Grid ColumnSpacing="12" RowSpacing="8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Imię:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay}"/>
+                        <TextBlock Text="Imię" Grid.ColumnSpan="2" Style="{ThemeResource CaptionTextBlockStyle}"/>
+                        <TextBox Grid.Row="1" Grid.Column="0"
+                                 Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBox Grid.Row="1" Grid.Column="1"
+                                 Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="Nazwisko:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay}"/>
+                        <TextBlock Text="Skrót" Grid.Row="2" Grid.ColumnSpan="2" Style="{ThemeResource CaptionTextBlockStyle}" Margin="0,8,0,0"/>
+                        <TextBox Grid.Row="3" Grid.ColumnSpan="2"
+                                 Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Email:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-
-                        <TextBlock Grid.Row="2" Grid.Column="1"
-                                   Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}"
-                                   Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
-
-                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Skrót:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="1" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-
-                        <TextBlock Grid.Row="2" Grid.Column="3"
-                                   Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}"
-                                   Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
+                        <TextBlock Text="Email" Grid.Row="4" Grid.ColumnSpan="2" Style="{ThemeResource CaptionTextBlockStyle}" Margin="0,8,0,0"/>
+                        <TextBox Grid.Row="5" Grid.ColumnSpan="2"
+                                 Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </Grid>
 
-                    <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}"/>
+                    <!-- Reset hasła (gdy istniejący użytkownik) -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Text="Przypisania i Aktywność w Jednostkach" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments}">
+                        <Button Content="Resetuj hasło użytkownika"
+                                Command="{x:Bind ViewModel.ResetPasswordCommand}"
+                                Visibility="{x:Bind ViewModel.EditorViewModel.ShowResetButton, Mode=OneWay}"
+                                HorizontalAlignment="Left"/>
+                    </Grid>
+
+                    <CheckBox Content="Administrator Systemu"
+                              IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}"
+                              Margin="0,12,0,0"/>
+
+                    <!-- LISTA JEDNOSTEK + aktywność -->
+                    <TextBlock Text="Przypisania i Aktywność"
+                               Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
+
+                    <!-- KLUCZOWA ZMIANA: OneWay, by odświeżało się po podmianie EditorViewModel -->
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:UnitAssignmentViewModel">
                                 <Grid Margin="0,8" Padding="12" CornerRadius="4" Background="{ThemeResource LayerFillColorDefaultBrush}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <CheckBox Grid.Column="0" Content="{x:Bind UnitName}" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"/>
-                                    <ToggleSwitch Grid.Column="1" Header="Aktywny" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
+                                    <CheckBox Grid.Column="0"
+                                              Content="{x:Bind UnitName}"
+                                              IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"/>
+
+                                    <ToggleSwitch Grid.Column="1"
+                                                  Header="Aktywna"
+                                                  IsOn="{x:Bind IsActive, Mode=TwoWay}"
+                                                  IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Pasek statusu -->
+                    <controls:InfoBar
+                        x:Name="StatusInfoBar"
+                        Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}"
+                        Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                        IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}"
+                        Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}"
+                        CornerRadius="4"
+                        Margin="0,12,0,0"/>
 
                     <Button Content="Zapisz zmiany"
                             Command="{x:Bind ViewModel.SaveDoctorCommand}"
                             Style="{StaticResource AccentButtonStyle}"
                             HorizontalAlignment="Right"
                             Margin="0,24,0,0"/>
-
                 </StackPanel>
             </ScrollViewer>
         </Grid>
     </Grid>
 </UserControl>
+
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ManagementView.xaml.cs (719 bytes)
+===== FILE: GrafikoMat\Views\ManagementView.xaml.cs (1716 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
-using Microsoft.UI.Dispatching; // ZMIANA: Dodajemy ten using
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace GrafikoMat.Views
 {
@@ -4455,13 +4748,36 @@ namespace GrafikoMat.Views
     {
         public ManagementViewModel ViewModel { get; }
 
-        // ZMIANA: Konstruktor przyjmuje DispatcherQueue.
         public ManagementView(DataService dataService, DispatcherQueue dispatcher)
         {
             this.InitializeComponent();
-            // ZMIANA: Przekazujemy dispatcher dalej do ViewModelu.
             ViewModel = new ManagementViewModel(dataService, dispatcher);
-            this.DataContext = ViewModel;
+            this.Loaded += ManagementView_Loaded;
+        }
+
+        private async void ManagementView_Loaded(object sender, RoutedEventArgs e)
+        {
+            this.Loaded -= ManagementView_Loaded;
+            await ViewModel.InitializeAsync();
+        }
+
+        private void CopyPassword_Click(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.EditorViewModel != null && !string.IsNullOrEmpty(ViewModel.EditorViewModel.Password))
+            {
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(ViewModel.EditorViewModel.Password);
+                Clipboard.SetContent(dataPackage);
+            }
+        }
+
+        private void NameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel.EditorViewModel != null)
+            {
+                ViewModel.EditorViewModel.FirstName = ViewModel.EditorViewModel.SanitizeName(ViewModel.EditorViewModel.FirstName);
+                ViewModel.EditorViewModel.LastName = ViewModel.EditorViewModel.SanitizeName(ViewModel.EditorViewModel.LastName);
+            }
         }
     }
 }
@@ -4769,7 +5085,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (4278 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (4386 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
@@ -4777,6 +5093,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -4795,13 +5112,15 @@ namespace GrafikoMat.Views.Settings
         public async void Initialize(DataService service)
         {
             _dataService = service;
+
+            // ZMIANA: Dodajemy logowanie diagnostyczne
+            Debug.WriteLine("[UnitsSettingsView] Inicjalizacja i próba załadowania jednostek...");
             await LoadUnitsAsync();
         }
 
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
-
             Units.Clear();
             var unitsFromDb = await _dataService.GetAllUnitsAsync();
             foreach (var unit in unitsFromDb.OrderBy(u => u.Name))
@@ -4853,7 +5172,6 @@ namespace GrafikoMat.Views.Settings
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
-
             var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, hospitalNameTextBox, departmentNameTextBox } };
 
             var dialog = new ContentDialog
@@ -4864,7 +5182,6 @@ namespace GrafikoMat.Views.Settings
                 CloseButtonText = "Anuluj",
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = this.XamlRoot,
-                // ZMIANA: Ustawiamy stałą, większą szerokość okna
                 MinWidth = 700,
                 MaxWidth = 700
             };
@@ -4879,7 +5196,6 @@ namespace GrafikoMat.Views.Settings
                     HospitalFullName = hospitalNameTextBox.Text,
                     DepartmentName = departmentNameTextBox.Text
                 };
-
                 await _dataService.SaveUnitAsync(unitToSave);
                 await LoadUnitsAsync();
             }

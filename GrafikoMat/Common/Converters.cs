@@ -7,14 +7,12 @@ using Windows.UI;
 
 namespace GrafikoMat.Common
 {
-    // ZMIANA: Dodajemy nową, brakującą klasę konwertera
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
 
-            // Obsługa parametru "Inverse", aby można było odwrócić logikę
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;

@@ -18,7 +18,12 @@ namespace GrafikoMat.ViewModels
         private readonly DataService? _dataService;
         private readonly DispatcherQueue? _dispatcher;
 
-        public ObservableCollection<DoctorProfile> AllDoctors { get; } = new();
+        // ZMIANA: Ta kolekcja będzie teraz przechowywać pełną, niefiltrowaną listę lekarzy
+        private readonly List<DoctorProfile> _allDoctorsMasterList = new();
+
+        // ZMIANA: Nowa kolekcja, powiązana z UI, przechowująca odfiltrowane wyniki
+        public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
+
         private List<Unit> _allUnits = new();
 
         private DoctorProfile? _selectedDoctor;
@@ -35,8 +40,21 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        public bool IsDoctorSelectedAndNotNew => SelectedDoctor != null && (EditorViewModel != null && !EditorViewModel.IsNewDoctor);
+        // ZMIANA: Nowa właściwość dla pola wyszukiwania
+        private string _searchText = string.Empty;
+        public string SearchText
+        {
+            get => _searchText;
+            set
+            {
+                if (SetProperty(ref _searchText, value))
+                {
+                    FilterDoctors();
+                }
+            }
+        }
 
+        public bool IsDoctorSelectedAndNotNew => SelectedDoctor != null && (EditorViewModel != null && !EditorViewModel.IsNewDoctor);
         private DoctorEditorViewModel? _editorViewModel;
         public DoctorEditorViewModel? EditorViewModel
         {
@@ -60,41 +78,21 @@ namespace GrafikoMat.ViewModels
         }
 
         private bool _isLoading;
-        public bool IsLoading
-        {
-            get => _isLoading;
-            set => SetProperty(ref _isLoading, value);
-        }
+        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
 
         private bool _isStatusMessageOpen;
-        public bool IsStatusMessageOpen
-        {
-            get => _isStatusMessageOpen;
-            set => SetProperty(ref _isStatusMessageOpen, value);
-        }
+        public bool IsStatusMessageOpen { get => _isStatusMessageOpen; set => SetProperty(ref _isStatusMessageOpen, value); }
 
         private string _statusMessageTitle = string.Empty;
-        public string StatusMessageTitle
-        {
-            get => _statusMessageTitle;
-            set => SetProperty(ref _statusMessageTitle, value);
-        }
+        public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
 
         private string _statusMessage = string.Empty;
-        public string StatusMessage
-        {
-            get => _statusMessage;
-            set => SetProperty(ref _statusMessage, value);
-        }
+        public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
 
         private InfoBarSeverity _statusMessageSeverity;
-        public InfoBarSeverity StatusMessageSeverity
-        {
-            get => _statusMessageSeverity;
-            set => SetProperty(ref _statusMessageSeverity, value);
-        }
+        public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set => SetProperty(ref _statusMessageSeverity, value); }
 
-        public RelayCommand AddNewDoctorCommand { get; }
+        public AsyncRelayCommand AddNewDoctorCommand { get; }
         public AsyncRelayCommand SaveDoctorCommand { get; }
         public AsyncRelayCommand ResetPasswordCommand { get; }
 
@@ -103,15 +101,14 @@ namespace GrafikoMat.ViewModels
             _dataService = dataService;
             _dispatcher = dispatcher;
 
-            AddNewDoctorCommand = new RelayCommand(AddNewDoctor);
+            AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
-            // ZMIANA: Uściślamy warunek, kiedy przycisk resetu jest aktywny
             ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
+        }
 
-            if (_dataService != null)
-            {
-                Task.Run(LoadInitialDataAsync);
-            }
+        public async Task InitializeAsync()
+        {
+            await LoadInitialDataAsync();
         }
 
         private void Editor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -120,10 +117,23 @@ namespace GrafikoMat.ViewModels
             {
                 SaveDoctorCommand.NotifyCanExecuteChanged();
             }
-            // ZMIANA: Dodajemy powiadomienie dla przycisku resetowania
             if (e.PropertyName == nameof(EditorViewModel.ShowResetButton))
             {
                 ResetPasswordCommand.NotifyCanExecuteChanged();
+            }
+        }
+
+        private async Task EnsureUnitsLoadedAsync()
+        {
+            if (_allUnits.Count > 0 || _dataService == null) return;
+            _dispatcher?.TryEnqueue(() => IsLoading = true);
+            try
+            {
+                _allUnits = await _dataService.GetAllUnitsAsync();
+            }
+            finally
+            {
+                _dispatcher?.TryEnqueue(() => IsLoading = false);
             }
         }
 
@@ -140,15 +150,14 @@ namespace GrafikoMat.ViewModels
 
                 _dispatcher?.TryEnqueue(() =>
                 {
-                    AllDoctors.Clear();
-                    foreach (var doctor in doctors.OrderBy(d => d.LastName))
-                    {
-                        AllDoctors.Add(doctor);
-                    }
+                    _allDoctorsMasterList.Clear();
+                    _allDoctorsMasterList.AddRange(doctors.OrderBy(d => d.LastName));
+
+                    FilterDoctors(); // ZMIANA: Zamiast ładować do AllDoctors, filtrujemy
 
                     if (previouslySelectedId != null)
                     {
-                        SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
+                        SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == previouslySelectedId);
                     }
                 });
             }
@@ -162,16 +171,52 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private void AddNewDoctor()
+        // ZMIANA: Nowa metoda filtrująca
+        private void FilterDoctors()
         {
+            FilteredDoctors.Clear();
+            if (string.IsNullOrWhiteSpace(SearchText))
+            {
+                foreach (var doctor in _allDoctorsMasterList)
+                {
+                    FilteredDoctors.Add(doctor);
+                }
+            }
+            else
+            {
+                var searchTextLower = SearchText.ToLowerInvariant();
+                var filtered = _allDoctorsMasterList.Where(d =>
+                    d.LastName.ToLowerInvariant().Contains(searchTextLower) ||
+                    d.FirstName.ToLowerInvariant().Contains(searchTextLower));
+
+                foreach (var doctor in filtered)
+                {
+                    FilteredDoctors.Add(doctor);
+                }
+            }
+        }
+
+        private async Task AddNewDoctorAsync()
+        {
+            await EnsureUnitsLoadedAsync();
+            if (_allUnits.Count == 0)
+            {
+                ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
+                return;
+            }
+
             SelectedDoctor = null;
-            EditorViewModel = new DoctorEditorViewModel(new DoctorProfile { Id = Guid.Empty }, _allUnits, new List<UnitDoctorAssignment>(), AllDoctors.Select(d => d.Abbreviation));
+            EditorViewModel = new DoctorEditorViewModel(
+                new DoctorProfile { Id = Guid.Empty },
+                new List<Unit>(_allUnits),
+                new List<UnitDoctorAssignment>(),
+                _allDoctorsMasterList.Select(d => d.Abbreviation)
+            );
         }
 
         private async Task SaveDoctor()
         {
             if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
-
             IsLoading = true;
             HideStatusMessage();
 
@@ -183,9 +228,8 @@ namespace GrafikoMat.ViewModels
 
                 _dispatcher?.TryEnqueue(() =>
                 {
-                    SelectedDoctor = AllDoctors.FirstOrDefault(d => d.Id == savedProfileId);
+                    SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
                 });
-
                 ShowStatusMessage("Sukces!", "Dane zostały pomyślnie zapisane.", InfoBarSeverity.Success);
             }
             catch (Exception ex)
@@ -198,11 +242,9 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Pełna implementacja logiki resetowania hasła
         private async Task ResetPassword()
         {
             if (SelectedDoctor == null || EditorViewModel == null || _dataService == null) return;
-
             var confirmDialog = new ContentDialog
             {
                 Title = "Potwierdź resetowanie hasła",
@@ -211,7 +253,6 @@ namespace GrafikoMat.ViewModels
                 CloseButtonText = "Anuluj",
                 XamlRoot = App.MainWindow.Content.XamlRoot
             };
-
             var result = await confirmDialog.ShowAsync();
 
             if (result == ContentDialogResult.Primary)
@@ -220,18 +261,10 @@ namespace GrafikoMat.ViewModels
                 HideStatusMessage();
                 try
                 {
-                    // 1. Wygeneruj nowe hasło
                     var newPassword = PasswordGenerator.GenerateInitialPassword();
-
-                    // 2. Wywołaj RPC, aby zresetować hasło w Supabase Auth
                     await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
-
-                    // 3. Ustaw flagę wymuszającą zmianę hasła w profilu lekarza
                     await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
-
-                    // 4. Zaktualizuj UI, aby pokazać nowe hasło
                     EditorViewModel.SetNewGeneratedPassword(newPassword);
-
                     ShowStatusMessage("Sukces!", $"Hasło zostało zresetowane. Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success);
                 }
                 catch (Exception ex)
@@ -259,12 +292,27 @@ namespace GrafikoMat.ViewModels
             IsLoading = true;
             try
             {
-                var existingAbbreviations = AllDoctors
+                if (_dataService == null) return;
+
+                await EnsureUnitsLoadedAsync();
+                if (_allUnits.Count == 0)
+                {
+                    ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
+                    EditorViewModel = null;
+                    return;
+                }
+
+                var existingAbbreviations = _allDoctorsMasterList
                     .Where(d => d.Id != doctorProfile.Id)
                     .Select(d => d.Abbreviation);
-
                 var currentAssignments = await _dataService.GetAssignmentsForDoctorAsync(doctorProfile.Id);
-                EditorViewModel = new DoctorEditorViewModel((DoctorProfile)doctorProfile.Clone(), _allUnits, currentAssignments, existingAbbreviations);
+
+                EditorViewModel = new DoctorEditorViewModel(
+                    (DoctorProfile)doctorProfile.Clone(),
+                    new List<Unit>(_allUnits),
+                    currentAssignments,
+                    existingAbbreviations
+                );
             }
             catch (Exception ex)
             {
@@ -288,16 +336,14 @@ namespace GrafikoMat.ViewModels
             });
         }
 
-        private void HideStatusMessage()
+        public void HideStatusMessage()
         {
-            if (_dispatcher?.HasThreadAccess == false)
-            {
-                _dispatcher.TryEnqueue(() => IsStatusMessageOpen = false);
-            }
-            else
+            _dispatcher?.TryEnqueue(() =>
             {
                 IsStatusMessageOpen = false;
-            }
+                StatusMessage = string.Empty;
+                StatusMessageTitle = string.Empty;
+            });
         }
     }
 }
