@@ -3,7 +3,7 @@ using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
-using GrafikoMat.Services; // NOWY using
+using GrafikoMat.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -21,22 +21,17 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        // ZMIANA: Usunięcie repozytorium lekarzy, będziemy działać na DataService
         private DataService? _dataService;
 
-        // NOWE: Pola do zarządzania stanem jednostek
         private readonly List<Unit> _userUnits = new();
         private int _activeUnitIndex = -1;
 
-        // NOWA: Właściwość przechowująca informację o statusie admina
         public bool IsCurrentUserAdmin { get; private set; }
 
-        // NOWA: Właściwość zwracająca pełny obiekt aktywnej jednostki
         public Unit? ActiveUnit => _activeUnitIndex >= 0 && _activeUnitIndex < _userUnits.Count
             ? _userUnits[_activeUnitIndex]
             : null;
 
-        // ZMIANA: Gettery tych właściwości pobierają teraz dane z ActiveUnit
         public string ActiveUnitHospitalName
         {
             get => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
@@ -72,22 +67,19 @@ namespace GrafikoMat.ViewModels
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
-        // ZMIANA: Konstruktor nie przyjmuje już repozytorium
         public MainViewModel()
         {
-            // ZMIANA: Implementacja komend zostanie dodana w Etapie 2
-            SwitchToPreviousUnitCommand = new RelayCommand(() => { });
-            SwitchToNextUnitCommand = new RelayCommand(() => { });
+            // ZMIANA: Przypisujemy komendy do nowo utworzonych metod
+            SwitchToPreviousUnitCommand = new AsyncRelayCommand(SwitchToPreviousUnit);
+            SwitchToNextUnitCommand = new AsyncRelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
         }
 
-        // NOWA METODA: Do wstrzykiwania DataService po jego utworzeniu w MainWindow
         public void SetDataService(DataService? dataService)
         {
             _dataService = dataService;
         }
 
-        // NOWA, KLUCZOWA METODA: Wczytuje dane o użytkowniku i na tej podstawie listę jednostek
         public async Task LoadUserAndUnitDataAsync()
         {
             if (_dataService == null) return;
@@ -95,7 +87,6 @@ namespace GrafikoMat.ViewModels
             var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
             if (userProfile == null)
             {
-                // Obsługa błędu - nie udało się pobrać profilu
                 return;
             }
 
@@ -106,14 +97,12 @@ namespace GrafikoMat.ViewModels
 
             if (IsCurrentUserAdmin)
             {
-                // ADMIN: Wczytaj wszystkie jednostki
                 var allUnits = await _dataService.GetAllUnitsAsync();
-                allUnits.Sort(); // Używa IComparable zaimplementowanego w Unit.cs
+                allUnits.Sort();
                 _userUnits.AddRange(allUnits);
             }
             else
             {
-                // ZWYKŁY UŻYTKOWNIK: Wczytaj tylko przypisane jednostki
                 var assignments = await _dataService.GetAssignmentsForDoctorAsync(userProfile.Id);
                 if (assignments.Any())
                 {
@@ -125,22 +114,46 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
-            // Ustaw pierwszą jednostkę jako aktywną (w Etapie 4 dodamy tu logikę przywracania)
             _activeUnitIndex = _userUnits.Any() ? 0 : -1;
 
-            // Odśwież UI
             OnPropertyChanged(nameof(ActiveUnit));
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
         }
 
+        // NOWE METODY: Logika przełączania jednostek
+        private async Task SwitchToNextUnit()
+        {
+            if (_userUnits.Count == 0) return;
+            _activeUnitIndex = (_activeUnitIndex + 1) % _userUnits.Count;
 
-        // ZMIANA: Metoda zostanie zmodyfikowana w Etapie 3. Na razie czyści listę lekarzy.
-        public async Task LoadDoctorsAsync()
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+
+            await LoadDataForActiveUnitAsync();
+        }
+
+        private async Task SwitchToPreviousUnit()
+        {
+            if (_userUnits.Count == 0) return;
+            _activeUnitIndex = (_activeUnitIndex - 1 + _userUnits.Count) % _userUnits.Count;
+
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+
+            await LoadDataForActiveUnitAsync();
+        }
+
+        // ZMIANA: Zmiana nazwy z LoadDoctorsAsync i przygotowanie pod Etap 3
+        public async Task LoadDataForActiveUnitAsync()
         {
             DoctorRows.Clear();
+
             // W Etapie 3 ta metoda zostanie rozbudowana o wczytywanie lekarzy
-            // dla aktywnej jednostki (ActiveUnit)
+            // dla nowej, aktywnej jednostki (ActiveUnit)
+
             await Task.CompletedTask;
         }
 

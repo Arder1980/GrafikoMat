@@ -244,20 +244,17 @@ namespace GrafikoMat
 
         private async Task LoadDataAndShowDashboardAsync()
         {
-            // ZMIANA: Nowa sekwencja startowa
             if (_dataService != null)
             {
-                // 1. Wczytaj dane o użytkowniku i jego jednostkach (z logiką admin/user)
                 await ViewModel.LoadUserAndUnitDataAsync();
-                // 2. Wczytaj lekarzy (w Etapie 3 będzie to robić dla aktywnej jednostki)
-                await ViewModel.LoadDoctorsAsync();
+                // Zmieniamy wywołanie na nową nazwę metody
+                await ViewModel.LoadDataForActiveUnitAsync();
             }
 
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ResetViewportState();
         }
-
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
