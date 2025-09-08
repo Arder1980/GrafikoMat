@@ -5,7 +5,8 @@ using System;
 namespace GrafikoMat.Core.Data
 {
     [Table("units")]
-    public class Unit : BaseModel
+    // NOWA ZMIANA: Implementacja interfejsu dla łatwego sortowania
+    public class Unit : BaseModel, IComparable<Unit>
     {
         [PrimaryKey("id")]
         public Guid Id { get; set; }
@@ -25,5 +26,12 @@ namespace GrafikoMat.Core.Data
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
+
+        // NOWA METODA: Implementacja sortowania po nazwie skróconej
+        public int CompareTo(Unit? other)
+        {
+            if (other == null) return 1;
+            return string.Compare(this.Name, other.Name, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

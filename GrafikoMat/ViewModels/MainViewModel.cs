@@ -1,7 +1,9 @@
-﻿using GrafikoMat.Common;
+﻿using CommunityToolkit.Mvvm.Input;
+using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
+using GrafikoMat.Services; // NOWY using
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -10,7 +12,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using CommunityToolkit.Mvvm.Input;
+
 
 namespace GrafikoMat.ViewModels
 {
@@ -19,13 +21,32 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private IDoctorRepository? _doctorRepository;
+        // ZMIANA: Usunięcie repozytorium lekarzy, będziemy działać na DataService
+        private DataService? _dataService;
 
-        private string _activeUnitHospitalName = "GrafikoMat Dyżurowy";
-        public string ActiveUnitHospitalName { get => _activeUnitHospitalName; set { if (_activeUnitHospitalName != value) { _activeUnitHospitalName = value; OnPropertyChanged(); } } }
+        // NOWE: Pola do zarządzania stanem jednostek
+        private readonly List<Unit> _userUnits = new();
+        private int _activeUnitIndex = -1;
 
-        private string _activeUnitDepartmentName = "Proszę wybrać aktywny profil w ustawieniach";
-        public string ActiveUnitDepartmentName { get => _activeUnitDepartmentName; set { if (_activeUnitDepartmentName != value) { _activeUnitDepartmentName = value; OnPropertyChanged(); } } }
+        // NOWA: Właściwość przechowująca informację o statusie admina
+        public bool IsCurrentUserAdmin { get; private set; }
+
+        // NOWA: Właściwość zwracająca pełny obiekt aktywnej jednostki
+        public Unit? ActiveUnit => _activeUnitIndex >= 0 && _activeUnitIndex < _userUnits.Count
+            ? _userUnits[_activeUnitIndex]
+            : null;
+
+        // ZMIANA: Gettery tych właściwości pobierają teraz dane z ActiveUnit
+        public string ActiveUnitHospitalName
+        {
+            get => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
+        }
+
+        public string ActiveUnitDepartmentName
+        {
+            get => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
+        }
+
 
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
 
@@ -33,7 +54,6 @@ namespace GrafikoMat.ViewModels
         public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
 
         public string[] Months { get; } = new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" };
-
         private int _selectedMonthIndex = DateTime.Today.Month - 1;
         public int SelectedMonthIndex { get => _selectedMonthIndex; set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
 
@@ -52,36 +72,76 @@ namespace GrafikoMat.ViewModels
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
-        public MainViewModel(IDoctorRepository? doctorRepository = null)
+        // ZMIANA: Konstruktor nie przyjmuje już repozytorium
+        public MainViewModel()
         {
-            _doctorRepository = doctorRepository;
+            // ZMIANA: Implementacja komend zostanie dodana w Etapie 2
             SwitchToPreviousUnitCommand = new RelayCommand(() => { });
             SwitchToNextUnitCommand = new RelayCommand(() => { });
             UpdateRosterForSelectedMonth();
         }
 
-        public void UpdateDoctorRepository(IDoctorRepository? doctorRepository)
+        // NOWA METODA: Do wstrzykiwania DataService po jego utworzeniu w MainWindow
+        public void SetDataService(DataService? dataService)
         {
-            _doctorRepository = doctorRepository;
+            _dataService = dataService;
         }
 
-        public async Task LoadDoctorsAsync()
+        // NOWA, KLUCZOWA METODA: Wczytuje dane o użytkowniku i na tej podstawie listę jednostek
+        public async Task LoadUserAndUnitDataAsync()
         {
-            if (_doctorRepository == null)
+            if (_dataService == null) return;
+
+            var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
+            if (userProfile == null)
             {
-                DoctorRows.Clear();
+                // Obsługa błędu - nie udało się pobrać profilu
                 return;
             }
 
-            var doctors = await _doctorRepository.GetAllAsync();
-            DoctorRows.Clear();
-            if (doctors != null)
+            IsCurrentUserAdmin = userProfile.IsAdmin;
+            OnPropertyChanged(nameof(IsCurrentUserAdmin));
+
+            _userUnits.Clear();
+
+            if (IsCurrentUserAdmin)
             {
-                foreach (var doctor in doctors.OrderBy(d => d.LastName))
+                // ADMIN: Wczytaj wszystkie jednostki
+                var allUnits = await _dataService.GetAllUnitsAsync();
+                allUnits.Sort(); // Używa IComparable zaimplementowanego w Unit.cs
+                _userUnits.AddRange(allUnits);
+            }
+            else
+            {
+                // ZWYKŁY UŻYTKOWNIK: Wczytaj tylko przypisane jednostki
+                var assignments = await _dataService.GetAssignmentsForDoctorAsync(userProfile.Id);
+                if (assignments.Any())
                 {
-                    DoctorRows.Add(new DoctorRow($"{doctor.FirstName} {doctor.LastName}", false));
+                    var allUnits = await _dataService.GetAllUnitsAsync();
+                    var assignedUnitIds = assignments.Select(a => a.UnitId).ToHashSet();
+                    var filteredUnits = allUnits.Where(u => assignedUnitIds.Contains(u.Id)).ToList();
+                    filteredUnits.Sort();
+                    _userUnits.AddRange(filteredUnits);
                 }
             }
+
+            // Ustaw pierwszą jednostkę jako aktywną (w Etapie 4 dodamy tu logikę przywracania)
+            _activeUnitIndex = _userUnits.Any() ? 0 : -1;
+
+            // Odśwież UI
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+        }
+
+
+        // ZMIANA: Metoda zostanie zmodyfikowana w Etapie 3. Na razie czyści listę lekarzy.
+        public async Task LoadDoctorsAsync()
+        {
+            DoctorRows.Clear();
+            // W Etapie 3 ta metoda zostanie rozbudowana o wczytywanie lekarzy
+            // dla aktywnej jednostki (ActiveUnit)
+            await Task.CompletedTask;
         }
 
         private void UpdateRosterForSelectedMonth()

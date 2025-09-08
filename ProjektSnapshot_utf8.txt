@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-08 22:31:12
+# Data:       2025-09-09 00:28:22
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -82,7 +82,7 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (1166 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (1249 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
@@ -111,13 +111,16 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
+        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
+        [Column("is_archived")]
+        public bool IsArchived { get; set; } = false;
+
         [Column("requires_password_change")]
         public bool RequiresPasswordChange { get; set; }
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // ZMIANA: Dodajemy nową, wygodną właściwość
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()
@@ -161,7 +164,7 @@ namespace GrafikoMat.Core.Data
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Data\Unit.cs (655 bytes)
+===== FILE: GrafikoMat.Core\Data\Unit.cs (796 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
@@ -184,11 +187,14 @@ namespace GrafikoMat.Core.Data
         [Column("department_name")]
         public string DepartmentName { get; set; } = string.Empty;
 
+        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
+        [Column("is_archived")]
+        public bool IsArchived { get; set; } = false;
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
     }
 }
-
 ----- END -----
 
 ===== FILE: GrafikoMat.Core\Data\UnitDoctorAssignment.cs (477 bytes)
@@ -623,7 +629,7 @@ namespace GrafikoMat
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (2629 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (3325 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -634,12 +640,32 @@ using Windows.UI;
 
 namespace GrafikoMat.Common
 {
+    // NOWY KONWERTER: Zmienia bool na wartość krycia (Opacity)
+    public class BooleanToOpacityConverter : IValueConverter
+    {
+        public double TrueValue { get; set; } = 0.5;
+        public double FalseValue { get; set; } = 1.0;
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool b)
+            {
+                return b ? TrueValue : FalseValue;
+            }
+            return FalseValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;
@@ -2261,7 +2287,7 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\DataService.cs (5554 bytes)
+===== FILE: GrafikoMat\Services\DataService.cs (7069 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Generic;
@@ -2272,6 +2298,8 @@ using GrafikoMat.Core.Data;
 using GrafikoMat.ViewModels;
 using Supabase;
 using SbClient = Supabase.Client;
+using Supabase.Postgrest;
+using Supabase.Postgrest.Responses;
 
 namespace GrafikoMat.Services
 {
@@ -2286,6 +2314,32 @@ namespace GrafikoMat.Services
             _supabase = supabaseService.Client;
         }
 
+        // NOWA METODA: Do wyszukiwania pierwszego rekordu o DOKŁADNIE takiej samej nazwie szpitala
+        public async Task<Unit?> GetFirstUnitByExactHospitalNameAsync(string fullName)
+        {
+            var response = await _supabase.From<Unit>()
+                .Filter("hospital_full_name", Constants.Operator.Equals, fullName)
+                .Limit(1)
+                .Get();
+
+            return response.Models?.FirstOrDefault();
+        }
+
+        public async Task<Unit?> GetUniqueUnitByHospitalNameStartAsync(string partialName)
+        {
+            var response = await _supabase.From<Unit>()
+                .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
+                .Limit(2)
+                .Get();
+
+            if (response.Models != null && response.Models.Count == 1)
+            {
+                return response.Models.First();
+            }
+
+            return null;
+        }
+
         public async Task<List<DoctorProfile>> GetAllDoctorsAsync()
         {
             var response = await _supabase.From<DoctorProfile>().Get();
@@ -2294,9 +2348,7 @@ namespace GrafikoMat.Services
 
         public async Task<List<Unit>> GetAllUnitsAsync()
         {
-            // ZMIANA: Poprawiamy błędny zapis na ostatecznie poprawny: _supabase.Postgrest.BaseUrl
             Debug.WriteLine($"[DataService.GetAllUnitsAsync] Stan klienta: {(_supabase == null ? "NULL" : "OK")}, Auth: {(_supabase?.Auth?.CurrentUser == null ? "Brak" : "OK")}, URL: {_supabase?.Postgrest.BaseUrl}");
-
             var response = await _supabase.From<Unit>().Get();
             return response.Models ?? new List<Unit>();
         }
@@ -2348,6 +2400,16 @@ namespace GrafikoMat.Services
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
+        public async Task SetDoctorArchiveStatusAsync(Guid doctorId, bool isArchived)
+        {
+            var partialUpdate = new DoctorProfile
+            {
+                Id = doctorId,
+                IsArchived = isArchived
+            };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
+
         public async Task SaveDoctorAsync(DoctorEditorViewModel editorViewModel)
         {
             var profile = editorViewModel.Profile;
@@ -2357,7 +2419,6 @@ namespace GrafikoMat.Services
                 var userId = _supabase.Auth.CurrentUser?.Id;
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
-
                 profile.Id = Guid.Parse(userId);
                 profile.RequiresPasswordChange = true;
 
@@ -2397,7 +2458,15 @@ namespace GrafikoMat.Services
             await _supabase.From<Unit>().Upsert(unit);
 
         public async Task DeleteUnitAsync(Guid unitId) =>
-            await _supabase.From<Unit>().Where(u => u.Id == unitId).Delete();
+            await SetUnitArchiveStatusAsync(unitId, true);
+
+        public async Task SetUnitArchiveStatusAsync(Guid unitId, bool isArchived)
+        {
+            await _supabase.From<Unit>()
+                .Where(u => u.Id == unitId)
+                .Set(u => u.IsArchived, isArchived)
+                .Update();
+        }
     }
 }
 ----- END -----
@@ -3110,7 +3179,7 @@ namespace GrafikoMat.ViewModels
 
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DoctorEditorViewModel.cs (8107 bytes)
+===== FILE: GrafikoMat\ViewModels\DoctorEditorViewModel.cs (8367 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -3263,7 +3332,13 @@ namespace GrafikoMat.ViewModels
             foreach (var unit in allUnits.OrderBy(u => u.Name))
             {
                 var assignment = currentAssignments.FirstOrDefault(a => a.UnitId == unit.Id);
-                Assignments.Add(new UnitAssignmentViewModel(unit, assignment != null, assignment?.IsActive ?? true));
+
+                // ZMIANA: Przekazujemy 'assignment != null' jako informację,
+                // że powiązanie już istnieje w bazie danych.
+                Assignments.Add(new UnitAssignmentViewModel(unit,
+                    isAssigned: assignment != null,
+                    isActive: assignment?.IsActive ?? true,
+                    isPersisted: assignment != null));
             }
         }
 
@@ -3277,12 +3352,10 @@ namespace GrafikoMat.ViewModels
         public string SanitizeName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-
             var cleaned = name.Trim();
             cleaned = Regex.Replace(cleaned, @"\s+", " ");
             cleaned = Regex.Replace(cleaned, @"\s*-\s*", "-");
             cleaned = Regex.Replace(cleaned, "-+", "-");
-
             var parts = cleaned.Split(' ');
             var resultParts = parts.Select(part =>
             {
@@ -3294,7 +3367,6 @@ namespace GrafikoMat.ViewModels
                 });
                 return string.Join("-", resultSubParts);
             });
-
             return string.Join(" ", resultParts);
         }
 
@@ -3487,7 +3559,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (13351 bytes)
+===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (17798 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -3509,10 +3581,7 @@ namespace GrafikoMat.ViewModels
         private readonly DataService? _dataService;
         private readonly DispatcherQueue? _dispatcher;
 
-        // ZMIANA: Ta kolekcja będzie teraz przechowywać pełną, niefiltrowaną listę lekarzy
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
-
-        // ZMIANA: Nowa kolekcja, powiązana z UI, przechowująca odfiltrowane wyniki
         public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
 
         private List<Unit> _allUnits = new();
@@ -3527,11 +3596,15 @@ namespace GrafikoMat.ViewModels
                 {
                     LoadEditorFor(value);
                     ResetPasswordCommand.NotifyCanExecuteChanged();
+                    // ZMIANA: Powiadomienie o zmianie stanu przycisków archiwizacji/przywracania
+                    ArchiveDoctorCommand.NotifyCanExecuteChanged();
+                    RestoreDoctorCommand.NotifyCanExecuteChanged();
+                    OnPropertyChanged(nameof(CanArchive));
+                    OnPropertyChanged(nameof(CanRestore));
                 }
             }
         }
 
-        // ZMIANA: Nowa właściwość dla pola wyszukiwania
         private string _searchText = string.Empty;
         public string SearchText
         {
@@ -3544,6 +3617,25 @@ namespace GrafikoMat.ViewModels
                 }
             }
         }
+
+        // NOWA WŁAŚCIWOŚĆ: Steruje pokazywaniem zarchiwizowanych
+        private bool _showArchived;
+        public bool ShowArchived
+        {
+            get => _showArchived;
+            set
+            {
+                if (SetProperty(ref _showArchived, value))
+                {
+                    FilterDoctors();
+                }
+            }
+        }
+
+        // NOWE WŁAŚCIWOŚCI: Sterują widocznością i dostępnością przycisków
+        public bool CanArchive => SelectedDoctor != null && !SelectedDoctor.IsArchived;
+        public bool CanRestore => SelectedDoctor != null && SelectedDoctor.IsArchived;
+
 
         public bool IsDoctorSelectedAndNotNew => SelectedDoctor != null && (EditorViewModel != null && !EditorViewModel.IsNewDoctor);
         private DoctorEditorViewModel? _editorViewModel;
@@ -3586,6 +3678,9 @@ namespace GrafikoMat.ViewModels
         public AsyncRelayCommand AddNewDoctorCommand { get; }
         public AsyncRelayCommand SaveDoctorCommand { get; }
         public AsyncRelayCommand ResetPasswordCommand { get; }
+        // NOWE KOMENDY
+        public AsyncRelayCommand ArchiveDoctorCommand { get; }
+        public AsyncRelayCommand RestoreDoctorCommand { get; }
 
         public ManagementViewModel(DataService? dataService, DispatcherQueue? dispatcher)
         {
@@ -3595,6 +3690,10 @@ namespace GrafikoMat.ViewModels
             AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
             ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
+
+            // ZMIANA: Inicjalizacja nowych komend
+            ArchiveDoctorCommand = new AsyncRelayCommand(ArchiveDoctor, () => CanArchive);
+            RestoreDoctorCommand = new AsyncRelayCommand(RestoreDoctor, () => CanRestore);
         }
 
         public async Task InitializeAsync()
@@ -3643,12 +3742,11 @@ namespace GrafikoMat.ViewModels
                 {
                     _allDoctorsMasterList.Clear();
                     _allDoctorsMasterList.AddRange(doctors.OrderBy(d => d.LastName));
-
-                    FilterDoctors(); // ZMIANA: Zamiast ładować do AllDoctors, filtrujemy
+                    FilterDoctors();
 
                     if (previouslySelectedId != null)
                     {
-                        SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == previouslySelectedId);
+                        SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
                     }
                 });
             }
@@ -3662,28 +3760,20 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Nowa metoda filtrująca
+        // ZMIANA: Logika filtrowania uwzględnia teraz CheckBox "Pokaż zarchiwizowanych"
         private void FilterDoctors()
         {
             FilteredDoctors.Clear();
-            if (string.IsNullOrWhiteSpace(SearchText))
-            {
-                foreach (var doctor in _allDoctorsMasterList)
-                {
-                    FilteredDoctors.Add(doctor);
-                }
-            }
-            else
-            {
-                var searchTextLower = SearchText.ToLowerInvariant();
-                var filtered = _allDoctorsMasterList.Where(d =>
-                    d.LastName.ToLowerInvariant().Contains(searchTextLower) ||
-                    d.FirstName.ToLowerInvariant().Contains(searchTextLower));
+            var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
 
-                foreach (var doctor in filtered)
-                {
-                    FilteredDoctors.Add(doctor);
-                }
+            var filteredResult = string.IsNullOrWhiteSpace(SearchText)
+                ? sourceList
+                : sourceList.Where(d =>
+                    d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase));
+
+            foreach (var doctor in filteredResult)
+            {
+                FilteredDoctors.Add(doctor);
             }
         }
 
@@ -3708,9 +3798,34 @@ namespace GrafikoMat.ViewModels
         private async Task SaveDoctor()
         {
             if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
-            IsLoading = true;
+
             HideStatusMessage();
 
+            var newAssignments = EditorViewModel.Assignments
+                .Where(a => a.IsAssigned && !a.IsPersisted)
+                .ToList();
+
+            if (newAssignments.Any())
+            {
+                var confirmDialog = new ContentDialog
+                {
+                    Title = "Potwierdzenie Operacji Nieodwracalnej",
+                    Content = "Przypisanie lekarza do nowej jednostki jest operacją trwałą i nie będzie można jej cofnąć w przyszłości.\n\nCzy na pewno chcesz kontynuować?",
+                    PrimaryButtonText = "Tak, zapisz przypisanie",
+                    CloseButtonText = "Anuluj",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = App.MainWindow.Content.XamlRoot
+                };
+
+                var result = await confirmDialog.ShowAsync();
+
+                if (result != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+            }
+
+            IsLoading = true;
             try
             {
                 var savedProfileId = EditorViewModel.Profile.Id;
@@ -3732,6 +3847,66 @@ namespace GrafikoMat.ViewModels
                 _dispatcher?.TryEnqueue(() => IsLoading = false);
             }
         }
+
+        // NOWA METODA: Logika archiwizacji
+        private async Task ArchiveDoctor()
+        {
+            if (SelectedDoctor == null || _dataService == null) return;
+
+            var confirmDialog = new ContentDialog
+            {
+                Title = "Potwierdź archiwizację",
+                Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.FullName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
+                PrimaryButtonText = "Archiwizuj",
+                CloseButtonText = "Anuluj",
+                XamlRoot = App.MainWindow.Content.XamlRoot
+            };
+
+            var result = await confirmDialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            IsLoading = true;
+            try
+            {
+                await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, true);
+                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany.", InfoBarSeverity.Success);
+                SelectedDoctor = null; // Deselekcja po archiwizacji
+                await LoadInitialDataAsync();
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage("Błąd", $"Wystąpił błąd podczas archiwizacji: {ex.Message}", InfoBarSeverity.Error);
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        // NOWA METODA: Logika przywracania
+        private async Task RestoreDoctor()
+        {
+            if (SelectedDoctor == null || _dataService == null) return;
+            IsLoading = true;
+            try
+            {
+                await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, false);
+                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony.", InfoBarSeverity.Success);
+                var restoredDoctorId = SelectedDoctor.Id;
+                await LoadInitialDataAsync();
+                // Ponowne zaznaczenie przywróconego lekarza
+                SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
+            }
+            catch (Exception ex)
+            {
+                ShowStatusMessage("Błąd", $"Wystąpił błąd podczas przywracania: {ex.Message}", InfoBarSeverity.Error);
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
 
         private async Task ResetPassword()
         {
@@ -3784,7 +3959,6 @@ namespace GrafikoMat.ViewModels
             try
             {
                 if (_dataService == null) return;
-
                 await EnsureUnitsLoadedAsync();
                 if (_allUnits.Count == 0)
                 {
@@ -3803,7 +3977,7 @@ namespace GrafikoMat.ViewModels
                     new List<Unit>(_allUnits),
                     currentAssignments,
                     existingAbbreviations
-                );
+                 );
             }
             catch (Exception ex)
             {
@@ -3840,7 +4014,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\UnitAssignmentViewModel.cs (1096 bytes)
+===== FILE: GrafikoMat\ViewModels\UnitAssignmentViewModel.cs (1391 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -3852,8 +4026,13 @@ namespace GrafikoMat.ViewModels
     {
         public Guid UnitId { get; }
         public string UnitName { get; }
-        // ZMIANA: Dodajemy nową właściwość na nazwę oddziału
         public string DepartmentName { get; }
+
+        // NOWA WŁAŚCIWOŚĆ: przechowuje informację, czy przypisanie istnieje w bazie
+        public bool IsPersisted { get; }
+
+        // NOWA WŁAŚCIWOŚĆ: na jej podstawie UI zablokuje checkbox
+        public bool CanBeChanged => !IsPersisted;
 
         private bool _isAssigned;
         public bool IsAssigned
@@ -3869,13 +4048,13 @@ namespace GrafikoMat.ViewModels
             set => SetProperty(ref _isActive, value);
         }
 
-        public UnitAssignmentViewModel(Unit unit, bool isAssigned, bool isActive)
+        // ZMIANA: Zaktualizowany konstruktor przyjmujący nowy parametr
+        public UnitAssignmentViewModel(Unit unit, bool isAssigned, bool isActive, bool isPersisted)
         {
             UnitId = unit.Id;
             UnitName = unit.Name;
-            // ZMIANA: Inicjalizujemy nową właściwość
             DepartmentName = unit.DepartmentName;
-
+            IsPersisted = isPersisted; // Zapamiętujemy stan początkowy
             _isAssigned = isAssigned;
             _isActive = isActive;
         }
@@ -4606,7 +4785,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ManagementView.xaml (10482 bytes)
+===== FILE: GrafikoMat\Views\ManagementView.xaml (11676 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.ManagementView"
@@ -4617,7 +4796,12 @@ namespace GrafikoMat.Views
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+    </UserControl.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -4629,12 +4813,20 @@ namespace GrafikoMat.Views
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
             <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
                 <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
-                <AppBarButton Icon="Delete" Label="Usuń"/>
+
+                <AppBarButton Label="Archiwizuj" Command="{x:Bind ViewModel.ArchiveDoctorCommand}" IsEnabled="{x:Bind ViewModel.CanArchive, Mode=OneWay}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="&#xE7B8;"/>
+                    </AppBarButton.Icon>
+                </AppBarButton>
+
+                <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </CommandBar>
 
             <TextBox Grid.Row="1" 
@@ -4642,7 +4834,11 @@ namespace GrafikoMat.Views
                      PlaceholderText="Filtruj listę..."
                      Margin="8,0,8,8"/>
 
-            <ListView Grid.Row="2"
+            <CheckBox Grid.Row="2" Content="Pokaż zarchiwizowanych" 
+                      IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}"
+                      Margin="8,0,8,8"/>
+
+            <ListView Grid.Row="3"
                       BorderThickness="0,1,1,0"
                       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                       ItemsSource="{x:Bind ViewModel.FilteredDoctors}"
@@ -4652,7 +4848,8 @@ namespace GrafikoMat.Views
                         <TextBlock Margin="12,10" 
                                    Style="{ThemeResource BaseTextBlockStyle}"
                                    FontWeight="SemiBold"
-                                   Text="{x:Bind FullName}"/>
+                                   Text="{x:Bind FullName}"
+                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
@@ -4744,7 +4941,9 @@ namespace GrafikoMat.Views
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}">
+                                    <CheckBox Grid.Column="0" 
+                                              IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"
+                                              IsEnabled="{x:Bind CanBeChanged, Mode=OneWay}">
                                         <StackPanel Spacing="2">
                                             <TextBlock Text="{x:Bind UnitName}" FontWeight="SemiBold"/>
                                             <TextBlock Text="{x:Bind DepartmentName}" FontSize="12" Opacity="0.8"/>
@@ -5080,7 +5279,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (1897 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3192 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.UnitsSettingsView"
@@ -5089,65 +5288,88 @@ namespace GrafikoMat.Views.Settings
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:data="using:GrafikoMat.Core.Data"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
 
-	<Grid>
-		<Grid.RowDefinitions>
-			<RowDefinition Height="Auto"/>
-			<RowDefinition Height="*"/>
-		</Grid.RowDefinitions>
+    <UserControl.Resources>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
 
-		<TextBlock Grid.Row="0" Text="Zarządzanie Jednostkami" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,20"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-		<Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="20">
+        <TextBlock Grid.Row="0" Text="Zarządzanie Jednostkami" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
-			<ListView x:Name="UnitsListView"
-                      ItemsSource="{x:Bind Units}"
-                      SelectionMode="Single"
-                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                      BorderThickness="1"
-                      CornerRadius="4">
-				<ListView.ItemTemplate>
-					<DataTemplate x:DataType="data:Unit">
-						<StackPanel Margin="12" Spacing="4">
-							<TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
-							<TextBlock Opacity="0.7" FontSize="12">
-								<Run Text="{x:Bind HospitalFullName}"/>
-							</TextBlock>
-						</StackPanel>
-					</DataTemplate>
-				</ListView.ItemTemplate>
-			</ListView>
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="20" Margin="0,0,0,8">
+            <CheckBox x:Name="ShowArchivedCheckBox" 
+                      Content="Pokaż zarchiwizowane" 
+                      Checked="ShowArchivedCheckBox_Changed" 
+                      Unchecked="ShowArchivedCheckBox_Changed"/>
 
-			<StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Top">
-				<Button x:Name="AddButton" Content="Dodaj nową..." HorizontalAlignment="Stretch" Click="AddButton_Click"/>
-				<Button x:Name="EditButton" Content="Edytuj..." HorizontalAlignment="Stretch" Click="EditButton_Click"/>
-				<Button x:Name="DeleteButton" Content="Usuń" HorizontalAlignment="Stretch" Click="DeleteButton_Click"/>
-			</StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                <Button x:Name="AddButton" Content="Dodaj nową..." HorizontalAlignment="Stretch" Click="AddButton_Click"/>
+                <Button x:Name="EditButton" Content="Edytuj..." HorizontalAlignment="Stretch" Click="EditButton_Click" IsEnabled="False"/>
+                <Button x:Name="ArchiveButton" Content="Archiwizuj" HorizontalAlignment="Stretch" Click="ArchiveButton_Click" IsEnabled="False"/>
+                <Button x:Name="RestoreButton" Content="Przywróć" HorizontalAlignment="Stretch" Click="RestoreButton_Click" Visibility="Collapsed"/>
+            </StackPanel>
+        </Grid>
 
-		</Grid>
-	</Grid>
+        <ListView x:Name="UnitsListView"
+                  Grid.Row="2"
+                  ItemsSource="{x:Bind DisplayedUnits}"
+                  SelectionMode="Single"
+                  SelectionChanged="UnitsListView_SelectionChanged"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1"
+                  CornerRadius="4">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="data:Unit">
+                    <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
+                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
+                        <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
+                        <TextBlock Opacity="0.7" FontSize="12">
+                            <Run Text="{x:Bind HospitalFullName}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (4386 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (10439 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.System;
 
 namespace GrafikoMat.Views.Settings
 {
     public sealed partial class UnitsSettingsView : UserControl
     {
-        private readonly ObservableCollection<Unit> Units = new();
+        private readonly List<Unit> _masterUnitList = new();
+        private readonly ObservableCollection<Unit> DisplayedUnits = new();
+
         private DataService? _dataService;
+
+        private bool _isAutocompleteActive = true;
+        private Unit? _currentSuggestion;
 
         public UnitsSettingsView()
         {
@@ -5157,20 +5379,57 @@ namespace GrafikoMat.Views.Settings
         public async void Initialize(DataService service)
         {
             _dataService = service;
-
-            // ZMIANA: Dodajemy logowanie diagnostyczne
-            Debug.WriteLine("[UnitsSettingsView] Inicjalizacja i próba załadowania jednostek...");
             await LoadUnitsAsync();
         }
 
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
-            Units.Clear();
+
+            _masterUnitList.Clear();
             var unitsFromDb = await _dataService.GetAllUnitsAsync();
-            foreach (var unit in unitsFromDb.OrderBy(u => u.Name))
+            _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
+
+            FilterUnits();
+            UpdateButtonStates();
+        }
+
+        private void FilterUnits()
+        {
+            DisplayedUnits.Clear();
+            bool showArchived = ShowArchivedCheckBox.IsChecked ?? false;
+            var sourceList = showArchived ? _masterUnitList : _masterUnitList.Where(u => !u.IsArchived);
+
+            foreach (var unit in sourceList)
             {
-                Units.Add(unit);
+                DisplayedUnits.Add(unit);
+            }
+        }
+
+        private void UpdateButtonStates()
+        {
+            if (UnitsListView.SelectedItem is Unit selectedUnit)
+            {
+                EditButton.IsEnabled = !selectedUnit.IsArchived;
+
+                if (selectedUnit.IsArchived)
+                {
+                    ArchiveButton.Visibility = Visibility.Collapsed;
+                    RestoreButton.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ArchiveButton.Visibility = Visibility.Visible;
+                    RestoreButton.Visibility = Visibility.Collapsed;
+                    ArchiveButton.IsEnabled = true;
+                }
+            }
+            else
+            {
+                EditButton.IsEnabled = false;
+                ArchiveButton.IsEnabled = false;
+                ArchiveButton.Visibility = Visibility.Visible;
+                RestoreButton.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -5181,21 +5440,21 @@ namespace GrafikoMat.Views.Settings
 
         private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
-            if (UnitsListView.SelectedItem is Unit selectedUnit)
+            if (UnitsListView.SelectedItem is Unit selectedUnit && !selectedUnit.IsArchived)
             {
                 await ShowUnitDialogAsync(selectedUnit);
             }
         }
 
-        private async void DeleteButton_Click(object sender, RoutedEventArgs e)
+        private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
             {
                 var dialog = new ContentDialog
                 {
-                    Title = "Potwierdź usunięcie",
-                    Content = $"Czy na pewno chcesz usunąć jednostkę '{selectedUnit.Name}'? Tej operacji nie można cofnąć.",
-                    PrimaryButtonText = "Usuń",
+                    Title = "Potwierdź archiwizację",
+                    Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'? Zostanie ona ukryta na listach, ale będzie można ją przywrócić.",
+                    PrimaryButtonText = "Archiwizuj",
                     CloseButtonText = "Anuluj",
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = this.XamlRoot
@@ -5203,9 +5462,18 @@ namespace GrafikoMat.Views.Settings
                 var result = await dialog.ShowAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    await _dataService.DeleteUnitAsync(selectedUnit.Id);
+                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
                     await LoadUnitsAsync();
                 }
+            }
+        }
+
+        private async void RestoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
+            {
+                await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                await LoadUnitsAsync();
             }
         }
 
@@ -5213,11 +5481,23 @@ namespace GrafikoMat.Views.Settings
         {
             if (_dataService == null) return;
             bool isEditMode = existingUnit != null;
+            _currentSuggestion = null;
+            _isAutocompleteActive = true;
 
-            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
-            var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, hospitalNameTextBox, departmentNameTextBox } };
+            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
+
+            hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
+            hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
+            hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
+
+            var panel = new StackPanel
+            {
+                Spacing = 12,
+                Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox },
+                Width = 650
+            };
 
             var dialog = new ContentDialog
             {
@@ -5225,25 +5505,123 @@ namespace GrafikoMat.Views.Settings
                 Content = panel,
                 PrimaryButtonText = "Zapisz",
                 CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.XamlRoot,
-                MinWidth = 700,
-                MaxWidth = 700
+                DefaultButton = ContentDialogButton.None,
+                XamlRoot = this.XamlRoot
             };
+
+            hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
 
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var unitToSave = new Unit
-                {
-                    Id = existingUnit?.Id ?? Guid.NewGuid(),
-                    Name = nameTextBox.Text,
-                    HospitalFullName = hospitalNameTextBox.Text,
-                    DepartmentName = departmentNameTextBox.Text
-                };
+                var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
+                unitToSave.Name = nameTextBox.Text;
+                unitToSave.HospitalFullName = hospitalNameTextBox.Text;
+                unitToSave.DepartmentName = departmentNameTextBox.Text;
+
                 await _dataService.SaveUnitAsync(unitToSave);
                 await LoadUnitsAsync();
             }
+        }
+
+        // POPRAWIONA METODA: Zmieniono logikę, aby uniknąć błędu kompilatora
+        private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Podstawowe warunki wyjścia
+            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _dataService == null)
+            {
+                return;
+            }
+
+            // Bezpieczne pobranie powiązanych kontrolek
+            if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes)
+            {
+                return;
+            }
+
+            // Sprawdź, czy skrót jest już wypełniony - jeśli tak, nie rób nic
+            if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text))
+            {
+                return;
+            }
+
+            // Teraz, gdy wiemy, że `otherBoxes` istnieje, możemy kontynuować
+            var match = await _dataService.GetFirstUnitByExactHospitalNameAsync(hospitalTextBox.Text);
+            if (match != null)
+            {
+                otherBoxes.Item1.Text = match.Name;
+            }
+        }
+
+        private void HospitalNameTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (sender is not TextBox hospitalTextBox || _currentSuggestion == null) return;
+
+            if (e.Key == VirtualKey.Enter || e.Key == VirtualKey.Tab)
+            {
+                e.Handled = true;
+                _isAutocompleteActive = false;
+
+                hospitalTextBox.Text = _currentSuggestion.HospitalFullName;
+                hospitalTextBox.Select(hospitalTextBox.Text.Length, 0);
+
+                if (hospitalTextBox.Tag is Tuple<TextBox, TextBox> otherBoxes)
+                {
+                    otherBoxes.Item1.Text = _currentSuggestion.Name;
+
+                    if (e.Key == VirtualKey.Tab)
+                    {
+                        otherBoxes.Item2.Focus(FocusState.Programmatic);
+                    }
+                }
+
+                _currentSuggestion = null;
+                _isAutocompleteActive = true;
+            }
+        }
+
+        private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_isAutocompleteActive || _dataService == null || sender is not TextBox hospitalTextBox) return;
+
+            var userText = hospitalTextBox.Text;
+            var selectionStart = hospitalTextBox.SelectionStart;
+
+            if (selectionStart < userText.Length)
+            {
+                _currentSuggestion = null;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(userText) || userText.Length < 3)
+            {
+                _currentSuggestion = null;
+                return;
+            }
+
+            var match = await _dataService.GetUniqueUnitByHospitalNameStartAsync(userText);
+            _currentSuggestion = match;
+
+            if (match != null && match.HospitalFullName.Length > userText.Length)
+            {
+                _isAutocompleteActive = false;
+
+                hospitalTextBox.Text = match.HospitalFullName;
+                hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
+
+                _isAutocompleteActive = true;
+            }
+        }
+
+        private void ShowArchivedCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            FilterUnits();
+            UpdateButtonStates();
+        }
+
+        private void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateButtonStates();
         }
     }
 }

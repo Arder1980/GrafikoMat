@@ -59,7 +59,8 @@ namespace GrafikoMat
             _settingsService = new SettingsService();
             _supabaseService = new SupabaseService();
 
-            ViewModel = new MainViewModel(null);
+            // ZMIANA: Inicjalizujemy ViewModel bez parametrów. Serwisy zostaną wstrzyknięte później.
+            ViewModel = new MainViewModel();
             InitializeComponent();
 
             this.ExtendsContentIntoTitleBar = true;
@@ -142,15 +143,16 @@ namespace GrafikoMat
             {
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 _dataService = new DataService(_supabaseService);
-                ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
                 await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
             {
                 _supabaseService.Initialize(string.Empty, string.Empty);
                 _dataService = null;
-                ViewModel.UpdateDoctorRepository(null);
             }
+
+            // NOWY KROK: Wstrzykujemy DataService do ViewModelu za każdym razem, gdy przeładowujemy ustawienia
+            ViewModel.SetDataService(_dataService);
         }
 
         private async void RefreshDataServicesAsync()
@@ -239,17 +241,18 @@ namespace GrafikoMat
             return await tcs.Task;
         }
 
-        private async Task LoadDataForAuthenticatedUserAsync()
-        {
-            if (_dataService == null) return;
-            await ViewModel.LoadDoctorsAsync();
-            ViewModel.ActiveUnitHospitalName = "Centralna Baza Danych";
-            ViewModel.ActiveUnitDepartmentName = "Zarządzanie Globalne";
-        }
 
         private async Task LoadDataAndShowDashboardAsync()
         {
-            await LoadDataForAuthenticatedUserAsync();
+            // ZMIANA: Nowa sekwencja startowa
+            if (_dataService != null)
+            {
+                // 1. Wczytaj dane o użytkowniku i jego jednostkach (z logiką admin/user)
+                await ViewModel.LoadUserAndUnitDataAsync();
+                // 2. Wczytaj lekarzy (w Etapie 3 będzie to robić dla aktywnej jednostki)
+                await ViewModel.LoadDoctorsAsync();
+            }
+
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ResetViewportState();
@@ -258,6 +261,7 @@ namespace GrafikoMat
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
+            // ZMIANA: Przekazujemy _dataService, które może być null
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -675,7 +679,8 @@ namespace GrafikoMat
             try
             {
                 _dataService = null;
-                ViewModel.UpdateDoctorRepository(null);
+                // ZMIANA: Zaktualizowana metoda
+                ViewModel.SetDataService(null);
             }
             catch { }
 
