@@ -2,18 +2,27 @@
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.System;
 
 namespace GrafikoMat.Views.Settings
 {
     public sealed partial class UnitsSettingsView : UserControl
     {
-        private readonly ObservableCollection<Unit> Units = new();
+        private readonly List<Unit> _masterUnitList = new();
+        private readonly ObservableCollection<Unit> DisplayedUnits = new();
+
         private DataService? _dataService;
+
+        private bool _isAutocompleteActive = true;
+        private Unit? _currentSuggestion;
 
         public UnitsSettingsView()
         {
@@ -23,20 +32,57 @@ namespace GrafikoMat.Views.Settings
         public async void Initialize(DataService service)
         {
             _dataService = service;
-
-            // ZMIANA: Dodajemy logowanie diagnostyczne
-            Debug.WriteLine("[UnitsSettingsView] Inicjalizacja i próba załadowania jednostek...");
             await LoadUnitsAsync();
         }
 
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
-            Units.Clear();
+
+            _masterUnitList.Clear();
             var unitsFromDb = await _dataService.GetAllUnitsAsync();
-            foreach (var unit in unitsFromDb.OrderBy(u => u.Name))
+            _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
+
+            FilterUnits();
+            UpdateButtonStates();
+        }
+
+        private void FilterUnits()
+        {
+            DisplayedUnits.Clear();
+            bool showArchived = ShowArchivedCheckBox.IsChecked ?? false;
+            var sourceList = showArchived ? _masterUnitList : _masterUnitList.Where(u => !u.IsArchived);
+
+            foreach (var unit in sourceList)
             {
-                Units.Add(unit);
+                DisplayedUnits.Add(unit);
+            }
+        }
+
+        private void UpdateButtonStates()
+        {
+            if (UnitsListView.SelectedItem is Unit selectedUnit)
+            {
+                EditButton.IsEnabled = !selectedUnit.IsArchived;
+
+                if (selectedUnit.IsArchived)
+                {
+                    ArchiveButton.Visibility = Visibility.Collapsed;
+                    RestoreButton.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ArchiveButton.Visibility = Visibility.Visible;
+                    RestoreButton.Visibility = Visibility.Collapsed;
+                    ArchiveButton.IsEnabled = true;
+                }
+            }
+            else
+            {
+                EditButton.IsEnabled = false;
+                ArchiveButton.IsEnabled = false;
+                ArchiveButton.Visibility = Visibility.Visible;
+                RestoreButton.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -47,21 +93,21 @@ namespace GrafikoMat.Views.Settings
 
         private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
-            if (UnitsListView.SelectedItem is Unit selectedUnit)
+            if (UnitsListView.SelectedItem is Unit selectedUnit && !selectedUnit.IsArchived)
             {
                 await ShowUnitDialogAsync(selectedUnit);
             }
         }
 
-        private async void DeleteButton_Click(object sender, RoutedEventArgs e)
+        private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
             {
                 var dialog = new ContentDialog
                 {
-                    Title = "Potwierdź usunięcie",
-                    Content = $"Czy na pewno chcesz usunąć jednostkę '{selectedUnit.Name}'? Tej operacji nie można cofnąć.",
-                    PrimaryButtonText = "Usuń",
+                    Title = "Potwierdź archiwizację",
+                    Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'? Zostanie ona ukryta na listach, ale będzie można ją przywrócić.",
+                    PrimaryButtonText = "Archiwizuj",
                     CloseButtonText = "Anuluj",
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = this.XamlRoot
@@ -69,9 +115,18 @@ namespace GrafikoMat.Views.Settings
                 var result = await dialog.ShowAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    await _dataService.DeleteUnitAsync(selectedUnit.Id);
+                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
                     await LoadUnitsAsync();
                 }
+            }
+        }
+
+        private async void RestoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
+            {
+                await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                await LoadUnitsAsync();
             }
         }
 
@@ -79,11 +134,23 @@ namespace GrafikoMat.Views.Settings
         {
             if (_dataService == null) return;
             bool isEditMode = existingUnit != null;
+            _currentSuggestion = null;
+            _isAutocompleteActive = true;
 
-            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
-            var panel = new StackPanel { Spacing = 12, Children = { nameTextBox, hospitalNameTextBox, departmentNameTextBox } };
+            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
+
+            hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
+            hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
+            hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
+
+            var panel = new StackPanel
+            {
+                Spacing = 12,
+                Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox },
+                Width = 650
+            };
 
             var dialog = new ContentDialog
             {
@@ -91,25 +158,123 @@ namespace GrafikoMat.Views.Settings
                 Content = panel,
                 PrimaryButtonText = "Zapisz",
                 CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.XamlRoot,
-                MinWidth = 700,
-                MaxWidth = 700
+                DefaultButton = ContentDialogButton.None,
+                XamlRoot = this.XamlRoot
             };
+
+            hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
 
             var result = await dialog.ShowAsync();
             if (result == ContentDialogResult.Primary)
             {
-                var unitToSave = new Unit
-                {
-                    Id = existingUnit?.Id ?? Guid.NewGuid(),
-                    Name = nameTextBox.Text,
-                    HospitalFullName = hospitalNameTextBox.Text,
-                    DepartmentName = departmentNameTextBox.Text
-                };
+                var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
+                unitToSave.Name = nameTextBox.Text;
+                unitToSave.HospitalFullName = hospitalNameTextBox.Text;
+                unitToSave.DepartmentName = departmentNameTextBox.Text;
+
                 await _dataService.SaveUnitAsync(unitToSave);
                 await LoadUnitsAsync();
             }
+        }
+
+        // POPRAWIONA METODA: Zmieniono logikę, aby uniknąć błędu kompilatora
+        private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Podstawowe warunki wyjścia
+            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _dataService == null)
+            {
+                return;
+            }
+
+            // Bezpieczne pobranie powiązanych kontrolek
+            if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes)
+            {
+                return;
+            }
+
+            // Sprawdź, czy skrót jest już wypełniony - jeśli tak, nie rób nic
+            if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text))
+            {
+                return;
+            }
+
+            // Teraz, gdy wiemy, że `otherBoxes` istnieje, możemy kontynuować
+            var match = await _dataService.GetFirstUnitByExactHospitalNameAsync(hospitalTextBox.Text);
+            if (match != null)
+            {
+                otherBoxes.Item1.Text = match.Name;
+            }
+        }
+
+        private void HospitalNameTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (sender is not TextBox hospitalTextBox || _currentSuggestion == null) return;
+
+            if (e.Key == VirtualKey.Enter || e.Key == VirtualKey.Tab)
+            {
+                e.Handled = true;
+                _isAutocompleteActive = false;
+
+                hospitalTextBox.Text = _currentSuggestion.HospitalFullName;
+                hospitalTextBox.Select(hospitalTextBox.Text.Length, 0);
+
+                if (hospitalTextBox.Tag is Tuple<TextBox, TextBox> otherBoxes)
+                {
+                    otherBoxes.Item1.Text = _currentSuggestion.Name;
+
+                    if (e.Key == VirtualKey.Tab)
+                    {
+                        otherBoxes.Item2.Focus(FocusState.Programmatic);
+                    }
+                }
+
+                _currentSuggestion = null;
+                _isAutocompleteActive = true;
+            }
+        }
+
+        private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!_isAutocompleteActive || _dataService == null || sender is not TextBox hospitalTextBox) return;
+
+            var userText = hospitalTextBox.Text;
+            var selectionStart = hospitalTextBox.SelectionStart;
+
+            if (selectionStart < userText.Length)
+            {
+                _currentSuggestion = null;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(userText) || userText.Length < 3)
+            {
+                _currentSuggestion = null;
+                return;
+            }
+
+            var match = await _dataService.GetUniqueUnitByHospitalNameStartAsync(userText);
+            _currentSuggestion = match;
+
+            if (match != null && match.HospitalFullName.Length > userText.Length)
+            {
+                _isAutocompleteActive = false;
+
+                hospitalTextBox.Text = match.HospitalFullName;
+                hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
+
+                _isAutocompleteActive = true;
+            }
+        }
+
+        private void ShowArchivedCheckBox_Changed(object sender, RoutedEventArgs e)
+        {
+            FilterUnits();
+            UpdateButtonStates();
+        }
+
+        private void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateButtonStates();
         }
     }
 }

@@ -19,6 +19,10 @@ namespace GrafikoMat.Core.Data
         [Column("department_name")]
         public string DepartmentName { get; set; } = string.Empty;
 
+        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
+        [Column("is_archived")]
+        public bool IsArchived { get; set; } = false;
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
     }

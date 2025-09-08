@@ -7,6 +7,8 @@ using GrafikoMat.Core.Data;
 using GrafikoMat.ViewModels;
 using Supabase;
 using SbClient = Supabase.Client;
+using Supabase.Postgrest;
+using Supabase.Postgrest.Responses;
 
 namespace GrafikoMat.Services
 {
@@ -19,6 +21,32 @@ namespace GrafikoMat.Services
             if (supabaseService.Client is null)
                 throw new InvalidOperationException("Supabase client is not initialized.");
             _supabase = supabaseService.Client;
+        }
+
+        // NOWA METODA: Do wyszukiwania pierwszego rekordu o DOKŁADNIE takiej samej nazwie szpitala
+        public async Task<Unit?> GetFirstUnitByExactHospitalNameAsync(string fullName)
+        {
+            var response = await _supabase.From<Unit>()
+                .Filter("hospital_full_name", Constants.Operator.Equals, fullName)
+                .Limit(1)
+                .Get();
+
+            return response.Models?.FirstOrDefault();
+        }
+
+        public async Task<Unit?> GetUniqueUnitByHospitalNameStartAsync(string partialName)
+        {
+            var response = await _supabase.From<Unit>()
+                .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
+                .Limit(2)
+                .Get();
+
+            if (response.Models != null && response.Models.Count == 1)
+            {
+                return response.Models.First();
+            }
+
+            return null;
         }
 
         public async Task<List<DoctorProfile>> GetAllDoctorsAsync()
@@ -81,7 +109,6 @@ namespace GrafikoMat.Services
             await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
 
-        // NOWA METODA: Do archiwizacji i przywracania lekarzy
         public async Task SetDoctorArchiveStatusAsync(Guid doctorId, bool isArchived)
         {
             var partialUpdate = new DoctorProfile
@@ -138,7 +165,16 @@ namespace GrafikoMat.Services
 
         public async Task SaveUnitAsync(Unit unit) =>
             await _supabase.From<Unit>().Upsert(unit);
+
         public async Task DeleteUnitAsync(Guid unitId) =>
-            await _supabase.From<Unit>().Where(u => u.Id == unitId).Delete();
+            await SetUnitArchiveStatusAsync(unitId, true);
+
+        public async Task SetUnitArchiveStatusAsync(Guid unitId, bool isArchived)
+        {
+            await _supabase.From<Unit>()
+                .Where(u => u.Id == unitId)
+                .Set(u => u.IsArchived, isArchived)
+                .Update();
+        }
     }
 }
