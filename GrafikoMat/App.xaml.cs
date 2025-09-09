@@ -4,7 +4,9 @@ namespace GrafikoMat
 {
     public partial class App : Application
     {
-        public static Window MainWindow { get; private set; }
+        // ZMIANA: Zamiast generycznego 'Window', tworzymy właściwość
+        // o konkretnym typie 'MainWindow', aby uniknąć rzutowania.
+        public static MainWindow MainRoot { get; private set; }
 
         public App()
         {
@@ -13,8 +15,9 @@ namespace GrafikoMat
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            MainWindow = new GrafikoMat.MainWindow();
-            MainWindow.Activate();
+            // Używamy naszej nowej, silnie typowanej właściwości.
+            MainRoot = new GrafikoMat.MainWindow();
+            MainRoot.Activate();
         }
     }
 }

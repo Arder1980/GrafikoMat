@@ -20,7 +20,6 @@ namespace GrafikoMat.ViewModels
 
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
         public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
-
         private List<Unit> _allUnits = new();
 
         private DoctorProfile? _selectedDoctor;
@@ -33,7 +32,6 @@ namespace GrafikoMat.ViewModels
                 {
                     LoadEditorFor(value);
                     ResetPasswordCommand.NotifyCanExecuteChanged();
-                    // ZMIANA: Powiadomienie o zmianie stanu przycisków archiwizacji/przywracania
                     ArchiveDoctorCommand.NotifyCanExecuteChanged();
                     RestoreDoctorCommand.NotifyCanExecuteChanged();
                     OnPropertyChanged(nameof(CanArchive));
@@ -55,7 +53,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA WŁAŚCIWOŚĆ: Steruje pokazywaniem zarchiwizowanych
         private bool _showArchived;
         public bool ShowArchived
         {
@@ -69,7 +66,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWE WŁAŚCIWOŚCI: Sterują widocznością i dostępnością przycisków
         public bool CanArchive => SelectedDoctor != null && !SelectedDoctor.IsArchived;
         public bool CanRestore => SelectedDoctor != null && SelectedDoctor.IsArchived;
 
@@ -115,7 +111,6 @@ namespace GrafikoMat.ViewModels
         public AsyncRelayCommand AddNewDoctorCommand { get; }
         public AsyncRelayCommand SaveDoctorCommand { get; }
         public AsyncRelayCommand ResetPasswordCommand { get; }
-        // NOWE KOMENDY
         public AsyncRelayCommand ArchiveDoctorCommand { get; }
         public AsyncRelayCommand RestoreDoctorCommand { get; }
 
@@ -127,8 +122,6 @@ namespace GrafikoMat.ViewModels
             AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
             ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
-
-            // ZMIANA: Inicjalizacja nowych komend
             ArchiveDoctorCommand = new AsyncRelayCommand(ArchiveDoctor, () => CanArchive);
             RestoreDoctorCommand = new AsyncRelayCommand(RestoreDoctor, () => CanRestore);
         }
@@ -197,17 +190,14 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Logika filtrowania uwzględnia teraz CheckBox "Pokaż zarchiwizowanych"
         private void FilterDoctors()
         {
             FilteredDoctors.Clear();
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
-
             var filteredResult = string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
                     d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase));
-
             foreach (var doctor in filteredResult)
             {
                 FilteredDoctors.Add(doctor);
@@ -235,13 +225,11 @@ namespace GrafikoMat.ViewModels
         private async Task SaveDoctor()
         {
             if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
-
             HideStatusMessage();
 
             var newAssignments = EditorViewModel.Assignments
                 .Where(a => a.IsAssigned && !a.IsPersisted)
                 .ToList();
-
             if (newAssignments.Any())
             {
                 var confirmDialog = new ContentDialog
@@ -251,9 +239,8 @@ namespace GrafikoMat.ViewModels
                     PrimaryButtonText = "Tak, zapisz przypisanie",
                     CloseButtonText = "Anuluj",
                     DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = App.MainWindow.Content.XamlRoot
+                    XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
                 };
-
                 var result = await confirmDialog.ShowAsync();
 
                 if (result != ContentDialogResult.Primary)
@@ -265,6 +252,7 @@ namespace GrafikoMat.ViewModels
             IsLoading = true;
             try
             {
+                var isNew = EditorViewModel.IsNewDoctor;
                 var savedProfileId = EditorViewModel.Profile.Id;
                 await _dataService.SaveDoctorAsync(EditorViewModel);
                 await LoadInitialDataAsync();
@@ -273,7 +261,9 @@ namespace GrafikoMat.ViewModels
                 {
                     SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
                 });
-                ShowStatusMessage("Sukces!", "Dane zostały pomyślnie zapisane.", InfoBarSeverity.Success);
+
+                var successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces!", successMessage); // ZMIANA
             }
             catch (Exception ex)
             {
@@ -285,20 +275,17 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA METODA: Logika archiwizacji
         private async Task ArchiveDoctor()
         {
             if (SelectedDoctor == null || _dataService == null) return;
-
             var confirmDialog = new ContentDialog
             {
                 Title = "Potwierdź archiwizację",
                 Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.FullName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
                 PrimaryButtonText = "Archiwizuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainWindow.Content.XamlRoot
+                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
             };
-
             var result = await confirmDialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 
@@ -306,8 +293,8 @@ namespace GrafikoMat.ViewModels
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, true);
-                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany.", InfoBarSeverity.Success);
-                SelectedDoctor = null; // Deselekcja po archiwizacji
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany."); // ZMIANA
+                SelectedDoctor = null;
                 await LoadInitialDataAsync();
             }
             catch (Exception ex)
@@ -320,7 +307,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA METODA: Logika przywracania
         private async Task RestoreDoctor()
         {
             if (SelectedDoctor == null || _dataService == null) return;
@@ -328,10 +314,9 @@ namespace GrafikoMat.ViewModels
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, false);
-                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony.", InfoBarSeverity.Success);
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony."); // ZMIANA
                 var restoredDoctorId = SelectedDoctor.Id;
                 await LoadInitialDataAsync();
-                // Ponowne zaznaczenie przywróconego lekarza
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
             }
             catch (Exception ex)
@@ -354,7 +339,7 @@ namespace GrafikoMat.ViewModels
                 Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.FirstName} {SelectedDoctor.LastName}?",
                 PrimaryButtonText = "Resetuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainWindow.Content.XamlRoot
+                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
             };
             var result = await confirmDialog.ShowAsync();
 
@@ -368,7 +353,7 @@ namespace GrafikoMat.ViewModels
                     await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
                     await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
                     EditorViewModel.SetNewGeneratedPassword(newPassword);
-                    ShowStatusMessage("Sukces!", $"Hasło zostało zresetowane. Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success);
+                    App.MainRoot?.ShowTemporaryStatusMessage("Hasło zresetowane", $"Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success); // ZMIANA
                 }
                 catch (Exception ex)
                 {
@@ -414,7 +399,7 @@ namespace GrafikoMat.ViewModels
                     new List<Unit>(_allUnits),
                     currentAssignments,
                     existingAbbreviations
-                 );
+                );
             }
             catch (Exception ex)
             {

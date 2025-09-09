@@ -9,21 +9,38 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.System;
 
 namespace GrafikoMat.Views.Settings
 {
-    public sealed partial class UnitsSettingsView : UserControl
+    public sealed partial class UnitsSettingsView : UserControl, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
         private DataService? _dataService;
 
+        private bool _isLoading;
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (_isLoading != value)
+                {
+                    _isLoading = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
-
         public UnitsSettingsView()
         {
             this.InitializeComponent();
@@ -38,13 +55,20 @@ namespace GrafikoMat.Views.Settings
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
+            IsLoading = true;
+            try
+            {
+                _masterUnitList.Clear();
+                var unitsFromDb = await _dataService.GetAllUnitsAsync();
+                _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
 
-            _masterUnitList.Clear();
-            var unitsFromDb = await _dataService.GetAllUnitsAsync();
-            _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
-
-            FilterUnits();
-            UpdateButtonStates();
+                FilterUnits();
+                UpdateButtonStates();
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private void FilterUnits()
@@ -52,7 +76,6 @@ namespace GrafikoMat.Views.Settings
             DisplayedUnits.Clear();
             bool showArchived = ShowArchivedCheckBox.IsChecked ?? false;
             var sourceList = showArchived ? _masterUnitList : _masterUnitList.Where(u => !u.IsArchived);
-
             foreach (var unit in sourceList)
             {
                 DisplayedUnits.Add(unit);
@@ -64,7 +87,6 @@ namespace GrafikoMat.Views.Settings
             if (UnitsListView.SelectedItem is Unit selectedUnit)
             {
                 EditButton.IsEnabled = !selectedUnit.IsArchived;
-
                 if (selectedUnit.IsArchived)
                 {
                     ArchiveButton.Visibility = Visibility.Collapsed;
@@ -115,8 +137,16 @@ namespace GrafikoMat.Views.Settings
                 var result = await dialog.ShowAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
-                    await LoadUnitsAsync();
+                    IsLoading = true;
+                    try
+                    {
+                        await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
+                        await LoadUnitsAsync();
+                    }
+                    finally
+                    {
+                        IsLoading = false;
+                    }
                 }
             }
         }
@@ -125,8 +155,16 @@ namespace GrafikoMat.Views.Settings
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
             {
-                await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
-                await LoadUnitsAsync();
+                IsLoading = true;
+                try
+                {
+                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                    await LoadUnitsAsync();
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
             }
         }
 
@@ -136,11 +174,9 @@ namespace GrafikoMat.Views.Settings
             bool isEditMode = existingUnit != null;
             _currentSuggestion = null;
             _isAutocompleteActive = true;
-
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
-
             hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
             hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
             hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
@@ -151,7 +187,6 @@ namespace GrafikoMat.Views.Settings
                 Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox },
                 Width = 650
             };
-
             var dialog = new ContentDialog
             {
                 Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę",
@@ -172,33 +207,36 @@ namespace GrafikoMat.Views.Settings
                 unitToSave.HospitalFullName = hospitalNameTextBox.Text;
                 unitToSave.DepartmentName = departmentNameTextBox.Text;
 
-                await _dataService.SaveUnitAsync(unitToSave);
-                await LoadUnitsAsync();
+                IsLoading = true;
+                try
+                {
+                    await _dataService.SaveUnitAsync(unitToSave);
+                    await LoadUnitsAsync();
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
             }
         }
 
-        // POPRAWIONA METODA: Zmieniono logikę, aby uniknąć błędu kompilatora
         private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            // Podstawowe warunki wyjścia
             if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _dataService == null)
             {
                 return;
             }
 
-            // Bezpieczne pobranie powiązanych kontrolek
             if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes)
             {
                 return;
             }
 
-            // Sprawdź, czy skrót jest już wypełniony - jeśli tak, nie rób nic
             if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text))
             {
                 return;
             }
 
-            // Teraz, gdy wiemy, że `otherBoxes` istnieje, możemy kontynuować
             var match = await _dataService.GetFirstUnitByExactHospitalNameAsync(hospitalTextBox.Text);
             if (match != null)
             {
@@ -209,7 +247,6 @@ namespace GrafikoMat.Views.Settings
         private void HospitalNameTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (sender is not TextBox hospitalTextBox || _currentSuggestion == null) return;
-
             if (e.Key == VirtualKey.Enter || e.Key == VirtualKey.Tab)
             {
                 e.Handled = true;
@@ -221,7 +258,6 @@ namespace GrafikoMat.Views.Settings
                 if (hospitalTextBox.Tag is Tuple<TextBox, TextBox> otherBoxes)
                 {
                     otherBoxes.Item1.Text = _currentSuggestion.Name;
-
                     if (e.Key == VirtualKey.Tab)
                     {
                         otherBoxes.Item2.Focus(FocusState.Programmatic);
@@ -236,7 +272,6 @@ namespace GrafikoMat.Views.Settings
         private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!_isAutocompleteActive || _dataService == null || sender is not TextBox hospitalTextBox) return;
-
             var userText = hospitalTextBox.Text;
             var selectionStart = hospitalTextBox.SelectionStart;
 
@@ -258,7 +293,6 @@ namespace GrafikoMat.Views.Settings
             if (match != null && match.HospitalFullName.Length > userText.Length)
             {
                 _isAutocompleteActive = false;
-
                 hospitalTextBox.Text = match.HospitalFullName;
                 hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
 

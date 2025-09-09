@@ -138,6 +138,21 @@ namespace GrafikoMat
             await RunEntranceAnimationAsync();
         }
 
+        public void ShowTemporaryStatusMessage(string title, string? message, InfoBarSeverity severity = InfoBarSeverity.Success)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                GlobalStatusInfoBar.Title = title;
+                GlobalStatusInfoBar.Message = message;
+                GlobalStatusInfoBar.Severity = severity;
+                GlobalStatusInfoBar.IsOpen = true;
+
+                await Task.Delay(3000);
+
+                GlobalStatusInfoBar.IsOpen = false;
+            });
+        }
+
         private async Task RunEntranceAnimationAsync()
         {
             var sb = new Storyboard();

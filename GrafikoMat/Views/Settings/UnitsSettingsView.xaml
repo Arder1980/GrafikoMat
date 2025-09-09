@@ -36,25 +36,31 @@
             </StackPanel>
         </Grid>
 
-        <ListView x:Name="UnitsListView"
-                  Grid.Row="2"
-                  ItemsSource="{x:Bind DisplayedUnits}"
-                  SelectionMode="Single"
-                  SelectionChanged="UnitsListView_SelectionChanged"
-                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                  BorderThickness="1"
-                  CornerRadius="4">
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="data:Unit">
-                    <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
-                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
-                        <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
-                        <TextBlock Opacity="0.7" FontSize="12">
-                            <Run Text="{x:Bind HospitalFullName}"/>
-                        </TextBlock>
-                    </StackPanel>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+        <Grid Grid.Row="2">
+            <ListView x:Name="UnitsListView"
+                      ItemsSource="{x:Bind DisplayedUnits}"
+                      SelectionMode="Single"
+                      SelectionChanged="UnitsListView_SelectionChanged"
+                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                      BorderThickness="1"
+                      CornerRadius="4">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="data:Unit">
+                        <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
+                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
+                            <TextBlock Opacity="0.7" FontSize="12">
+                                <Run Text="{x:Bind HospitalFullName}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                  Visibility="{x:Bind IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>

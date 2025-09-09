@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-09 15:17:11
+# Data:       2025-09-09 18:55:31
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -650,7 +650,7 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (455 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (671 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml;
 
@@ -658,7 +658,9 @@ namespace GrafikoMat
 {
     public partial class App : Application
     {
-        public static Window MainWindow { get; private set; }
+        // ZMIANA: Zamiast generycznego 'Window', tworzymy właściwość
+        // o konkretnym typie 'MainWindow', aby uniknąć rzutowania.
+        public static MainWindow MainRoot { get; private set; }
 
         public App()
         {
@@ -667,8 +669,9 @@ namespace GrafikoMat
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            MainWindow = new GrafikoMat.MainWindow();
-            MainWindow.Activate();
+            // Używamy naszej nowej, silnie typowanej właściwości.
+            MainRoot = new GrafikoMat.MainWindow();
+            MainRoot.Activate();
         }
     }
 }
@@ -1214,7 +1217,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (7820 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (8733 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -1232,13 +1235,15 @@ namespace GrafikoMat.Converters
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
-      Background="{ThemeResource LayerFillColorDefaultBrush}"
-      Padding="10,0,0,0">
-            <!-- prawa krawędź ustawimy dynamicznie w C# -->
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              Padding="10,0,0,0" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
 
             <Grid.Resources>
-                <!-- Flyout w zasobach -->
                 <MenuFlyout x:Key="TitleBarMenu" Placement="BottomEdgeAlignedRight">
                     <MenuFlyoutItem Text="Ustawienia" Click="TitleBarSettings_Click">
                         <MenuFlyoutItem.Icon>
@@ -1259,27 +1264,28 @@ namespace GrafikoMat.Converters
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- TYLKO to jest strefą przeciągania -->
             <Grid x:Name="DragBar" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="GrafikoMat Dyżurowy" FontSize="14" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
 
-            <!-- Hamburger „jak przyciski okna”: prostokątny, biała ikona, hover=seledyn -->
             <Button Grid.Column="1"
-            x:Name="TitleBarMenuButton"
-            Width="46" Height="32"
-            HorizontalAlignment="Right"
-            ToolTipService.ToolTip="Menu"
-            FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}"
-            Click="TitleBarMenuButton_Click">
+                    x:Name="TitleBarMenuButton"
+                    Width="46" Height="32"
+                    HorizontalAlignment="Right"
+                    ToolTipService.ToolTip="Menu"
+                    FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}"
+                    Click="TitleBarMenuButton_Click">
                 <Button.Resources>
-                    <!-- prostokątny kształt (bez zaokrągleń) -->
                     <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
                 </Button.Resources>
                 <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;"/>
             </Button>
         </Grid>
-        <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
+
+        <Grid x:Name="UnitSelectionPanel" Grid.Row="1" Padding="12,8" MinHeight="100" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -1316,7 +1322,10 @@ namespace GrafikoMat.Converters
                     ToolTipService.ToolTip="Następna jednostka"/>
         </Grid>
 
-        <Grid Grid.Row="2" Padding="12,8,12,4">
+        <Grid x:Name="MainContentPanel" Grid.Row="2" Padding="12,8,12,4" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <Grid x:Name="ViewportGrid">
                     <ContentControl x:Name="ViewportCurrent" Opacity="1"
@@ -1327,19 +1336,16 @@ namespace GrafikoMat.Converters
             </Border>
         </Grid>
 
-        <Grid Grid.Row="3" Padding="12,4,12,10">
+        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
             <ItemsControl x:Name="ActionButtons"
                           ItemsSource="{x:Bind Actions}"
                           VerticalAlignment="Center">
-
                 <ItemsControl.RenderTransform>
                     <TranslateTransform/>
                 </ItemsControl.RenderTransform>
-
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
@@ -1355,8 +1361,11 @@ namespace GrafikoMat.Converters
             </ItemsControl>
         </Grid>
 
-        <Grid Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
-              Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid x:Name="BottomStatusBar" Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
+              Background="{ThemeResource LayerFillColorDefaultBrush}" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </Grid.RenderTransform>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -1374,15 +1383,24 @@ namespace GrafikoMat.Converters
                        VerticalAlignment="Center"/>
         </Grid>
 
+        <Grid x:Name="InitialLoadingOverlay" Grid.RowSpan="5" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+                <TextBlock Text="Przygotowywanie zawartości..." FontSize="16" FontWeight="SemiBold" Opacity="0.9"/>
+            </StackPanel>
+        </Grid>
+
         <ContentControl x:Name="LoginOverlay"
                         HorizontalContentAlignment="Stretch"
                         VerticalContentAlignment="Stretch"
                         Grid.RowSpan="5"/>
+
+        <Border x:Name="StatusMessageAnchor" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
     </Grid>
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (36192 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (39760 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1422,7 +1440,7 @@ namespace GrafikoMat
         public ObservableCollection<UiAction> Actions { get; } = new();
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
-        private readonly SettingsView _settingsView = new();
+        private SettingsView? _settingsView;
         private ManagementView? _managementView;
 
         private Action<DoctorMonthDeclaration>? _evtDeclSave;
@@ -1446,7 +1464,6 @@ namespace GrafikoMat
             _supabaseService = new SupabaseService();
 
             ViewModel = new MainViewModel();
-            // NOWY KROK: Przekazujemy serwis ustawień do ViewModelu zaraz po jego utworzeniu.
             ViewModel.SetSettingsService(_settingsService);
 
             InitializeComponent();
@@ -1467,8 +1484,6 @@ namespace GrafikoMat
             _declarationsView.SaveRequested += _evtDeclSave;
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
-
-            _settingsView.ReloadRequired += RefreshDataServicesAsync;
 
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
@@ -1522,6 +1537,84 @@ namespace GrafikoMat
             }
 
             await LoadDataAndShowDashboardAsync();
+
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed;
+            await RunEntranceAnimationAsync();
+        }
+
+        // ZMIANA: Cała logika została opakowana w DispatcherQueue.TryEnqueue
+        public void ShowTemporaryStatusMessage(string title, string? message, InfoBarSeverity severity = InfoBarSeverity.Success)
+        {
+            // Gwarantuje, że kod tworzący UI wykona się w głównym wątku interfejsu
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                var teachingTip = new TeachingTip
+                {
+                    Title = title,
+                    Subtitle = message,
+                    Target = StatusMessageAnchor,
+                    PreferredPlacement = TeachingTipPlacementMode.TopRight,
+                    IsLightDismissEnabled = true,
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                switch (severity)
+                {
+                    case InfoBarSeverity.Success:
+                        teachingTip.IconSource = new SymbolIconSource { Symbol = Symbol.Accept };
+                        break;
+                    case InfoBarSeverity.Warning:
+                        teachingTip.IconSource = new SymbolIconSource { Symbol = Symbol.Important };
+                        break;
+                    case InfoBarSeverity.Error:
+                        teachingTip.IconSource = new SymbolIconSource { Symbol = Symbol.Cancel };
+                        break;
+                }
+
+                teachingTip.IsOpen = true;
+                await Task.Delay(2500);
+                teachingTip.IsOpen = false;
+            });
+        }
+
+        private async Task RunEntranceAnimationAsync()
+        {
+            var sb = new Storyboard();
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var duration = new Duration(TimeSpan.FromMilliseconds(400));
+
+            void AddAnimation(UIElement target, string property, double to, double beginTimeMs)
+            {
+                var anim = new DoubleAnimation
+                {
+                    To = to,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    BeginTime = TimeSpan.FromMilliseconds(beginTimeMs)
+                };
+                Storyboard.SetTarget(anim, target);
+                Storyboard.SetTargetProperty(anim, property);
+                sb.Children.Add(anim);
+            }
+
+            AddAnimation(TopBarRow, "Opacity", 1, 0);
+            AddAnimation(TopBarRow, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 0);
+
+            AddAnimation(UnitSelectionPanel, "Opacity", 1, 100);
+            AddAnimation(UnitSelectionPanel, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 100);
+
+            AddAnimation(MainContentPanel, "Opacity", 1, 200);
+            AddAnimation(MainContentPanel, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 200);
+
+            AddAnimation(ActionButtonsPanel, "Opacity", 1, 250);
+
+            AddAnimation(BottomStatusBar, "Opacity", 1, 300);
+            AddAnimation(BottomStatusBar, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 300);
+
+            var tcs = new TaskCompletionSource();
+            sb.Completed += (_, _) => tcs.TrySetResult();
+            sb.Begin();
+            await tcs.Task;
         }
 
         private async Task ReloadSettingsAndServicesAsync()
@@ -1643,12 +1736,20 @@ namespace GrafikoMat
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
+
+            _settingsView = new SettingsView();
+            _settingsView.ReloadRequired += RefreshDataServicesAsync;
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
             {
                 await AnimateToAsync(_settingsView, forward: true);
             }
+            else
+            {
+                ViewportCurrent.Content = _settingsView;
+            }
+
             BuildActionsForSettings();
         }
 
@@ -2039,6 +2140,8 @@ namespace GrafikoMat
             if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
             if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
+
+            if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
 
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
@@ -2862,7 +2965,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ChangePasswordViewModel.cs (2408 bytes)
+===== FILE: GrafikoMat\ViewModels\ChangePasswordViewModel.cs (2701 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Services;
@@ -2877,6 +2980,13 @@ namespace GrafikoMat.ViewModels
         private readonly SupabaseService _supabaseService;
         public event Action<string>? OnError;
         public event Action? OnSuccess;
+
+        private bool _isLoading;
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set => SetProperty(ref _isLoading, value);
+        }
 
         private string _newPassword = string.Empty;
         public string NewPassword
@@ -2922,7 +3032,6 @@ namespace GrafikoMat.ViewModels
         private async Task SavePasswordAsync()
         {
             OnError?.Invoke(string.Empty);
-
             if (NewPassword.Length < 8)
             {
                 OnError?.Invoke("Hasło musi mieć co najmniej 8 znaków.");
@@ -2935,6 +3044,7 @@ namespace GrafikoMat.ViewModels
                 return;
             }
 
+            IsLoading = true;
             try
             {
                 await _supabaseService.UpdateUserPasswordAsync(NewPassword);
@@ -2943,6 +3053,10 @@ namespace GrafikoMat.ViewModels
             catch (Exception ex)
             {
                 OnError?.Invoke($"Wystąpił błąd: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
             }
         }
     }
@@ -3763,7 +3877,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (17798 bytes)
+===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (17406 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -3787,7 +3901,6 @@ namespace GrafikoMat.ViewModels
 
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
         public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
-
         private List<Unit> _allUnits = new();
 
         private DoctorProfile? _selectedDoctor;
@@ -3800,7 +3913,6 @@ namespace GrafikoMat.ViewModels
                 {
                     LoadEditorFor(value);
                     ResetPasswordCommand.NotifyCanExecuteChanged();
-                    // ZMIANA: Powiadomienie o zmianie stanu przycisków archiwizacji/przywracania
                     ArchiveDoctorCommand.NotifyCanExecuteChanged();
                     RestoreDoctorCommand.NotifyCanExecuteChanged();
                     OnPropertyChanged(nameof(CanArchive));
@@ -3822,7 +3934,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA WŁAŚCIWOŚĆ: Steruje pokazywaniem zarchiwizowanych
         private bool _showArchived;
         public bool ShowArchived
         {
@@ -3836,7 +3947,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWE WŁAŚCIWOŚCI: Sterują widocznością i dostępnością przycisków
         public bool CanArchive => SelectedDoctor != null && !SelectedDoctor.IsArchived;
         public bool CanRestore => SelectedDoctor != null && SelectedDoctor.IsArchived;
 
@@ -3882,7 +3992,6 @@ namespace GrafikoMat.ViewModels
         public AsyncRelayCommand AddNewDoctorCommand { get; }
         public AsyncRelayCommand SaveDoctorCommand { get; }
         public AsyncRelayCommand ResetPasswordCommand { get; }
-        // NOWE KOMENDY
         public AsyncRelayCommand ArchiveDoctorCommand { get; }
         public AsyncRelayCommand RestoreDoctorCommand { get; }
 
@@ -3894,8 +4003,6 @@ namespace GrafikoMat.ViewModels
             AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
             ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
-
-            // ZMIANA: Inicjalizacja nowych komend
             ArchiveDoctorCommand = new AsyncRelayCommand(ArchiveDoctor, () => CanArchive);
             RestoreDoctorCommand = new AsyncRelayCommand(RestoreDoctor, () => CanRestore);
         }
@@ -3964,17 +4071,14 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ZMIANA: Logika filtrowania uwzględnia teraz CheckBox "Pokaż zarchiwizowanych"
         private void FilterDoctors()
         {
             FilteredDoctors.Clear();
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
-
             var filteredResult = string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
                     d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase));
-
             foreach (var doctor in filteredResult)
             {
                 FilteredDoctors.Add(doctor);
@@ -4002,13 +4106,11 @@ namespace GrafikoMat.ViewModels
         private async Task SaveDoctor()
         {
             if (_dataService == null || EditorViewModel == null || !EditorViewModel.IsValid) return;
-
             HideStatusMessage();
 
             var newAssignments = EditorViewModel.Assignments
                 .Where(a => a.IsAssigned && !a.IsPersisted)
                 .ToList();
-
             if (newAssignments.Any())
             {
                 var confirmDialog = new ContentDialog
@@ -4018,9 +4120,8 @@ namespace GrafikoMat.ViewModels
                     PrimaryButtonText = "Tak, zapisz przypisanie",
                     CloseButtonText = "Anuluj",
                     DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = App.MainWindow.Content.XamlRoot
+                    XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
                 };
-
                 var result = await confirmDialog.ShowAsync();
 
                 if (result != ContentDialogResult.Primary)
@@ -4032,6 +4133,7 @@ namespace GrafikoMat.ViewModels
             IsLoading = true;
             try
             {
+                var isNew = EditorViewModel.IsNewDoctor;
                 var savedProfileId = EditorViewModel.Profile.Id;
                 await _dataService.SaveDoctorAsync(EditorViewModel);
                 await LoadInitialDataAsync();
@@ -4040,7 +4142,9 @@ namespace GrafikoMat.ViewModels
                 {
                     SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
                 });
-                ShowStatusMessage("Sukces!", "Dane zostały pomyślnie zapisane.", InfoBarSeverity.Success);
+
+                var successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces!", successMessage); // ZMIANA
             }
             catch (Exception ex)
             {
@@ -4052,20 +4156,17 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA METODA: Logika archiwizacji
         private async Task ArchiveDoctor()
         {
             if (SelectedDoctor == null || _dataService == null) return;
-
             var confirmDialog = new ContentDialog
             {
                 Title = "Potwierdź archiwizację",
                 Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.FullName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
                 PrimaryButtonText = "Archiwizuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainWindow.Content.XamlRoot
+                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
             };
-
             var result = await confirmDialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 
@@ -4073,8 +4174,8 @@ namespace GrafikoMat.ViewModels
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, true);
-                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany.", InfoBarSeverity.Success);
-                SelectedDoctor = null; // Deselekcja po archiwizacji
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany."); // ZMIANA
+                SelectedDoctor = null;
                 await LoadInitialDataAsync();
             }
             catch (Exception ex)
@@ -4087,7 +4188,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWA METODA: Logika przywracania
         private async Task RestoreDoctor()
         {
             if (SelectedDoctor == null || _dataService == null) return;
@@ -4095,10 +4195,9 @@ namespace GrafikoMat.ViewModels
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, false);
-                ShowStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony.", InfoBarSeverity.Success);
+                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony."); // ZMIANA
                 var restoredDoctorId = SelectedDoctor.Id;
                 await LoadInitialDataAsync();
-                // Ponowne zaznaczenie przywróconego lekarza
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
             }
             catch (Exception ex)
@@ -4121,7 +4220,7 @@ namespace GrafikoMat.ViewModels
                 Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.FirstName} {SelectedDoctor.LastName}?",
                 PrimaryButtonText = "Resetuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainWindow.Content.XamlRoot
+                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
             };
             var result = await confirmDialog.ShowAsync();
 
@@ -4135,7 +4234,7 @@ namespace GrafikoMat.ViewModels
                     await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
                     await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
                     EditorViewModel.SetNewGeneratedPassword(newPassword);
-                    ShowStatusMessage("Sukces!", $"Hasło zostało zresetowane. Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success);
+                    App.MainRoot?.ShowTemporaryStatusMessage("Hasło zresetowane", $"Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success); // ZMIANA
                 }
                 catch (Exception ex)
                 {
@@ -4181,7 +4280,7 @@ namespace GrafikoMat.ViewModels
                     new List<Unit>(_allUnits),
                     currentAssignments,
                     existingAbbreviations
-                 );
+                );
             }
             catch (Exception ex)
             {
@@ -4266,7 +4365,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ChangePasswordView.xaml (1989 bytes)
+===== FILE: GrafikoMat\Views\ChangePasswordView.xaml (2500 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.ChangePasswordView"
@@ -4274,41 +4373,51 @@ namespace GrafikoMat.ViewModels
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
 
-	<Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-		<StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="380">
-			<TextBlock Text="Wymagana zmiana hasła"
+    <UserControl.Resources>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <StackPanel x:Name="MainPanel" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="380">
+            <TextBlock Text="Wymagana zmiana hasła"
                        FontSize="24"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center"/>
-			<TextBlock Text="Ze względów bezpieczeństwa, musisz ustawić nowe hasło przy pierwszym logowaniu."
+            <TextBlock Text="Ze względów bezpieczeństwa, musisz ustawić nowe hasło przy pierwszym logowaniu."
                        Opacity="0.8"
                        HorizontalAlignment="Center"
                        TextWrapping="Wrap"
                        TextAlignment="Center"
                        Margin="0,0,0,12"/>
 
-			<PasswordBox x:Name="NewPasswordBox"
+            <PasswordBox x:Name="NewPasswordBox"
                          Header="Nowe hasło"
                          Password="{x:Bind ViewModel.NewPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-			<PasswordBox x:Name="ConfirmPasswordBox"
+            <PasswordBox x:Name="ConfirmPasswordBox"
                          Header="Potwierdź nowe hasło"
                          Password="{x:Bind ViewModel.ConfirmPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-			<Button Content="Zapisz i kontynuuj"
+            <Button Content="Zapisz i kontynuuj"
                     Style="{StaticResource AccentButtonStyle}"
                     HorizontalAlignment="Stretch"
                     Command="{x:Bind ViewModel.SavePasswordCommand}"
                     Margin="0,12,0,0"/>
 
-			<InfoBar x:Name="ErrorBar"
+            <InfoBar x:Name="ErrorBar"
                      IsOpen="False"
                      IsClosable="True"
                      Severity="Error"
                      MinHeight="72"/>
-		</StackPanel>
-	</Grid>
+        </StackPanel>
+
+        <Grid Background="#88FFFFFF"
+              Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ProgressRing IsActive="True"/>
+        </Grid>
+    </Grid>
 </UserControl>
 ----- END -----
 
@@ -5497,7 +5606,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3192 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3581 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.UnitsSettingsView"
@@ -5537,31 +5646,37 @@ namespace GrafikoMat.Views.Settings
             </StackPanel>
         </Grid>
 
-        <ListView x:Name="UnitsListView"
-                  Grid.Row="2"
-                  ItemsSource="{x:Bind DisplayedUnits}"
-                  SelectionMode="Single"
-                  SelectionChanged="UnitsListView_SelectionChanged"
-                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                  BorderThickness="1"
-                  CornerRadius="4">
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="data:Unit">
-                    <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
-                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
-                        <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
-                        <TextBlock Opacity="0.7" FontSize="12">
-                            <Run Text="{x:Bind HospitalFullName}"/>
-                        </TextBlock>
-                    </StackPanel>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+        <Grid Grid.Row="2">
+            <ListView x:Name="UnitsListView"
+                      ItemsSource="{x:Bind DisplayedUnits}"
+                      SelectionMode="Single"
+                      SelectionChanged="UnitsListView_SelectionChanged"
+                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                      BorderThickness="1"
+                      CornerRadius="4">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="data:Unit">
+                        <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
+                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
+                            <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
+                            <TextBlock Opacity="0.7" FontSize="12">
+                                <Run Text="{x:Bind HospitalFullName}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                  Visibility="{x:Bind IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+            </Grid>
+        </Grid>
     </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (10439 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (11509 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
@@ -5574,21 +5689,38 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.System;
 
 namespace GrafikoMat.Views.Settings
 {
-    public sealed partial class UnitsSettingsView : UserControl
+    public sealed partial class UnitsSettingsView : UserControl, INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
         private DataService? _dataService;
 
+        private bool _isLoading;
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (_isLoading != value)
+                {
+                    _isLoading = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
-
         public UnitsSettingsView()
         {
             this.InitializeComponent();
@@ -5603,13 +5735,20 @@ namespace GrafikoMat.Views.Settings
         private async Task LoadUnitsAsync()
         {
             if (_dataService == null) return;
+            IsLoading = true;
+            try
+            {
+                _masterUnitList.Clear();
+                var unitsFromDb = await _dataService.GetAllUnitsAsync();
+                _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
 
-            _masterUnitList.Clear();
-            var unitsFromDb = await _dataService.GetAllUnitsAsync();
-            _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
-
-            FilterUnits();
-            UpdateButtonStates();
+                FilterUnits();
+                UpdateButtonStates();
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private void FilterUnits()
@@ -5617,7 +5756,6 @@ namespace GrafikoMat.Views.Settings
             DisplayedUnits.Clear();
             bool showArchived = ShowArchivedCheckBox.IsChecked ?? false;
             var sourceList = showArchived ? _masterUnitList : _masterUnitList.Where(u => !u.IsArchived);
-
             foreach (var unit in sourceList)
             {
                 DisplayedUnits.Add(unit);
@@ -5629,7 +5767,6 @@ namespace GrafikoMat.Views.Settings
             if (UnitsListView.SelectedItem is Unit selectedUnit)
             {
                 EditButton.IsEnabled = !selectedUnit.IsArchived;
-
                 if (selectedUnit.IsArchived)
                 {
                     ArchiveButton.Visibility = Visibility.Collapsed;
@@ -5680,8 +5817,16 @@ namespace GrafikoMat.Views.Settings
                 var result = await dialog.ShowAsync();
                 if (result == ContentDialogResult.Primary)
                 {
-                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
-                    await LoadUnitsAsync();
+                    IsLoading = true;
+                    try
+                    {
+                        await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
+                        await LoadUnitsAsync();
+                    }
+                    finally
+                    {
+                        IsLoading = false;
+                    }
                 }
             }
         }
@@ -5690,8 +5835,16 @@ namespace GrafikoMat.Views.Settings
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
             {
-                await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
-                await LoadUnitsAsync();
+                IsLoading = true;
+                try
+                {
+                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                    await LoadUnitsAsync();
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
             }
         }
 
@@ -5701,11 +5854,9 @@ namespace GrafikoMat.Views.Settings
             bool isEditMode = existingUnit != null;
             _currentSuggestion = null;
             _isAutocompleteActive = true;
-
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
-
             hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
             hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
             hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
@@ -5716,7 +5867,6 @@ namespace GrafikoMat.Views.Settings
                 Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox },
                 Width = 650
             };
-
             var dialog = new ContentDialog
             {
                 Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę",
@@ -5737,33 +5887,36 @@ namespace GrafikoMat.Views.Settings
                 unitToSave.HospitalFullName = hospitalNameTextBox.Text;
                 unitToSave.DepartmentName = departmentNameTextBox.Text;
 
-                await _dataService.SaveUnitAsync(unitToSave);
-                await LoadUnitsAsync();
+                IsLoading = true;
+                try
+                {
+                    await _dataService.SaveUnitAsync(unitToSave);
+                    await LoadUnitsAsync();
+                }
+                finally
+                {
+                    IsLoading = false;
+                }
             }
         }
 
-        // POPRAWIONA METODA: Zmieniono logikę, aby uniknąć błędu kompilatora
         private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            // Podstawowe warunki wyjścia
             if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _dataService == null)
             {
                 return;
             }
 
-            // Bezpieczne pobranie powiązanych kontrolek
             if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes)
             {
                 return;
             }
 
-            // Sprawdź, czy skrót jest już wypełniony - jeśli tak, nie rób nic
             if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text))
             {
                 return;
             }
 
-            // Teraz, gdy wiemy, że `otherBoxes` istnieje, możemy kontynuować
             var match = await _dataService.GetFirstUnitByExactHospitalNameAsync(hospitalTextBox.Text);
             if (match != null)
             {
@@ -5774,7 +5927,6 @@ namespace GrafikoMat.Views.Settings
         private void HospitalNameTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (sender is not TextBox hospitalTextBox || _currentSuggestion == null) return;
-
             if (e.Key == VirtualKey.Enter || e.Key == VirtualKey.Tab)
             {
                 e.Handled = true;
@@ -5786,7 +5938,6 @@ namespace GrafikoMat.Views.Settings
                 if (hospitalTextBox.Tag is Tuple<TextBox, TextBox> otherBoxes)
                 {
                     otherBoxes.Item1.Text = _currentSuggestion.Name;
-
                     if (e.Key == VirtualKey.Tab)
                     {
                         otherBoxes.Item2.Focus(FocusState.Programmatic);
@@ -5801,7 +5952,6 @@ namespace GrafikoMat.Views.Settings
         private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!_isAutocompleteActive || _dataService == null || sender is not TextBox hospitalTextBox) return;
-
             var userText = hospitalTextBox.Text;
             var selectionStart = hospitalTextBox.SelectionStart;
 
@@ -5823,7 +5973,6 @@ namespace GrafikoMat.Views.Settings
             if (match != null && match.HospitalFullName.Length > userText.Length)
             {
                 _isAutocompleteActive = false;
-
                 hospitalTextBox.Text = match.HospitalFullName;
                 hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
 
@@ -5893,7 +6042,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (3658 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (3775 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.Views.Settings;
@@ -5920,24 +6069,28 @@ namespace GrafikoMat.Views
                 "Wybór silnika",
                 "Wygląd"
             };
-            // ZMIANA: Usunęliśmy automatyczne zaznaczanie
+            // Domyślnie nic nie jest zaznaczone
             SettingsMenu.SelectedIndex = -1;
         }
 
+        // ZMIANA: Ta metoda jest teraz bardzo prosta
         public void Initialize(DataService? dataService, SettingsService settingsService, AppSettings settings)
         {
             _dataService = dataService;
             _settingsService = settingsService;
             _appSettings = settings;
 
-            // ZMIANA: Czyścimy zawartość przy każdym wejściu do ustawień
-            SettingsDetailContent.Content = null;
-            SettingsMenu.SelectedIndex = -1;
+            // Domyślnie zaznaczamy pierwszą pozycję na liście, aby użytkownik od razu widział zawartość
+            SettingsMenu.SelectedIndex = 0;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (e.AddedItems.FirstOrDefault() is not string selectedItem) return;
+            if (e.AddedItems.FirstOrDefault() is not string selectedItem)
+            {
+                SettingsDetailContent.Content = null;
+                return;
+            }
             LoadSubView(selectedItem);
         }
 
@@ -5957,7 +6110,6 @@ namespace GrafikoMat.Views
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
                     SettingsDetailContent.Content = connectionView;
                     break;
-
                 case "Jednostki":
                     if (_dataService != null)
                     {
@@ -5975,19 +6127,15 @@ namespace GrafikoMat.Views
                         };
                     }
                     break;
-
                 case "Priorytety":
                     SettingsDetailContent.Content = new PrioritiesSettingsView();
                     break;
-
                 case "Wybór silnika":
                     SettingsDetailContent.Content = new EngineSettingsView();
                     break;
-
                 case "Wygląd":
                     SettingsDetailContent.Content = new AppearanceSettingsView();
                     break;
-
                 default:
                     SettingsDetailContent.Content = null;
                     break;
