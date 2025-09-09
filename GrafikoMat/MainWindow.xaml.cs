@@ -36,7 +36,10 @@ namespace GrafikoMat
         public ObservableCollection<UiAction> Actions { get; } = new();
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
-        private readonly SettingsView _settingsView = new();
+
+        // ZMIANA: Usunęliśmy tworzenie instancji tutaj.
+        // Będzie ona teraz tworzona na żądanie.
+        private SettingsView? _settingsView;
         private ManagementView? _managementView;
 
         private Action<DoctorMonthDeclaration>? _evtDeclSave;
@@ -60,7 +63,6 @@ namespace GrafikoMat
             _supabaseService = new SupabaseService();
 
             ViewModel = new MainViewModel();
-            // NOWY KROK: Przekazujemy serwis ustawień do ViewModelu zaraz po jego utworzeniu.
             ViewModel.SetSettingsService(_settingsService);
 
             InitializeComponent();
@@ -82,7 +84,8 @@ namespace GrafikoMat
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
 
-            _settingsView.ReloadRequired += RefreshDataServicesAsync;
+            // ZMIANA: Subskrypcja do zdarzenia będzie teraz w metodzie SwitchToSettings
+            // _settingsView.ReloadRequired += RefreshDataServicesAsync;
 
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
@@ -254,15 +257,26 @@ namespace GrafikoMat
             ResetViewportState();
         }
 
+        // ZMIANA: Ta metoda została gruntownie przebudowana
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
+
+            // Tworzymy nową, świeżą instancję za każdym razem
+            _settingsView = new SettingsView();
+            _settingsView.ReloadRequired += RefreshDataServicesAsync;
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
             {
                 await AnimateToAsync(_settingsView, forward: true);
             }
+            else
+            {
+                // W przypadku przeładowania, po prostu podmieniamy zawartość bez animacji
+                ViewportCurrent.Content = _settingsView;
+            }
+
             BuildActionsForSettings();
         }
 
@@ -653,6 +667,9 @@ namespace GrafikoMat
             if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
             if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
+
+            // Odpinamy zdarzenie od ostatniej instancji _settingsView
+            if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
 
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }

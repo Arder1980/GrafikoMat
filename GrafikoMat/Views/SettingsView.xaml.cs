@@ -23,24 +23,28 @@ namespace GrafikoMat.Views
                 "Wybór silnika",
                 "Wygląd"
             };
-            // ZMIANA: Usunęliśmy automatyczne zaznaczanie
+            // Domyślnie nic nie jest zaznaczone
             SettingsMenu.SelectedIndex = -1;
         }
 
+        // ZMIANA: Ta metoda jest teraz bardzo prosta
         public void Initialize(DataService? dataService, SettingsService settingsService, AppSettings settings)
         {
             _dataService = dataService;
             _settingsService = settingsService;
             _appSettings = settings;
 
-            // ZMIANA: Czyścimy zawartość przy każdym wejściu do ustawień
-            SettingsDetailContent.Content = null;
-            SettingsMenu.SelectedIndex = -1;
+            // Domyślnie zaznaczamy pierwszą pozycję na liście, aby użytkownik od razu widział zawartość
+            SettingsMenu.SelectedIndex = 0;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (e.AddedItems.FirstOrDefault() is not string selectedItem) return;
+            if (e.AddedItems.FirstOrDefault() is not string selectedItem)
+            {
+                SettingsDetailContent.Content = null;
+                return;
+            }
             LoadSubView(selectedItem);
         }
 
@@ -60,7 +64,6 @@ namespace GrafikoMat.Views
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
                     SettingsDetailContent.Content = connectionView;
                     break;
-
                 case "Jednostki":
                     if (_dataService != null)
                     {
@@ -78,19 +81,15 @@ namespace GrafikoMat.Views
                         };
                     }
                     break;
-
                 case "Priorytety":
                     SettingsDetailContent.Content = new PrioritiesSettingsView();
                     break;
-
                 case "Wybór silnika":
                     SettingsDetailContent.Content = new EngineSettingsView();
                     break;
-
                 case "Wygląd":
                     SettingsDetailContent.Content = new AppearanceSettingsView();
                     break;
-
                 default:
                     SettingsDetailContent.Content = null;
                     break;

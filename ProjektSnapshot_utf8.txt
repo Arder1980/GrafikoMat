@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-09 01:50:34
+# Data:       2025-09-09 15:17:11
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -82,13 +82,13 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (1494 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (1319 bytes)
 ----- BEGIN -----
+// Plik: GrafikoMat.Core\Data\Doctor.cs
+
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
-
-// UWAGA: Usunęliśmy 'using System.Text.Json.Serialization;', nie jest już potrzebny.
 
 namespace GrafikoMat.Core.Data
 {
@@ -122,9 +122,7 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // ZMIANA: Wracamy do atrybutu [Ignore], który jest specyficzny dla Supabase.Postgrest.
-        // To jest jedyny atrybut, który zadziała przy operacjach Update() i Insert().
-        [Ignore]
+        // BEZ ATRYBUTÓW - To jest teraz tylko właściwość pomocnicza w C#
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()
@@ -233,14 +231,50 @@ namespace GrafikoMat.Core.Data
 
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Declarations.Models.cs (2177 bytes)
+===== FILE: GrafikoMat.Core\Declarations.Models.cs (3365 bytes)
 ----- BEGIN -----
+using GrafikoMat.Core.Data;
+using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
 using System;
 using System.Collections.Generic;
 using GrafikoMat.Core.Scheduling;
 
 namespace GrafikoMat.Core.Declarations
 {
+    // NOWA KLASA - DTO (Data Transfer Object) do aktualizacji danych lekarza.
+    // Zawiera tylko te pola, które mają swoje odpowiedniki w bazie danych.
+    [Table("doctors")]
+    public class DoctorForUpdate : BaseModel
+    {
+        [PrimaryKey("id", shouldInsert: false)] // Klucz główny, ale nie wstawiamy go przy tworzeniu
+        public Guid Id { get; set; }
+
+        [Column("first_name")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Column("last_name")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Column("abbreviation")]
+        public string Abbreviation { get; set; } = string.Empty;
+
+        [Column("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Column("is_admin")]
+        public bool IsAdmin { get; set; }
+
+        [Column("is_archived")]
+        public bool IsArchived { get; set; }
+
+        [Column("requires_password_change")]
+        public bool RequiresPasswordChange { get; set; }
+
+        // Celowo pomijamy 'created_at' i 'FullName'
+    }
+
+
     /// <summary>
     /// Deklaracje dyżurowe lekarza dla jednego miesiąca (wejście do generatora).
     /// </summary>
@@ -295,7 +329,6 @@ namespace GrafikoMat.Core.Declarations
         }
     }
 }
-
 ----- END -----
 
 ===== FILE: GrafikoMat.Core\GrafikoMat.Core.csproj (437 bytes)
@@ -1349,7 +1382,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (36496 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (36192 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1412,8 +1445,10 @@ namespace GrafikoMat
             _settingsService = new SettingsService();
             _supabaseService = new SupabaseService();
 
-            // ZMIANA: Inicjalizujemy ViewModel bez parametrów. Serwisy zostaną wstrzyknięte później.
             ViewModel = new MainViewModel();
+            // NOWY KROK: Przekazujemy serwis ustawień do ViewModelu zaraz po jego utworzeniu.
+            ViewModel.SetSettingsService(_settingsService);
+
             InitializeComponent();
 
             this.ExtendsContentIntoTitleBar = true;
@@ -1503,8 +1538,6 @@ namespace GrafikoMat
                 _supabaseService.Initialize(string.Empty, string.Empty);
                 _dataService = null;
             }
-
-            // NOWY KROK: Wstrzykujemy DataService do ViewModelu za każdym razem, gdy przeładowujemy ustawienia
             ViewModel.SetDataService(_dataService);
         }
 
@@ -1594,14 +1627,11 @@ namespace GrafikoMat
             return await tcs.Task;
         }
 
-
-        // Plik: MainWindow.xaml.cs
         private async Task LoadDataAndShowDashboardAsync()
         {
             if (_dataService != null)
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
-                // ZMIANA: Wywołujemy nową, synchroniczną wersję metody.
                 ViewModel.LoadDataForActiveUnit();
             }
 
@@ -1609,10 +1639,10 @@ namespace GrafikoMat
             BuildActionsForDashboard();
             ResetViewportState();
         }
+
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
-            // ZMIANA: Przekazujemy _dataService, które może być null
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -2030,7 +2060,6 @@ namespace GrafikoMat
             try
             {
                 _dataService = null;
-                // ZMIANA: Zaktualizowana metoda
                 ViewModel.SetDataService(null);
             }
             catch { }
@@ -2302,7 +2331,7 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\DataService.cs (7389 bytes)
+===== FILE: GrafikoMat\Services\DataService.cs (7829 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Generic;
@@ -2310,11 +2339,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Declarations;
 using GrafikoMat.ViewModels;
 using Supabase;
 using SbClient = Supabase.Client;
 using Supabase.Postgrest;
 using Supabase.Postgrest.Responses;
+
 namespace GrafikoMat.Services
 {
     public class DataService
@@ -2357,9 +2388,7 @@ namespace GrafikoMat.Services
             return response.Models ?? new List<DoctorProfile>();
         }
 
-        // USUNIĘTA METODA: GetDoctorsForUnitAsync została usunięta, aby uniknąć błędu.
-
-        // NOWA METODA: Pobiera wszystkie przypisania z bazy danych za jednym razem.
+        // BRAKUJĄCA METODA DODANA PONIŻEJ
         public async Task<List<UnitDoctorAssignment>> GetAllAssignmentsAsync()
         {
             var response = await _supabase.From<UnitDoctorAssignment>().Get();
@@ -2446,7 +2475,19 @@ namespace GrafikoMat.Services
             }
             else
             {
-                await _supabase.From<DoctorProfile>().Update(profile);
+                var doctorDataForUpdate = new DoctorForUpdate
+                {
+                    Id = profile.Id,
+                    FirstName = profile.FirstName,
+                    LastName = profile.LastName,
+                    Abbreviation = profile.Abbreviation,
+                    Email = profile.Email,
+                    IsAdmin = profile.IsAdmin,
+                    IsArchived = profile.IsArchived,
+                    RequiresPasswordChange = profile.RequiresPasswordChange
+                };
+
+                await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
             }
 
             var currentAssignments = await GetAssignmentsForDoctorAsync(profile.Id);
@@ -2587,7 +2628,7 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (2427 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (2457 bytes)
 ----- BEGIN -----
 using System;
 using System.IO;
@@ -2599,7 +2640,6 @@ namespace GrafikoMat.Services
 {
     /// <summary>
     /// Przechowuje globalne ustawienia aplikacji.
-    /// W nowym, scentralizowanym modelu, zawiera jedno, główne połączenie do bazy Supabase.
     /// </summary>
     public record AppSettings
     {
@@ -2610,6 +2650,9 @@ namespace GrafikoMat.Services
         // Pozostałe, globalne ustawienia aplikacji
         public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
+
+        // NOWA WŁAŚCIWOŚĆ: Przechowuje ID ostatnio aktywnej jednostki
+        public Guid? LastActiveUnitId { get; init; }
     }
 
     public record WindowSize(int Width, int Height);
@@ -2627,7 +2670,6 @@ namespace GrafikoMat.Services
         {
             if (_currentSettings != null)
                 return _currentSettings;
-
             try
             {
                 if (File.Exists(_settingsPath))
@@ -2649,7 +2691,6 @@ namespace GrafikoMat.Services
         public async Task SaveSettingsAsync(AppSettings settings)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
-
             _currentSettings = settings;
             var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(_settingsPath, json);
@@ -3429,7 +3470,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (11120 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (13032 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -3455,8 +3496,9 @@ namespace GrafikoMat.ViewModels
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         private DataService? _dataService;
+        // NOWE: Pole do przechowywania serwisu ustawień
+        private SettingsService? _settingsService;
 
-        // Główne listy przechowujące dane w pamięci przez całą sesję
         private readonly List<DoctorProfile> _allDoctors = new();
         private readonly List<UnitDoctorAssignment> _allAssignments = new();
 
@@ -3509,6 +3551,9 @@ namespace GrafikoMat.ViewModels
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
+
+            // NOWY KROK: Subskrybujemy zdarzenie, aby wykryć zmianę jednostki i zapisać ją.
+            this.PropertyChanged += OnMainViewModelPropertyChanged;
         }
 
         public void SetDataService(DataService? dataService)
@@ -3516,17 +3561,21 @@ namespace GrafikoMat.ViewModels
             _dataService = dataService;
         }
 
+        // NOWA METODA: Do wstrzykiwania SettingsService
+        public void SetSettingsService(SettingsService settingsService)
+        {
+            _settingsService = settingsService;
+        }
+
         public async Task LoadUserAndUnitDataAsync()
         {
-            if (_dataService == null) return;
+            if (_dataService == null || _settingsService == null) return;
 
-            // Jednorazowe wczytanie wszystkich danych do pamięci
             _allDoctors.Clear();
             _allAssignments.Clear();
             _allDoctors.AddRange(await _dataService.GetAllDoctorsAsync());
             _allAssignments.AddRange(await _dataService.GetAllAssignmentsAsync());
 
-            // ZMIANA: Używamy dedykowanej metody z DataService do pobrania profilu.
             var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
             if (userProfile == null)
             {
@@ -3557,7 +3606,28 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
-            _activeUnitIndex = _userUnits.Any() ? 0 : -1;
+            // ZMIANA: Dodajemy logikę odczytu i przywracania ostatniej jednostki
+            var settings = await _settingsService.LoadSettingsAsync();
+            var lastUnitId = settings.LastActiveUnitId;
+
+            int targetIndex = 0; // Domyślnie pierwsza jednostka z listy
+
+            if (lastUnitId.HasValue)
+            {
+                // Szukamy, czy zapisana jednostka jest dostępna dla bieżącego użytkownika
+                int foundIndex = _userUnits.FindIndex(u => u.Id == lastUnitId.Value);
+
+                // Jeśli znaleziono (indeks >= 0), to ustawiamy ją jako docelową
+                if (foundIndex != -1)
+                {
+                    targetIndex = foundIndex;
+                }
+                // Jeśli nie znaleziono, `targetIndex` pozostaje 0, co automatycznie
+                // obsługuje przypadek, gdy nowy użytkownik nie ma dostępu do starej jednostki.
+            }
+
+            // Ustawiamy aktywny indeks, obsługując przypadek, gdy użytkownik nie ma żadnych jednostek
+            _activeUnitIndex = _userUnits.Any() ? targetIndex : -1;
 
             OnPropertyChanged(nameof(ActiveUnit));
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
@@ -3592,34 +3662,28 @@ namespace GrafikoMat.ViewModels
         {
             DoctorRows.Clear();
 
-            if (ActiveUnit == null)
+            if (ActiveUnit != null)
             {
-                return;
+                var doctorIdsForUnit = _allAssignments
+                    .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
+                    .Select(a => a.DoctorId)
+                    .ToHashSet();
+
+                if (doctorIdsForUnit.Any())
+                {
+                    var doctorsForUnit = _allDoctors
+                        .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
+
+                    foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
+                    {
+                        var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                        bool hasDecls = _declByKey.ContainsKey(key);
+                        DoctorRows.Add(new DoctorRow(doctor.FullName, hasDecls));
+                    }
+                }
             }
 
-            // 1. Znajdź ID lekarzy przypisanych do aktywnej jednostki (filtrowanie w pamięci)
-            var doctorIdsForUnit = _allAssignments
-                .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
-                .Select(a => a.DoctorId)
-                .ToHashSet();
-
-            if (!doctorIdsForUnit.Any())
-            {
-                return;
-            }
-
-            // 2. Odfiltruj z master-listy tylko pasujących lekarzy (filtrowanie w pamięci)
-            var doctorsForUnit = _allDoctors
-                .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
-
-
-            // 3. Wypełnij kolekcję, która jest powiązana z UI
-            foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
-            {
-                var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
-                bool hasDecls = _declByKey.ContainsKey(key);
-                DoctorRows.Add(new DoctorRow(doctor.FullName, hasDecls));
-            }
+            UpdateRosterForSelectedMonth();
         }
 
         private void UpdateRosterForSelectedMonth()
@@ -3635,6 +3699,28 @@ namespace GrafikoMat.ViewModels
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }
         }
+
+        // NOWE METODY: Logika zapisu ustawień
+        private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ActiveUnit))
+            {
+                SaveCurrentUnitAsync();
+            }
+        }
+
+        private async void SaveCurrentUnitAsync()
+        {
+            if (_settingsService == null) return;
+
+            var settings = await _settingsService.LoadSettingsAsync();
+
+            // Używamy `ActiveUnit?.Id`, co da `null` jeśli żadna jednostka nie jest aktywna
+            var newSettings = settings with { LastActiveUnitId = ActiveUnit?.Id };
+
+            await _settingsService.SaveSettingsAsync(newSettings);
+        }
+
 
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
         public void PrevYear() => SelectedYear -= 1;
@@ -4363,9 +4449,10 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (8158 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (9045 bytes)
 ----- BEGIN -----
 using System;
+using System.Collections.Specialized; // NOWY USING
 using System.ComponentModel;
 using GrafikoMat.Common;
 using GrafikoMat.ViewModels;
@@ -4389,22 +4476,43 @@ namespace GrafikoMat.Views
             DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
         }
 
+        // ZMIANA: Metoda Attach została rozbudowana o obsługę zdarzenia CollectionChanged
         public void Attach(MainViewModel vm)
         {
             if (_vm != null)
+            {
                 _vm.PropertyChanged -= OnVmPropertyChanged;
+                // Zawsze odpinamy stare zdarzenie, aby uniknąć wycieków pamięci
+                _vm.DoctorRows.CollectionChanged -= OnDoctorRowsChanged;
+            }
 
             _vm = vm;
             this.DataContext = vm;
-            _vm.PropertyChanged += OnVmPropertyChanged;
+
+            if (_vm != null)
+            {
+                _vm.PropertyChanged += OnVmPropertyChanged;
+                // Podpinamy nowe zdarzenie do nowej instancji ViewModelu
+                _vm.DoctorRows.CollectionChanged += OnDoctorRowsChanged;
+            }
         }
+
+        // NOWA METODA: Ta metoda będzie wywoływana za każdym razem,
+        // gdy lista DoctorRows zostanie zmodyfikowana (wyczyszczona, dodany element itp.)
+        private void OnDoctorRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Upewniamy się, że przebudowanie siatki odbywa się w wątku UI
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                BuildLeftTable();
+            });
+        }
+
 
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // ZMIANA: Dodajemy sprawdzenie, czy _vm nie jest null.
             if (_vm != null && (e.PropertyName == nameof(MainViewModel.SelectedYear) ||
-                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex) ||
-                e.PropertyName.StartsWith("DoctorRows")))
+                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex)))
             {
                 BuildLeftTable();
             }
@@ -4418,7 +4526,6 @@ namespace GrafikoMat.Views
         private void BuildLeftTable()
         {
             if (_vm is null || this.ActualWidth == 0) return;
-
             DeclarationsGrid.Children.Clear();
             DeclarationsGrid.RowDefinitions.Clear();
             DeclarationsGrid.ColumnDefinitions.Clear();
@@ -4454,14 +4561,12 @@ namespace GrafikoMat.Views
                 var date = new DateTime(year, month, d);
                 bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
                 bool isLastColumn = (d == daysInMonth);
-
                 var cell = new Border
                 {
                     BorderBrush = borderBrush,
                     BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1),
                     Background = isDayOff ? dayOffFill : null
                 };
-
                 Grid.SetRow(cell, 0);
                 Grid.SetColumn(cell, d);
                 cell.Child = new TextBlock { Text = $"{d:00}\n{DowPlShort(date.DayOfWeek)}", TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, LineHeight = 14, Padding = new Thickness(0, 4, 0, 4) };
@@ -4483,19 +4588,16 @@ namespace GrafikoMat.Views
                     var date = new DateTime(year, month, d);
                     bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
                     bool isLastColumn = (d == daysInMonth);
-
                     var cell = new Border
                     {
                         BorderBrush = borderBrush,
                         BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1),
                         Background = isDayOff ? dayOffFill : null
                     };
-
                     Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
 
                     var entry = _vm.TryGetEntry(doctor.Name, year, _vm.SelectedMonthIndex, d - 1);
                     FrameworkElement content;
-
                     if (!entry.has || (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
                     {
                         content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -4510,10 +4612,8 @@ namespace GrafikoMat.Views
                         g.RowDefinitions.Add(new RowDefinition());
                         g.RowDefinitions.Add(new RowDefinition());
                         g.Children.Add(new Border { BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)), BorderThickness = new Thickness(0, 0, 0, 1), VerticalAlignment = VerticalAlignment.Center });
-
                         var tb1 = new TextBlock { Text = entry.day, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                         var tb2 = new TextBlock { Text = entry.night, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
-
                         Grid.SetRow(tb1, 0); Grid.SetRow(tb2, 1);
                         g.Children.Add(tb1); g.Children.Add(tb2);
                         content = g;
