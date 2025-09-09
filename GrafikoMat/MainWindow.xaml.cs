@@ -36,9 +36,6 @@ namespace GrafikoMat
         public ObservableCollection<UiAction> Actions { get; } = new();
         private readonly DashboardView _dashboardView = new();
         private readonly DeclarationsView _declarationsView = new();
-
-        // ZMIANA: Usunęliśmy tworzenie instancji tutaj.
-        // Będzie ona teraz tworzona na żądanie.
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
 
@@ -83,9 +80,6 @@ namespace GrafikoMat
             _declarationsView.SaveRequested += _evtDeclSave;
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
-
-            // ZMIANA: Subskrypcja do zdarzenia będzie teraz w metodzie SwitchToSettings
-            // _settingsView.ReloadRequired += RefreshDataServicesAsync;
 
             this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
@@ -139,6 +133,49 @@ namespace GrafikoMat
             }
 
             await LoadDataAndShowDashboardAsync();
+
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed;
+            await RunEntranceAnimationAsync();
+        }
+
+        private async Task RunEntranceAnimationAsync()
+        {
+            var sb = new Storyboard();
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var duration = new Duration(TimeSpan.FromMilliseconds(400));
+
+            void AddAnimation(UIElement target, string property, double to, double beginTimeMs)
+            {
+                var anim = new DoubleAnimation
+                {
+                    To = to,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    BeginTime = TimeSpan.FromMilliseconds(beginTimeMs)
+                };
+                Storyboard.SetTarget(anim, target);
+                Storyboard.SetTargetProperty(anim, property);
+                sb.Children.Add(anim);
+            }
+
+            AddAnimation(TopBarRow, "Opacity", 1, 0);
+            AddAnimation(TopBarRow, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 0);
+
+            AddAnimation(UnitSelectionPanel, "Opacity", 1, 100);
+            AddAnimation(UnitSelectionPanel, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 100);
+
+            AddAnimation(MainContentPanel, "Opacity", 1, 200);
+            AddAnimation(MainContentPanel, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 200);
+
+            AddAnimation(ActionButtonsPanel, "Opacity", 1, 250);
+
+            AddAnimation(BottomStatusBar, "Opacity", 1, 300);
+            AddAnimation(BottomStatusBar, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 300);
+
+            var tcs = new TaskCompletionSource();
+            sb.Completed += (_, _) => tcs.TrySetResult();
+            sb.Begin();
+            await tcs.Task;
         }
 
         private async Task ReloadSettingsAndServicesAsync()
@@ -257,12 +294,10 @@ namespace GrafikoMat
             ResetViewportState();
         }
 
-        // ZMIANA: Ta metoda została gruntownie przebudowana
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
 
-            // Tworzymy nową, świeżą instancję za każdym razem
             _settingsView = new SettingsView();
             _settingsView.ReloadRequired += RefreshDataServicesAsync;
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
@@ -273,7 +308,6 @@ namespace GrafikoMat
             }
             else
             {
-                // W przypadku przeładowania, po prostu podmieniamy zawartość bez animacji
                 ViewportCurrent.Content = _settingsView;
             }
 
@@ -668,7 +702,6 @@ namespace GrafikoMat
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
             if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
 
-            // Odpinamy zdarzenie od ostatniej instancji _settingsView
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
 
             try { ViewportNext.Content = null; } catch { }

@@ -14,13 +14,15 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+
         <Grid x:Name="TopBarRow" Grid.Row="0" Height="32"
-      Background="{ThemeResource LayerFillColorDefaultBrush}"
-      Padding="10,0,0,0">
-            <!-- prawa krawędź ustawimy dynamicznie w C# -->
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              Padding="10,0,0,0" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
 
             <Grid.Resources>
-                <!-- Flyout w zasobach -->
                 <MenuFlyout x:Key="TitleBarMenu" Placement="BottomEdgeAlignedRight">
                     <MenuFlyoutItem Text="Ustawienia" Click="TitleBarSettings_Click">
                         <MenuFlyoutItem.Icon>
@@ -41,27 +43,28 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <!-- TYLKO to jest strefą przeciągania -->
             <Grid x:Name="DragBar" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="GrafikoMat Dyżurowy" FontSize="14" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
 
-            <!-- Hamburger „jak przyciski okna”: prostokątny, biała ikona, hover=seledyn -->
             <Button Grid.Column="1"
-            x:Name="TitleBarMenuButton"
-            Width="46" Height="32"
-            HorizontalAlignment="Right"
-            ToolTipService.ToolTip="Menu"
-            FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}"
-            Click="TitleBarMenuButton_Click">
+                    x:Name="TitleBarMenuButton"
+                    Width="46" Height="32"
+                    HorizontalAlignment="Right"
+                    ToolTipService.ToolTip="Menu"
+                    FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}"
+                    Click="TitleBarMenuButton_Click">
                 <Button.Resources>
-                    <!-- prostokątny kształt (bez zaokrągleń) -->
                     <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
                 </Button.Resources>
                 <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;"/>
             </Button>
         </Grid>
-        <Grid Grid.Row="1" Padding="12,8" MinHeight="100">
+
+        <Grid x:Name="UnitSelectionPanel" Grid.Row="1" Padding="12,8" MinHeight="100" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -98,7 +101,10 @@
                     ToolTipService.ToolTip="Następna jednostka"/>
         </Grid>
 
-        <Grid Grid.Row="2" Padding="12,8,12,4">
+        <Grid x:Name="MainContentPanel" Grid.Row="2" Padding="12,8,12,4" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
             <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
                 <Grid x:Name="ViewportGrid">
                     <ContentControl x:Name="ViewportCurrent" Opacity="1"
@@ -109,19 +115,16 @@
             </Border>
         </Grid>
 
-        <Grid Grid.Row="3" Padding="12,4,12,10">
+        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
             <ItemsControl x:Name="ActionButtons"
                           ItemsSource="{x:Bind Actions}"
                           VerticalAlignment="Center">
-
                 <ItemsControl.RenderTransform>
                     <TranslateTransform/>
                 </ItemsControl.RenderTransform>
-
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
@@ -137,8 +140,11 @@
             </ItemsControl>
         </Grid>
 
-        <Grid Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
-              Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid x:Name="BottomStatusBar" Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16"
+              Background="{ThemeResource LayerFillColorDefaultBrush}" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </Grid.RenderTransform>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -154,6 +160,13 @@
                        FontWeight="SemiBold" 
                        Margin="0,2,0,0"
                        VerticalAlignment="Center"/>
+        </Grid>
+
+        <Grid x:Name="InitialLoadingOverlay" Grid.RowSpan="5" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+                <TextBlock Text="Przygotowywanie zawartości..." FontSize="16" FontWeight="SemiBold" Opacity="0.9"/>
+            </StackPanel>
         </Grid>
 
         <ContentControl x:Name="LoginOverlay"
