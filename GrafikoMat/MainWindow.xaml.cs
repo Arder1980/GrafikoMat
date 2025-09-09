@@ -59,8 +59,10 @@ namespace GrafikoMat
             _settingsService = new SettingsService();
             _supabaseService = new SupabaseService();
 
-            // ZMIANA: Inicjalizujemy ViewModel bez parametrów. Serwisy zostaną wstrzyknięte później.
             ViewModel = new MainViewModel();
+            // NOWY KROK: Przekazujemy serwis ustawień do ViewModelu zaraz po jego utworzeniu.
+            ViewModel.SetSettingsService(_settingsService);
+
             InitializeComponent();
 
             this.ExtendsContentIntoTitleBar = true;
@@ -150,8 +152,6 @@ namespace GrafikoMat
                 _supabaseService.Initialize(string.Empty, string.Empty);
                 _dataService = null;
             }
-
-            // NOWY KROK: Wstrzykujemy DataService do ViewModelu za każdym razem, gdy przeładowujemy ustawienia
             ViewModel.SetDataService(_dataService);
         }
 
@@ -241,14 +241,11 @@ namespace GrafikoMat
             return await tcs.Task;
         }
 
-
-        // Plik: MainWindow.xaml.cs
         private async Task LoadDataAndShowDashboardAsync()
         {
             if (_dataService != null)
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
-                // ZMIANA: Wywołujemy nową, synchroniczną wersję metody.
                 ViewModel.LoadDataForActiveUnit();
             }
 
@@ -256,10 +253,10 @@ namespace GrafikoMat
             BuildActionsForDashboard();
             ResetViewportState();
         }
+
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
-            // ZMIANA: Przekazujemy _dataService, które może być null
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -677,7 +674,6 @@ namespace GrafikoMat
             try
             {
                 _dataService = null;
-                // ZMIANA: Zaktualizowana metoda
                 ViewModel.SetDataService(null);
             }
             catch { }

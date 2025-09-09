@@ -8,7 +8,6 @@ namespace GrafikoMat.Services
 {
     /// <summary>
     /// Przechowuje globalne ustawienia aplikacji.
-    /// W nowym, scentralizowanym modelu, zawiera jedno, główne połączenie do bazy Supabase.
     /// </summary>
     public record AppSettings
     {
@@ -19,6 +18,9 @@ namespace GrafikoMat.Services
         // Pozostałe, globalne ustawienia aplikacji
         public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
+
+        // NOWA WŁAŚCIWOŚĆ: Przechowuje ID ostatnio aktywnej jednostki
+        public Guid? LastActiveUnitId { get; init; }
     }
 
     public record WindowSize(int Width, int Height);
@@ -36,7 +38,6 @@ namespace GrafikoMat.Services
         {
             if (_currentSettings != null)
                 return _currentSettings;
-
             try
             {
                 if (File.Exists(_settingsPath))
@@ -58,7 +59,6 @@ namespace GrafikoMat.Services
         public async Task SaveSettingsAsync(AppSettings settings)
         {
             if (settings == null) throw new ArgumentNullException(nameof(settings));
-
             _currentSettings = settings;
             var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(_settingsPath, json);

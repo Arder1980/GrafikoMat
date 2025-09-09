@@ -22,6 +22,8 @@ namespace GrafikoMat.ViewModels
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         private DataService? _dataService;
+        // NOWE: Pole do przechowywania serwisu ustawień
+        private SettingsService? _settingsService;
 
         private readonly List<DoctorProfile> _allDoctors = new();
         private readonly List<UnitDoctorAssignment> _allAssignments = new();
@@ -75,6 +77,9 @@ namespace GrafikoMat.ViewModels
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
+
+            // NOWY KROK: Subskrybujemy zdarzenie, aby wykryć zmianę jednostki i zapisać ją.
+            this.PropertyChanged += OnMainViewModelPropertyChanged;
         }
 
         public void SetDataService(DataService? dataService)
@@ -82,9 +87,15 @@ namespace GrafikoMat.ViewModels
             _dataService = dataService;
         }
 
+        // NOWA METODA: Do wstrzykiwania SettingsService
+        public void SetSettingsService(SettingsService settingsService)
+        {
+            _settingsService = settingsService;
+        }
+
         public async Task LoadUserAndUnitDataAsync()
         {
-            if (_dataService == null) return;
+            if (_dataService == null || _settingsService == null) return;
 
             _allDoctors.Clear();
             _allAssignments.Clear();
@@ -121,7 +132,28 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
-            _activeUnitIndex = _userUnits.Any() ? 0 : -1;
+            // ZMIANA: Dodajemy logikę odczytu i przywracania ostatniej jednostki
+            var settings = await _settingsService.LoadSettingsAsync();
+            var lastUnitId = settings.LastActiveUnitId;
+
+            int targetIndex = 0; // Domyślnie pierwsza jednostka z listy
+
+            if (lastUnitId.HasValue)
+            {
+                // Szukamy, czy zapisana jednostka jest dostępna dla bieżącego użytkownika
+                int foundIndex = _userUnits.FindIndex(u => u.Id == lastUnitId.Value);
+
+                // Jeśli znaleziono (indeks >= 0), to ustawiamy ją jako docelową
+                if (foundIndex != -1)
+                {
+                    targetIndex = foundIndex;
+                }
+                // Jeśli nie znaleziono, `targetIndex` pozostaje 0, co automatycznie
+                // obsługuje przypadek, gdy nowy użytkownik nie ma dostępu do starej jednostki.
+            }
+
+            // Ustawiamy aktywny indeks, obsługując przypadek, gdy użytkownik nie ma żadnych jednostek
+            _activeUnitIndex = _userUnits.Any() ? targetIndex : -1;
 
             OnPropertyChanged(nameof(ActiveUnit));
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
@@ -177,9 +209,6 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
-            // ZMIANA: Dodajemy to wywołanie, aby siatka grafiku również się odświeżyła.
-            // Na razie będzie to ta sama, pusta siatka, ale w przyszłości
-            // będzie tu logika wczytująca grafik dla danej jednostki.
             UpdateRosterForSelectedMonth();
         }
 
@@ -196,6 +225,28 @@ namespace GrafikoMat.ViewModels
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }
         }
+
+        // NOWE METODY: Logika zapisu ustawień
+        private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ActiveUnit))
+            {
+                SaveCurrentUnitAsync();
+            }
+        }
+
+        private async void SaveCurrentUnitAsync()
+        {
+            if (_settingsService == null) return;
+
+            var settings = await _settingsService.LoadSettingsAsync();
+
+            // Używamy `ActiveUnit?.Id`, co da `null` jeśli żadna jednostka nie jest aktywna
+            var newSettings = settings with { LastActiveUnitId = ActiveUnit?.Id };
+
+            await _settingsService.SaveSettingsAsync(newSettings);
+        }
+
 
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
         public void PrevYear() => SelectedYear -= 1;
