@@ -242,13 +242,14 @@ namespace GrafikoMat
         }
 
 
+        // Plik: MainWindow.xaml.cs
         private async Task LoadDataAndShowDashboardAsync()
         {
             if (_dataService != null)
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
-                // Zmieniamy wywołanie na nową nazwę metody
-                await ViewModel.LoadDataForActiveUnitAsync();
+                // ZMIANA: Wywołujemy nową, synchroniczną wersję metody.
+                ViewModel.LoadDataForActiveUnit();
             }
 
             ViewportCurrent.Content = _dashboardView;

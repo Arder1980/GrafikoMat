@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-09 00:28:22
+# Data:       2025-09-09 01:50:34
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -82,11 +82,13 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (1249 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (1494 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
+
+// UWAGA: Usunęliśmy 'using System.Text.Json.Serialization;', nie jest już potrzebny.
 
 namespace GrafikoMat.Core.Data
 {
@@ -111,7 +113,6 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
-        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
 
@@ -121,6 +122,9 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        // ZMIANA: Wracamy do atrybutu [Ignore], który jest specyficzny dla Supabase.Postgrest.
+        // To jest jedyny atrybut, który zadziała przy operacjach Update() i Insert().
+        [Ignore]
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()
@@ -164,7 +168,7 @@ namespace GrafikoMat.Core.Data
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Data\Unit.cs (796 bytes)
+===== FILE: GrafikoMat.Core\Data\Unit.cs (1160 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
@@ -173,7 +177,8 @@ using System;
 namespace GrafikoMat.Core.Data
 {
     [Table("units")]
-    public class Unit : BaseModel
+    // NOWA ZMIANA: Implementacja interfejsu dla łatwego sortowania
+    public class Unit : BaseModel, IComparable<Unit>
     {
         [PrimaryKey("id")]
         public Guid Id { get; set; }
@@ -193,6 +198,13 @@ namespace GrafikoMat.Core.Data
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
+
+        // NOWA METODA: Implementacja sortowania po nazwie skróconej
+        public int CompareTo(Unit? other)
+        {
+            if (other == null) return 1;
+            return string.Compare(this.Name, other.Name, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
 ----- END -----
@@ -1337,7 +1349,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (36329 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (36496 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -1400,7 +1412,8 @@ namespace GrafikoMat
             _settingsService = new SettingsService();
             _supabaseService = new SupabaseService();
 
-            ViewModel = new MainViewModel(null);
+            // ZMIANA: Inicjalizujemy ViewModel bez parametrów. Serwisy zostaną wstrzyknięte później.
+            ViewModel = new MainViewModel();
             InitializeComponent();
 
             this.ExtendsContentIntoTitleBar = true;
@@ -1483,15 +1496,16 @@ namespace GrafikoMat
             {
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 _dataService = new DataService(_supabaseService);
-                ViewModel.UpdateDoctorRepository(_supabaseService.Doctors);
                 await _supabaseService.RestoreSessionIfAnyAsync();
             }
             else
             {
                 _supabaseService.Initialize(string.Empty, string.Empty);
                 _dataService = null;
-                ViewModel.UpdateDoctorRepository(null);
             }
+
+            // NOWY KROK: Wstrzykujemy DataService do ViewModelu za każdym razem, gdy przeładowujemy ustawienia
+            ViewModel.SetDataService(_dataService);
         }
 
         private async void RefreshDataServicesAsync()
@@ -1580,25 +1594,25 @@ namespace GrafikoMat
             return await tcs.Task;
         }
 
-        private async Task LoadDataForAuthenticatedUserAsync()
-        {
-            if (_dataService == null) return;
-            await ViewModel.LoadDoctorsAsync();
-            ViewModel.ActiveUnitHospitalName = "Centralna Baza Danych";
-            ViewModel.ActiveUnitDepartmentName = "Zarządzanie Globalne";
-        }
 
+        // Plik: MainWindow.xaml.cs
         private async Task LoadDataAndShowDashboardAsync()
         {
-            await LoadDataForAuthenticatedUserAsync();
+            if (_dataService != null)
+            {
+                await ViewModel.LoadUserAndUnitDataAsync();
+                // ZMIANA: Wywołujemy nową, synchroniczną wersję metody.
+                ViewModel.LoadDataForActiveUnit();
+            }
+
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ResetViewportState();
         }
-
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
+            // ZMIANA: Przekazujemy _dataService, które może być null
             _settingsView.Initialize(_dataService, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -2016,7 +2030,8 @@ namespace GrafikoMat
             try
             {
                 _dataService = null;
-                ViewModel.UpdateDoctorRepository(null);
+                // ZMIANA: Zaktualizowana metoda
+                ViewModel.SetDataService(null);
             }
             catch { }
 
@@ -2287,7 +2302,7 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\DataService.cs (7069 bytes)
+===== FILE: GrafikoMat\Services\DataService.cs (7389 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Generic;
@@ -2300,13 +2315,11 @@ using Supabase;
 using SbClient = Supabase.Client;
 using Supabase.Postgrest;
 using Supabase.Postgrest.Responses;
-
 namespace GrafikoMat.Services
 {
     public class DataService
     {
         private readonly SbClient _supabase;
-
         public DataService(SupabaseService supabaseService)
         {
             if (supabaseService.Client is null)
@@ -2314,13 +2327,12 @@ namespace GrafikoMat.Services
             _supabase = supabaseService.Client;
         }
 
-        // NOWA METODA: Do wyszukiwania pierwszego rekordu o DOKŁADNIE takiej samej nazwie szpitala
         public async Task<Unit?> GetFirstUnitByExactHospitalNameAsync(string fullName)
         {
             var response = await _supabase.From<Unit>()
                 .Filter("hospital_full_name", Constants.Operator.Equals, fullName)
                 .Limit(1)
-                .Get();
+                 .Get();
 
             return response.Models?.FirstOrDefault();
         }
@@ -2331,7 +2343,6 @@ namespace GrafikoMat.Services
                 .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
                 .Limit(2)
                 .Get();
-
             if (response.Models != null && response.Models.Count == 1)
             {
                 return response.Models.First();
@@ -2344,6 +2355,15 @@ namespace GrafikoMat.Services
         {
             var response = await _supabase.From<DoctorProfile>().Get();
             return response.Models ?? new List<DoctorProfile>();
+        }
+
+        // USUNIĘTA METODA: GetDoctorsForUnitAsync została usunięta, aby uniknąć błędu.
+
+        // NOWA METODA: Pobiera wszystkie przypisania z bazy danych za jednym razem.
+        public async Task<List<UnitDoctorAssignment>> GetAllAssignmentsAsync()
+        {
+            var response = await _supabase.From<UnitDoctorAssignment>().Get();
+            return response.Models ?? new List<UnitDoctorAssignment>();
         }
 
         public async Task<List<Unit>> GetAllUnitsAsync()
@@ -2436,30 +2456,23 @@ namespace GrafikoMat.Services
                 .Where(d => d.IsAssigned && !currentAssignments.Any(c => c.UnitId == d.UnitId))
                 .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive })
                 .ToList();
-
             if (assignmentsToAdd.Any())
                 await _supabase.From<UnitDoctorAssignment>().Insert(assignmentsToAdd);
-
             var assignmentsToRemove = currentAssignments
                 .Where(c => !desiredAssignments.Any(d => d.UnitId == c.UnitId && d.IsAssigned));
-
             foreach (var toRemove in assignmentsToRemove)
                 await _supabase.From<UnitDoctorAssignment>().Delete(toRemove);
-
             var assignmentsToUpdate = desiredAssignments
                 .Where(d => d.IsAssigned && currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
                 .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive });
-
             foreach (var toUpdate in assignmentsToUpdate)
                 await _supabase.From<UnitDoctorAssignment>().Update(toUpdate);
         }
 
         public async Task SaveUnitAsync(Unit unit) =>
             await _supabase.From<Unit>().Upsert(unit);
-
         public async Task DeleteUnitAsync(Guid unitId) =>
             await SetUnitArchiveStatusAsync(unitId, true);
-
         public async Task SetUnitArchiveStatusAsync(Guid unitId, bool isArchived)
         {
             await _supabase.From<Unit>()
@@ -3416,12 +3429,14 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (7479 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (11120 bytes)
 ----- BEGIN -----
+using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
+using GrafikoMat.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -3430,7 +3445,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using CommunityToolkit.Mvvm.Input;
+
 
 namespace GrafikoMat.ViewModels
 {
@@ -3439,13 +3454,31 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private IDoctorRepository? _doctorRepository;
+        private DataService? _dataService;
 
-        private string _activeUnitHospitalName = "GrafikoMat Dyżurowy";
-        public string ActiveUnitHospitalName { get => _activeUnitHospitalName; set { if (_activeUnitHospitalName != value) { _activeUnitHospitalName = value; OnPropertyChanged(); } } }
+        // Główne listy przechowujące dane w pamięci przez całą sesję
+        private readonly List<DoctorProfile> _allDoctors = new();
+        private readonly List<UnitDoctorAssignment> _allAssignments = new();
 
-        private string _activeUnitDepartmentName = "Proszę wybrać aktywny profil w ustawieniach";
-        public string ActiveUnitDepartmentName { get => _activeUnitDepartmentName; set { if (_activeUnitDepartmentName != value) { _activeUnitDepartmentName = value; OnPropertyChanged(); } } }
+        private readonly List<Unit> _userUnits = new();
+        private int _activeUnitIndex = -1;
+
+        public bool IsCurrentUserAdmin { get; private set; }
+
+        public Unit? ActiveUnit => _activeUnitIndex >= 0 && _activeUnitIndex < _userUnits.Count
+            ? _userUnits[_activeUnitIndex]
+            : null;
+
+        public string ActiveUnitHospitalName
+        {
+            get => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
+        }
+
+        public string ActiveUnitDepartmentName
+        {
+            get => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
+        }
+
 
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
 
@@ -3453,7 +3486,6 @@ namespace GrafikoMat.ViewModels
         public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
 
         public string[] Months { get; } = new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" };
-
         private int _selectedMonthIndex = DateTime.Today.Month - 1;
         public int SelectedMonthIndex { get => _selectedMonthIndex; set { if (_selectedMonthIndex != value) { _selectedMonthIndex = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
 
@@ -3472,35 +3504,121 @@ namespace GrafikoMat.ViewModels
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
-        public MainViewModel(IDoctorRepository? doctorRepository = null)
+        public MainViewModel()
         {
-            _doctorRepository = doctorRepository;
-            SwitchToPreviousUnitCommand = new RelayCommand(() => { });
-            SwitchToNextUnitCommand = new RelayCommand(() => { });
+            SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
+            SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
         }
 
-        public void UpdateDoctorRepository(IDoctorRepository? doctorRepository)
+        public void SetDataService(DataService? dataService)
         {
-            _doctorRepository = doctorRepository;
+            _dataService = dataService;
         }
 
-        public async Task LoadDoctorsAsync()
+        public async Task LoadUserAndUnitDataAsync()
         {
-            if (_doctorRepository == null)
+            if (_dataService == null) return;
+
+            // Jednorazowe wczytanie wszystkich danych do pamięci
+            _allDoctors.Clear();
+            _allAssignments.Clear();
+            _allDoctors.AddRange(await _dataService.GetAllDoctorsAsync());
+            _allAssignments.AddRange(await _dataService.GetAllAssignmentsAsync());
+
+            // ZMIANA: Używamy dedykowanej metody z DataService do pobrania profilu.
+            var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
+            if (userProfile == null)
             {
-                DoctorRows.Clear();
                 return;
             }
 
-            var doctors = await _doctorRepository.GetAllAsync();
-            DoctorRows.Clear();
-            if (doctors != null)
+            IsCurrentUserAdmin = userProfile.IsAdmin;
+            OnPropertyChanged(nameof(IsCurrentUserAdmin));
+
+            _userUnits.Clear();
+
+            if (IsCurrentUserAdmin)
             {
-                foreach (var doctor in doctors.OrderBy(d => d.LastName))
+                var allUnits = await _dataService.GetAllUnitsAsync();
+                allUnits.Sort();
+                _userUnits.AddRange(allUnits);
+            }
+            else
+            {
+                var assignments = _allAssignments.Where(a => a.DoctorId == userProfile.Id).ToList();
+                if (assignments.Any())
                 {
-                    DoctorRows.Add(new DoctorRow($"{doctor.FirstName} {doctor.LastName}", false));
+                    var allUnits = await _dataService.GetAllUnitsAsync();
+                    var assignedUnitIds = assignments.Select(a => a.UnitId).ToHashSet();
+                    var filteredUnits = allUnits.Where(u => assignedUnitIds.Contains(u.Id)).ToList();
+                    filteredUnits.Sort();
+                    _userUnits.AddRange(filteredUnits);
                 }
+            }
+
+            _activeUnitIndex = _userUnits.Any() ? 0 : -1;
+
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+        }
+
+        private void SwitchToNextUnit()
+        {
+            if (_userUnits.Count == 0) return;
+            _activeUnitIndex = (_activeUnitIndex + 1) % _userUnits.Count;
+
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+
+            LoadDataForActiveUnit();
+        }
+
+        private void SwitchToPreviousUnit()
+        {
+            if (_userUnits.Count == 0) return;
+            _activeUnitIndex = (_activeUnitIndex - 1 + _userUnits.Count) % _userUnits.Count;
+
+            OnPropertyChanged(nameof(ActiveUnit));
+            OnPropertyChanged(nameof(ActiveUnitHospitalName));
+            OnPropertyChanged(nameof(ActiveUnitDepartmentName));
+
+            LoadDataForActiveUnit();
+        }
+
+        public void LoadDataForActiveUnit()
+        {
+            DoctorRows.Clear();
+
+            if (ActiveUnit == null)
+            {
+                return;
+            }
+
+            // 1. Znajdź ID lekarzy przypisanych do aktywnej jednostki (filtrowanie w pamięci)
+            var doctorIdsForUnit = _allAssignments
+                .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
+                .Select(a => a.DoctorId)
+                .ToHashSet();
+
+            if (!doctorIdsForUnit.Any())
+            {
+                return;
+            }
+
+            // 2. Odfiltruj z master-listy tylko pasujących lekarzy (filtrowanie w pamięci)
+            var doctorsForUnit = _allDoctors
+                .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
+
+
+            // 3. Wypełnij kolekcję, która jest powiązana z UI
+            foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
+            {
+                var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                bool hasDecls = _declByKey.ContainsKey(key);
+                DoctorRows.Add(new DoctorRow(doctor.FullName, hasDecls));
             }
         }
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Specialized; // NOWY USING
 using System.ComponentModel;
 using GrafikoMat.Common;
 using GrafikoMat.ViewModels;
@@ -22,22 +23,43 @@ namespace GrafikoMat.Views
             DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
         }
 
+        // ZMIANA: Metoda Attach została rozbudowana o obsługę zdarzenia CollectionChanged
         public void Attach(MainViewModel vm)
         {
             if (_vm != null)
+            {
                 _vm.PropertyChanged -= OnVmPropertyChanged;
+                // Zawsze odpinamy stare zdarzenie, aby uniknąć wycieków pamięci
+                _vm.DoctorRows.CollectionChanged -= OnDoctorRowsChanged;
+            }
 
             _vm = vm;
             this.DataContext = vm;
-            _vm.PropertyChanged += OnVmPropertyChanged;
+
+            if (_vm != null)
+            {
+                _vm.PropertyChanged += OnVmPropertyChanged;
+                // Podpinamy nowe zdarzenie do nowej instancji ViewModelu
+                _vm.DoctorRows.CollectionChanged += OnDoctorRowsChanged;
+            }
         }
+
+        // NOWA METODA: Ta metoda będzie wywoływana za każdym razem,
+        // gdy lista DoctorRows zostanie zmodyfikowana (wyczyszczona, dodany element itp.)
+        private void OnDoctorRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Upewniamy się, że przebudowanie siatki odbywa się w wątku UI
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                BuildLeftTable();
+            });
+        }
+
 
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // ZMIANA: Dodajemy sprawdzenie, czy _vm nie jest null.
             if (_vm != null && (e.PropertyName == nameof(MainViewModel.SelectedYear) ||
-                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex) ||
-                e.PropertyName.StartsWith("DoctorRows")))
+                e.PropertyName == nameof(MainViewModel.SelectedMonthIndex)))
             {
                 BuildLeftTable();
             }
@@ -51,7 +73,6 @@ namespace GrafikoMat.Views
         private void BuildLeftTable()
         {
             if (_vm is null || this.ActualWidth == 0) return;
-
             DeclarationsGrid.Children.Clear();
             DeclarationsGrid.RowDefinitions.Clear();
             DeclarationsGrid.ColumnDefinitions.Clear();
@@ -87,14 +108,12 @@ namespace GrafikoMat.Views
                 var date = new DateTime(year, month, d);
                 bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
                 bool isLastColumn = (d == daysInMonth);
-
                 var cell = new Border
                 {
                     BorderBrush = borderBrush,
                     BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1),
                     Background = isDayOff ? dayOffFill : null
                 };
-
                 Grid.SetRow(cell, 0);
                 Grid.SetColumn(cell, d);
                 cell.Child = new TextBlock { Text = $"{d:00}\n{DowPlShort(date.DayOfWeek)}", TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, LineHeight = 14, Padding = new Thickness(0, 4, 0, 4) };
@@ -116,19 +135,16 @@ namespace GrafikoMat.Views
                     var date = new DateTime(year, month, d);
                     bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
                     bool isLastColumn = (d == daysInMonth);
-
                     var cell = new Border
                     {
                         BorderBrush = borderBrush,
                         BorderThickness = isLastColumn ? new Thickness(0, 0, 0, 1) : new Thickness(0, 0, 1, 1),
                         Background = isDayOff ? dayOffFill : null
                     };
-
                     Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
 
                     var entry = _vm.TryGetEntry(doctor.Name, year, _vm.SelectedMonthIndex, d - 1);
                     FrameworkElement content;
-
                     if (!entry.has || (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
                     {
                         content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -143,10 +159,8 @@ namespace GrafikoMat.Views
                         g.RowDefinitions.Add(new RowDefinition());
                         g.RowDefinitions.Add(new RowDefinition());
                         g.Children.Add(new Border { BorderBrush = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)), BorderThickness = new Thickness(0, 0, 0, 1), VerticalAlignment = VerticalAlignment.Center });
-
                         var tb1 = new TextBlock { Text = entry.day, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                         var tb2 = new TextBlock { Text = entry.night, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
-
                         Grid.SetRow(tb1, 0); Grid.SetRow(tb2, 1);
                         g.Children.Add(tb1); g.Children.Add(tb2);
                         content = g;

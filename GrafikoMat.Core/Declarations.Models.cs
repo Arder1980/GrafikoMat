@@ -1,9 +1,45 @@
-﻿using System;
+﻿using GrafikoMat.Core.Data;
+using Supabase.Postgrest.Attributes;
+using Supabase.Postgrest.Models;
+using System;
 using System.Collections.Generic;
 using GrafikoMat.Core.Scheduling;
 
 namespace GrafikoMat.Core.Declarations
 {
+    // NOWA KLASA - DTO (Data Transfer Object) do aktualizacji danych lekarza.
+    // Zawiera tylko te pola, które mają swoje odpowiedniki w bazie danych.
+    [Table("doctors")]
+    public class DoctorForUpdate : BaseModel
+    {
+        [PrimaryKey("id", shouldInsert: false)] // Klucz główny, ale nie wstawiamy go przy tworzeniu
+        public Guid Id { get; set; }
+
+        [Column("first_name")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Column("last_name")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Column("abbreviation")]
+        public string Abbreviation { get; set; } = string.Empty;
+
+        [Column("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Column("is_admin")]
+        public bool IsAdmin { get; set; }
+
+        [Column("is_archived")]
+        public bool IsArchived { get; set; }
+
+        [Column("requires_password_change")]
+        public bool RequiresPasswordChange { get; set; }
+
+        // Celowo pomijamy 'created_at' i 'FullName'
+    }
+
+
     /// <summary>
     /// Deklaracje dyżurowe lekarza dla jednego miesiąca (wejście do generatora).
     /// </summary>

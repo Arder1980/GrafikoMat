@@ -23,6 +23,9 @@ namespace GrafikoMat.ViewModels
 
         private DataService? _dataService;
 
+        private readonly List<DoctorProfile> _allDoctors = new();
+        private readonly List<UnitDoctorAssignment> _allAssignments = new();
+
         private readonly List<Unit> _userUnits = new();
         private int _activeUnitIndex = -1;
 
@@ -69,9 +72,8 @@ namespace GrafikoMat.ViewModels
 
         public MainViewModel()
         {
-            // ZMIANA: Przypisujemy komendy do nowo utworzonych metod
-            SwitchToPreviousUnitCommand = new AsyncRelayCommand(SwitchToPreviousUnit);
-            SwitchToNextUnitCommand = new AsyncRelayCommand(SwitchToNextUnit);
+            SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
+            SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
         }
 
@@ -83,6 +85,11 @@ namespace GrafikoMat.ViewModels
         public async Task LoadUserAndUnitDataAsync()
         {
             if (_dataService == null) return;
+
+            _allDoctors.Clear();
+            _allAssignments.Clear();
+            _allDoctors.AddRange(await _dataService.GetAllDoctorsAsync());
+            _allAssignments.AddRange(await _dataService.GetAllAssignmentsAsync());
 
             var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
             if (userProfile == null)
@@ -103,7 +110,7 @@ namespace GrafikoMat.ViewModels
             }
             else
             {
-                var assignments = await _dataService.GetAssignmentsForDoctorAsync(userProfile.Id);
+                var assignments = _allAssignments.Where(a => a.DoctorId == userProfile.Id).ToList();
                 if (assignments.Any())
                 {
                     var allUnits = await _dataService.GetAllUnitsAsync();
@@ -121,8 +128,7 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
         }
 
-        // NOWE METODY: Logika przełączania jednostek
-        private async Task SwitchToNextUnit()
+        private void SwitchToNextUnit()
         {
             if (_userUnits.Count == 0) return;
             _activeUnitIndex = (_activeUnitIndex + 1) % _userUnits.Count;
@@ -131,10 +137,10 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
 
-            await LoadDataForActiveUnitAsync();
+            LoadDataForActiveUnit();
         }
 
-        private async Task SwitchToPreviousUnit()
+        private void SwitchToPreviousUnit()
         {
             if (_userUnits.Count == 0) return;
             _activeUnitIndex = (_activeUnitIndex - 1 + _userUnits.Count) % _userUnits.Count;
@@ -143,18 +149,38 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
 
-            await LoadDataForActiveUnitAsync();
+            LoadDataForActiveUnit();
         }
 
-        // ZMIANA: Zmiana nazwy z LoadDoctorsAsync i przygotowanie pod Etap 3
-        public async Task LoadDataForActiveUnitAsync()
+        public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();
 
-            // W Etapie 3 ta metoda zostanie rozbudowana o wczytywanie lekarzy
-            // dla nowej, aktywnej jednostki (ActiveUnit)
+            if (ActiveUnit != null)
+            {
+                var doctorIdsForUnit = _allAssignments
+                    .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
+                    .Select(a => a.DoctorId)
+                    .ToHashSet();
 
-            await Task.CompletedTask;
+                if (doctorIdsForUnit.Any())
+                {
+                    var doctorsForUnit = _allDoctors
+                        .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
+
+                    foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
+                    {
+                        var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                        bool hasDecls = _declByKey.ContainsKey(key);
+                        DoctorRows.Add(new DoctorRow(doctor.FullName, hasDecls));
+                    }
+                }
+            }
+
+            // ZMIANA: Dodajemy to wywołanie, aby siatka grafiku również się odświeżyła.
+            // Na razie będzie to ta sama, pusta siatka, ale w przyszłości
+            // będzie tu logika wczytująca grafik dla danej jednostki.
+            UpdateRosterForSelectedMonth();
         }
 
         private void UpdateRosterForSelectedMonth()

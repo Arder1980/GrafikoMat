@@ -1,4 +1,6 @@
-﻿using Supabase.Postgrest.Attributes;
+﻿// Plik: GrafikoMat.Core\Data\Doctor.cs
+
+using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
 
@@ -25,7 +27,6 @@ namespace GrafikoMat.Core.Data
         [Column("is_admin")]
         public bool IsAdmin { get; set; } = false;
 
-        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
 
@@ -35,6 +36,7 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        // BEZ ATRYBUTÓW - To jest teraz tylko właściwość pomocnicza w C#
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()

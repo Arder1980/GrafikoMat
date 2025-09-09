@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Declarations;
 using GrafikoMat.ViewModels;
 using Supabase;
 using SbClient = Supabase.Client;
@@ -15,7 +16,6 @@ namespace GrafikoMat.Services
     public class DataService
     {
         private readonly SbClient _supabase;
-
         public DataService(SupabaseService supabaseService)
         {
             if (supabaseService.Client is null)
@@ -23,13 +23,12 @@ namespace GrafikoMat.Services
             _supabase = supabaseService.Client;
         }
 
-        // NOWA METODA: Do wyszukiwania pierwszego rekordu o DOKŁADNIE takiej samej nazwie szpitala
         public async Task<Unit?> GetFirstUnitByExactHospitalNameAsync(string fullName)
         {
             var response = await _supabase.From<Unit>()
                 .Filter("hospital_full_name", Constants.Operator.Equals, fullName)
                 .Limit(1)
-                .Get();
+                 .Get();
 
             return response.Models?.FirstOrDefault();
         }
@@ -40,7 +39,6 @@ namespace GrafikoMat.Services
                 .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
                 .Limit(2)
                 .Get();
-
             if (response.Models != null && response.Models.Count == 1)
             {
                 return response.Models.First();
@@ -53,6 +51,13 @@ namespace GrafikoMat.Services
         {
             var response = await _supabase.From<DoctorProfile>().Get();
             return response.Models ?? new List<DoctorProfile>();
+        }
+
+        // BRAKUJĄCA METODA DODANA PONIŻEJ
+        public async Task<List<UnitDoctorAssignment>> GetAllAssignmentsAsync()
+        {
+            var response = await _supabase.From<UnitDoctorAssignment>().Get();
+            return response.Models ?? new List<UnitDoctorAssignment>();
         }
 
         public async Task<List<Unit>> GetAllUnitsAsync()
@@ -135,7 +140,19 @@ namespace GrafikoMat.Services
             }
             else
             {
-                await _supabase.From<DoctorProfile>().Update(profile);
+                var doctorDataForUpdate = new DoctorForUpdate
+                {
+                    Id = profile.Id,
+                    FirstName = profile.FirstName,
+                    LastName = profile.LastName,
+                    Abbreviation = profile.Abbreviation,
+                    Email = profile.Email,
+                    IsAdmin = profile.IsAdmin,
+                    IsArchived = profile.IsArchived,
+                    RequiresPasswordChange = profile.RequiresPasswordChange
+                };
+
+                await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
             }
 
             var currentAssignments = await GetAssignmentsForDoctorAsync(profile.Id);
@@ -145,30 +162,23 @@ namespace GrafikoMat.Services
                 .Where(d => d.IsAssigned && !currentAssignments.Any(c => c.UnitId == d.UnitId))
                 .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive })
                 .ToList();
-
             if (assignmentsToAdd.Any())
                 await _supabase.From<UnitDoctorAssignment>().Insert(assignmentsToAdd);
-
             var assignmentsToRemove = currentAssignments
                 .Where(c => !desiredAssignments.Any(d => d.UnitId == c.UnitId && d.IsAssigned));
-
             foreach (var toRemove in assignmentsToRemove)
                 await _supabase.From<UnitDoctorAssignment>().Delete(toRemove);
-
             var assignmentsToUpdate = desiredAssignments
                 .Where(d => d.IsAssigned && currentAssignments.Any(c => c.UnitId == d.UnitId && c.IsActive != d.IsActive))
                 .Select(d => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = d.UnitId, IsActive = d.IsActive });
-
             foreach (var toUpdate in assignmentsToUpdate)
                 await _supabase.From<UnitDoctorAssignment>().Update(toUpdate);
         }
 
         public async Task SaveUnitAsync(Unit unit) =>
             await _supabase.From<Unit>().Upsert(unit);
-
         public async Task DeleteUnitAsync(Guid unitId) =>
             await SetUnitArchiveStatusAsync(unitId, true);
-
         public async Task SetUnitArchiveStatusAsync(Guid unitId, bool isArchived)
         {
             await _supabase.From<Unit>()
