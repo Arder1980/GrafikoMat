@@ -115,15 +115,5 @@
 
         <ContentControl x:Name="LoginOverlay" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Grid.RowSpan="5"/>
 
-        <InfoBar x:Name="GlobalStatusInfoBar"
-                 Grid.Row="0"
-                 Grid.RowSpan="5"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center"
-                 Margin="0"
-                 MaxWidth="500"
-                 IsOpen="False"
-                 IsClosable="False"
-                 Canvas.ZIndex="99"/>
     </Grid>
 </Window>

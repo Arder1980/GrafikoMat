@@ -39,6 +39,31 @@ namespace GrafikoMat.Views.Settings
             }
         }
 
+        #region Właściwości dla InfoBar
+        private bool _isStatusMessageOpen;
+        public bool IsStatusMessageOpen
+        {
+            get => _isStatusMessageOpen;
+            set
+            {
+                if (_isStatusMessageOpen != value)
+                {
+                    _isStatusMessageOpen = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _statusMessageTitle = string.Empty;
+        public string StatusMessageTitle { get => _statusMessageTitle; set { _statusMessageTitle = value; OnPropertyChanged(); } }
+
+        private string _statusMessage = string.Empty;
+        public string StatusMessage { get => _statusMessage; set { _statusMessage = value; OnPropertyChanged(); } }
+
+        private InfoBarSeverity _statusMessageSeverity = InfoBarSeverity.Informational;
+        public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set { _statusMessageSeverity = value; OnPropertyChanged(); } }
+        #endregion
+
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
         public UnitsSettingsView()
@@ -49,26 +74,53 @@ namespace GrafikoMat.Views.Settings
         public async void Initialize(DataService service)
         {
             _dataService = service;
-            await LoadUnitsAsync();
-        }
-
-        private async Task LoadUnitsAsync()
-        {
-            if (_dataService == null) return;
             IsLoading = true;
             try
             {
-                _masterUnitList.Clear();
-                var unitsFromDb = await _dataService.GetAllUnitsAsync();
-                _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
-
-                FilterUnits();
-                UpdateButtonStates();
+                await LoadUnitsAsync();
             }
             finally
             {
                 IsLoading = false;
             }
+        }
+
+        #region Metody pomocnicze dla InfoBar
+        private void ShowStatusMessage(string title, string message, InfoBarSeverity severity)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                StatusMessageTitle = title;
+                StatusMessage = message;
+                StatusMessageSeverity = severity;
+                IsStatusMessageOpen = true;
+            });
+        }
+
+        private async Task ShowTemporarySuccessMessage(string title, string message)
+        {
+            ShowStatusMessage(title, message, InfoBarSeverity.Success);
+            await Task.Delay(3000);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (StatusMessageSeverity == InfoBarSeverity.Success)
+                {
+                    IsStatusMessageOpen = false;
+                }
+            });
+        }
+        #endregion
+
+        private async Task LoadUnitsAsync()
+        {
+            if (_dataService == null) return;
+            // Usunięto zarządzanie IsLoading z tej metody
+            _masterUnitList.Clear();
+            var unitsFromDb = await _dataService.GetAllUnitsAsync();
+            _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
+
+            FilterUnits();
+            UpdateButtonStates();
         }
 
         private void FilterUnits()
@@ -141,7 +193,12 @@ namespace GrafikoMat.Views.Settings
                     try
                     {
                         await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
+                        await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została zarchiwizowana.");
                         await LoadUnitsAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        ShowStatusMessage("Błąd", $"Wystąpił błąd podczas archiwizacji: {ex.Message}", InfoBarSeverity.Error);
                     }
                     finally
                     {
@@ -159,7 +216,12 @@ namespace GrafikoMat.Views.Settings
                 try
                 {
                     await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                    await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została przywrócona.");
                     await LoadUnitsAsync();
+                }
+                catch (Exception ex)
+                {
+                    ShowStatusMessage("Błąd", $"Wystąpił błąd podczas przywracania: {ex.Message}", InfoBarSeverity.Error);
                 }
                 finally
                 {
@@ -211,7 +273,15 @@ namespace GrafikoMat.Views.Settings
                 try
                 {
                     await _dataService.SaveUnitAsync(unitToSave);
+                    var successMessage = isEditMode
+                        ? "Poprawnie zapisano dane w bazie Supabase."
+                        : "Nowa jednostka została pomyślnie dodana.";
+                    await ShowTemporarySuccessMessage("Sukces!", successMessage);
                     await LoadUnitsAsync();
+                }
+                catch (Exception ex)
+                {
+                    ShowStatusMessage("Błąd zapisu", $"Wystąpił nieoczekiwany błąd: {ex.Message}", InfoBarSeverity.Error);
                 }
                 finally
                 {

@@ -2,9 +2,15 @@
     x:Class="GrafikoMat.Views.Settings.ConnectionSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    mc:Ignorable="d"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    xmlns:common="using:GrafikoMat.Common"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
 
     <Grid>
         <StackPanel x:Name="MainPanel" Spacing="20">
@@ -18,8 +24,6 @@
             <TextBox x:Name="UrlTextBox" Header="Supabase URL"/>
             <TextBox x:Name="ApiKeyTextBox" Header="Supabase Anon Key"/>
 
-            <InfoBar x:Name="StatusInfoBar" IsOpen="False" IsClosable="True" MinHeight="72"/>
-
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button x:Name="TestButton" 
                         Content="Testuj połączenie"
@@ -31,10 +35,23 @@
             </StackPanel>
         </StackPanel>
 
-        <ProgressRing x:Name="LoadingRing"
-                      IsActive="False"
-                      Width="64" Height="64"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center"/>
+        <Grid Background="#88FFFFFF"
+              Visibility="{x:Bind IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ProgressRing IsActive="True" Width="48" Height="48"/>
+        </Grid>
+
+        <controls:InfoBar
+            Title="{x:Bind StatusMessageTitle, Mode=OneWay}"
+            Message="{x:Bind StatusMessage, Mode=OneWay}"
+            IsOpen="{x:Bind IsStatusMessageOpen, Mode=OneWay}"
+            Severity="{x:Bind StatusMessageSeverity, Mode=OneWay}"
+            CornerRadius="4"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            IsClosable="{x:Bind IsError, Mode=OneWay}"
+            Closed="StatusInfoBar_Closed"
+            Canvas.ZIndex="99"
+            MinWidth="400"
+            MaxWidth="600" />
     </Grid>
 </UserControl>

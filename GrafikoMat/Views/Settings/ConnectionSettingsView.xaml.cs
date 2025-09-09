@@ -4,16 +4,40 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Supabase;
 using System;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace GrafikoMat.Views.Settings
 {
-    public sealed partial class ConnectionSettingsView : UserControl
+    public sealed partial class ConnectionSettingsView : UserControl, INotifyPropertyChanged
     {
         public event Action? ReloadRequired;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
+
+        #region Właściwości do bindowania danych (INotifyPropertyChanged)
+
+        private bool _isLoading;
+        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
+
+        private bool _isStatusMessageOpen;
+        public bool IsStatusMessageOpen { get => _isStatusMessageOpen; set => SetProperty(ref _isStatusMessageOpen, value); }
+
+        private string _statusMessageTitle = string.Empty;
+        public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
+
+        private string _statusMessage = string.Empty;
+        public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
+
+        private InfoBarSeverity _statusMessageSeverity = InfoBarSeverity.Informational;
+        public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set { SetProperty(ref _statusMessageSeverity, value); OnPropertyChanged(nameof(IsError)); } }
+
+        public bool IsError => StatusMessageSeverity == InfoBarSeverity.Error;
+
+        #endregion
 
         public ConnectionSettingsView()
         {
@@ -34,75 +58,122 @@ namespace GrafikoMat.Views.Settings
 
         private async void TestButton_Click(object sender, RoutedEventArgs e)
         {
-            await RunConnectionTestAsync();
+            IsLoading = true;
+            try
+            {
+                bool isOk = await RunConnectionTestAsync();
+                if (isOk)
+                {
+                    await ShowTemporaryMessage("Sukces!", "Połączenie z bazą Supabase jest aktywne.", InfoBarSeverity.Success);
+                }
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private async void SaveButton_Click(object sender, RoutedEventArgs e)
         {
             if (_settingsService == null || _appSettings == null) return;
 
-            SetBusy(true);
-
-            var newSettings = _appSettings with
+            IsLoading = true;
+            try
             {
-                SupabaseUrl = UrlTextBox.Text,
-                SupabaseAnonKey = ApiKeyTextBox.Text
-            };
+                var newSettings = _appSettings with
+                {
+                    SupabaseUrl = UrlTextBox.Text,
+                    SupabaseAnonKey = ApiKeyTextBox.Text
+                };
+                await _settingsService.SaveSettingsAsync(newSettings);
 
-            await _settingsService.SaveSettingsAsync(newSettings);
+                bool isConnectionOk = await RunConnectionTestAsync(showErrors: false);
 
-            // Po zapisaniu, automatycznie uruchamiamy test
-            bool isConnectionOk = await RunConnectionTestAsync();
-
-            SetBusy(false);
-
-            // Przeładowujemy usługi w tle tylko jeśli połączenie jest prawidłowe
-            if (isConnectionOk)
+                if (isConnectionOk)
+                {
+                    await ShowTemporaryMessage("Zapisano i połączono", "Ustawienia zostały zapisane, a połączenie z bazą danych jest aktywne.", InfoBarSeverity.Success);
+                    ReloadRequired?.Invoke();
+                }
+                else
+                {
+                    ShowStatusMessage("Zapisano, lecz brak połączenia", "Ustawienia zostały zapisane, ale nie udało się nawiązać połączenia z bazą. Sprawdź poprawność danych.", InfoBarSeverity.Warning);
+                }
+            }
+            finally
             {
-                ReloadRequired?.Invoke();
+                IsLoading = false;
             }
         }
 
-        private async Task<bool> RunConnectionTestAsync()
+        private async Task<bool> RunConnectionTestAsync(bool showErrors = true)
         {
-            StatusInfoBar.IsOpen = false;
-            var url = UrlTextBox.Text;
-            var key = ApiKeyTextBox.Text;
-
-            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))
-            {
-                StatusInfoBar.Severity = InfoBarSeverity.Error;
-                StatusInfoBar.Message = "URL i klucz API nie mogą być puste.";
-                StatusInfoBar.IsOpen = true;
-                return false;
-            }
-
+            IsStatusMessageOpen = false;
             try
             {
+                var url = UrlTextBox.Text;
+                var key = ApiKeyTextBox.Text;
+
+                if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))
+                {
+                    if (showErrors) ShowStatusMessage("Błąd Walidacji", "URL i klucz API nie mogą być puste.", InfoBarSeverity.Error);
+                    return false;
+                }
+
                 var options = new SupabaseOptions { AutoConnectRealtime = false, AutoRefreshToken = false };
                 var tempClient = new Client(url, key, options);
                 await tempClient.From<Unit>().Select("id").Limit(1).Get();
-
-                StatusInfoBar.Severity = InfoBarSeverity.Success;
-                StatusInfoBar.Message = "Połączenie udane!";
-                StatusInfoBar.IsOpen = true;
                 return true;
             }
             catch (Exception ex)
             {
-                StatusInfoBar.Severity = InfoBarSeverity.Error;
-                StatusInfoBar.Message = $"Błąd połączenia: {ex.Message}";
-                StatusInfoBar.IsOpen = true;
+                if (showErrors) ShowStatusMessage("Błąd połączenia", $"Sprawdź dane i spróbuj ponownie. Szczegóły: {ex.Message}", InfoBarSeverity.Error);
                 return false;
             }
         }
 
-        private void SetBusy(bool isBusy)
+        #region Metody pomocnicze (InfoBar, INotifyPropertyChanged)
+
+        private void ShowStatusMessage(string title, string message, InfoBarSeverity severity)
         {
-            MainPanel.Opacity = isBusy ? 0.5 : 1.0;
-            LoadingRing.IsActive = isBusy;
-            TestButton.IsEnabled = !isBusy;
-            SaveButton.IsEnabled = !isBusy;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                StatusMessageTitle = title;
+                StatusMessage = message;
+                StatusMessageSeverity = severity;
+                IsStatusMessageOpen = true;
+            });
         }
+
+        private async Task ShowTemporaryMessage(string title, string message, InfoBarSeverity severity)
+        {
+            ShowStatusMessage(title, message, severity);
+            await Task.Delay(3000);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (StatusMessageSeverity != InfoBarSeverity.Error)
+                {
+                    IsStatusMessageOpen = false;
+                }
+            });
+        }
+
+        private void SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
+        {
+            if (Equals(storage, value)) return;
+            storage = value;
+            OnPropertyChanged(propertyName);
+        }
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private void StatusInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args)
+        {
+            IsStatusMessageOpen = false;
+        }
+
+        #endregion
     }
 }

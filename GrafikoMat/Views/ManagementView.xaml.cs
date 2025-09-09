@@ -21,7 +21,15 @@ namespace GrafikoMat.Views
         private async void ManagementView_Loaded(object sender, RoutedEventArgs e)
         {
             this.Loaded -= ManagementView_Loaded;
-            await ViewModel.InitializeAsync();
+            ViewModel.IsLoading = true;
+            try
+            {
+                await ViewModel.InitializeAsync();
+            }
+            finally
+            {
+                ViewModel.IsLoading = false;
+            }
         }
 
         private void CopyPassword_Click(object sender, RoutedEventArgs e)

@@ -94,10 +94,35 @@ namespace GrafikoMat.ViewModels
         }
 
         private bool _isLoading;
-        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (SetProperty(ref _isLoading, value))
+                {
+                    // ZMIANA: Powiadom o zmianie właściwości zależnej
+                    OnPropertyChanged(nameof(ShowProgressRing));
+                }
+            }
+        }
 
         private bool _isStatusMessageOpen;
-        public bool IsStatusMessageOpen { get => _isStatusMessageOpen; set => SetProperty(ref _isStatusMessageOpen, value); }
+        public bool IsStatusMessageOpen
+        {
+            get => _isStatusMessageOpen;
+            set
+            {
+                if (SetProperty(ref _isStatusMessageOpen, value))
+                {
+                    // ZMIANA: Powiadom o zmianie właściwości zależnej
+                    OnPropertyChanged(nameof(ShowProgressRing));
+                }
+            }
+        }
+
+        // ZMIANA: Dodana brakująca właściwość
+        public bool ShowProgressRing => IsLoading && !IsStatusMessageOpen;
 
         private string _statusMessageTitle = string.Empty;
         public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
@@ -146,14 +171,13 @@ namespace GrafikoMat.ViewModels
         private async Task EnsureUnitsLoadedAsync()
         {
             if (_allUnits.Count > 0 || _dataService == null) return;
-            _dispatcher?.TryEnqueue(() => IsLoading = true);
             try
             {
                 _allUnits = await _dataService.GetAllUnitsAsync();
             }
-            finally
+            catch (Exception ex)
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                ShowStatusMessage("Błąd krytyczny", $"Nie udało się wczytać listy jednostek: {ex.Message}", InfoBarSeverity.Error);
             }
         }
 
@@ -162,7 +186,6 @@ namespace GrafikoMat.ViewModels
             if (_dataService == null) return;
             var previouslySelectedId = SelectedDoctor?.Id;
 
-            _dispatcher?.TryEnqueue(() => IsLoading = true);
             try
             {
                 var doctors = await _dataService.GetAllDoctorsAsync();
@@ -184,10 +207,6 @@ namespace GrafikoMat.ViewModels
             {
                 ShowStatusMessage("Błąd ładowania danych", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
-            {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
-            }
         }
 
         private void FilterDoctors()
@@ -206,20 +225,28 @@ namespace GrafikoMat.ViewModels
 
         private async Task AddNewDoctorAsync()
         {
-            await EnsureUnitsLoadedAsync();
-            if (_allUnits.Count == 0)
+            IsLoading = true;
+            try
             {
-                ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
-                return;
-            }
+                await EnsureUnitsLoadedAsync();
+                if (_allUnits.Count == 0)
+                {
+                    ShowStatusMessage("Brak jednostek", "Nie udało się wczytać listy jednostek. Sprawdź połączenie w Ustawieniach.", InfoBarSeverity.Warning);
+                    return;
+                }
 
-            SelectedDoctor = null;
-            EditorViewModel = new DoctorEditorViewModel(
-                new DoctorProfile { Id = Guid.Empty },
-                new List<Unit>(_allUnits),
-                new List<UnitDoctorAssignment>(),
-                _allDoctorsMasterList.Select(d => d.Abbreviation)
-            );
+                SelectedDoctor = null;
+                EditorViewModel = new DoctorEditorViewModel(
+                    new DoctorProfile { Id = Guid.Empty },
+                    new List<Unit>(_allUnits),
+                    new List<UnitDoctorAssignment>(),
+                    _allDoctorsMasterList.Select(d => d.Abbreviation)
+                );
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private async Task SaveDoctor()
@@ -239,21 +266,20 @@ namespace GrafikoMat.ViewModels
                     PrimaryButtonText = "Tak, zapisz przypisanie",
                     CloseButtonText = "Anuluj",
                     DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
+                    XamlRoot = App.MainRoot.Content.XamlRoot
                 };
                 var result = await confirmDialog.ShowAsync();
 
-                if (result != ContentDialogResult.Primary)
-                {
-                    return;
-                }
+                if (result != ContentDialogResult.Primary) return;
             }
 
             IsLoading = true;
+            string successMessage = string.Empty;
             try
             {
                 var isNew = EditorViewModel.IsNewDoctor;
                 var savedProfileId = EditorViewModel.Profile.Id;
+
                 await _dataService.SaveDoctorAsync(EditorViewModel);
                 await LoadInitialDataAsync();
 
@@ -262,16 +288,17 @@ namespace GrafikoMat.ViewModels
                     SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
                 });
 
-                var successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
-                App.MainRoot?.ShowTemporaryStatusMessage("Sukces!", successMessage); // ZMIANA
+                successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd zapisu", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (!string.IsNullOrEmpty(successMessage))
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                await ShowTemporarySuccessMessage("Sukces!", successMessage);
             }
         }
 
@@ -284,26 +311,30 @@ namespace GrafikoMat.ViewModels
                 Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.FullName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
                 PrimaryButtonText = "Archiwizuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
+                XamlRoot = App.MainRoot.Content.XamlRoot
             };
             var result = await confirmDialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 
             IsLoading = true;
+            string archivedDoctorName = SelectedDoctor.FullName;
+            bool success = false;
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, true);
-                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany."); // ZMIANA
-                SelectedDoctor = null;
                 await LoadInitialDataAsync();
+                SelectedDoctor = null;
+                success = true;
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd", $"Wystąpił błąd podczas archiwizacji: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (success)
             {
-                IsLoading = false;
+                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {archivedDoctorName} został zarchiwizowany.");
             }
         }
 
@@ -311,24 +342,27 @@ namespace GrafikoMat.ViewModels
         {
             if (SelectedDoctor == null || _dataService == null) return;
             IsLoading = true;
+            string restoredDoctorName = SelectedDoctor.FullName;
+            Guid restoredDoctorId = SelectedDoctor.Id;
+            bool success = false;
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, false);
-                App.MainRoot?.ShowTemporaryStatusMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony."); // ZMIANA
-                var restoredDoctorId = SelectedDoctor.Id;
                 await LoadInitialDataAsync();
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
+                success = true;
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd", $"Wystąpił błąd podczas przywracania: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (success)
             {
-                IsLoading = false;
+                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {restoredDoctorName} został przywrócony.");
             }
         }
-
 
         private async Task ResetPassword()
         {
@@ -339,7 +373,7 @@ namespace GrafikoMat.ViewModels
                 Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.FirstName} {SelectedDoctor.LastName}?",
                 PrimaryButtonText = "Resetuj",
                 CloseButtonText = "Anuluj",
-                XamlRoot = App.MainRoot.Content.XamlRoot // ZMIANA
+                XamlRoot = App.MainRoot.Content.XamlRoot
             };
             var result = await confirmDialog.ShowAsync();
 
@@ -353,15 +387,12 @@ namespace GrafikoMat.ViewModels
                     await _dataService.ResetPasswordAsync(SelectedDoctor.Id, newPassword);
                     await _dataService.SetPasswordChangeFlagAsync(SelectedDoctor.Id);
                     EditorViewModel.SetNewGeneratedPassword(newPassword);
-                    App.MainRoot?.ShowTemporaryStatusMessage("Hasło zresetowane", $"Nowe hasło startowe: {newPassword}", InfoBarSeverity.Success); // ZMIANA
+                    await ShowTemporarySuccessMessage("Hasło zresetowane", $"Nowe hasło startowe: {newPassword}");
                 }
                 catch (Exception ex)
                 {
+                    IsLoading = false;
                     ShowStatusMessage("Błąd resetowania hasła", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
-                }
-                finally
-                {
-                    _dispatcher?.TryEnqueue(() => IsLoading = false);
                 }
             }
         }
@@ -408,8 +439,29 @@ namespace GrafikoMat.ViewModels
             }
             finally
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                IsLoading = false;
             }
+        }
+
+        private async Task ShowTemporarySuccessMessage(string title, string message)
+        {
+            _dispatcher?.TryEnqueue(() =>
+            {
+                StatusMessageTitle = title;
+                StatusMessage = message;
+                StatusMessageSeverity = InfoBarSeverity.Success;
+                IsStatusMessageOpen = true;
+            });
+            await Task.Delay(3000);
+
+            _dispatcher?.TryEnqueue(() =>
+            {
+                if (StatusMessageSeverity == InfoBarSeverity.Success)
+                {
+                    IsStatusMessageOpen = false;
+                }
+                IsLoading = false;
+            });
         }
 
         private void ShowStatusMessage(string title, string message, InfoBarSeverity severity)

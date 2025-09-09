@@ -12,6 +12,11 @@
 
     <UserControl.Resources>
         <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <Style x:Key="CompactTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
+            <Setter Property="Margin" Value="0"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -24,165 +29,144 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
             <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
                 <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
-
                 <AppBarButton Label="Archiwizuj" Command="{x:Bind ViewModel.ArchiveDoctorCommand}" IsEnabled="{x:Bind ViewModel.CanArchive, Mode=OneWay}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="&#xE7B8;"/>
                     </AppBarButton.Icon>
                 </AppBarButton>
-
                 <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </CommandBar>
-
-            <TextBox Grid.Row="1" 
-                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     PlaceholderText="Filtruj listę..."
-                     Margin="8,0,8,8"/>
-
-            <CheckBox Grid.Row="2" Content="Pokaż zarchiwizowanych" 
-                      IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}"
-                      Margin="8,0,8,8"/>
-
-            <ListView Grid.Row="3"
-                      BorderThickness="0,1,1,0"
-                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                      ItemsSource="{x:Bind ViewModel.FilteredDoctors}"
-                      SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
+            <TextBox Grid.Row="1" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtruj listę..." Margin="8,0,8,8"/>
+            <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="data:DoctorProfile">
-                        <TextBlock Margin="12,10" 
-                                   Style="{ThemeResource BaseTextBlockStyle}"
-                                   FontWeight="SemiBold"
-                                   Text="{x:Bind FullName}"
-                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
+                        <TextBlock Margin="12,10" Style="{ThemeResource BaseTextBlockStyle}" FontWeight="SemiBold" Text="{x:Bind FullName}" Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
+            <CheckBox Grid.Row="3" Content="Pokaż zarchiwizowanych" IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}" Margin="8,8,8,8"/>
         </Grid>
 
         <Grid Grid.Column="1" Padding="24">
             <Grid>
-                <Grid Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}"
-                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
-                    <ProgressRing IsActive="True" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Grid>
-
-                <StackPanel HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Spacing="12"
-                            Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
                     <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0"
-                               Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                    <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0" Style="{ThemeResource BodyStrongTextBlockStyle}"/>
                 </StackPanel>
-            </Grid>
 
-            <ScrollViewer Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
-                <StackPanel Spacing="12">
+                <Grid Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <TextBlock Text="Dane dyżurnego" Style="{ThemeResource TitleTextBlockStyle}"/>
+                    <StackPanel Grid.Row="0" Spacing="0">
+                        <TextBlock Text="Dane dyżurnego" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,0,0,12"/>
+                        <Grid ColumnSpacing="12" RowSpacing="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="0.7*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                    <Grid ColumnSpacing="12" RowSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="1*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="1*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="0.7*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Imię:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource CompactTextBoxStyle}" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Nazwisko:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource CompactTextBoxStyle}" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
+                            <TextBlock Grid.Row="0" Grid.Column="4" Text="Skrót:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="5" Style="{StaticResource CompactTextBoxStyle}" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
 
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Imię:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.FirstName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
+                            <TextBlock Grid.Row="1" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{x:Bind ViewModel.EditorViewModel.NameErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
 
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="Nazwisko:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="3" Text="{x:Bind ViewModel.EditorViewModel.LastName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" LostFocus="NameTextBox_LostFocus"/>
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="E-mail:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource CompactTextBoxStyle}" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12" Margin="0,2,0,8"/>
 
-                        <TextBlock Grid.Row="0" Grid.Column="4" Text="Skrót:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="0" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.Abbreviation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="5" Text="{x:Bind ViewModel.EditorViewModel.AbbreviationErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
-
-                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="{x:Bind ViewModel.EditorViewModel.NameErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
-
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="E-mail:" VerticalAlignment="Center"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.EmailErrorMessage, Mode=OneWay}" Foreground="{ThemeResource SystemErrorTextColor}" FontSize="12"/>
-
-                        <Grid Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4">
-                            <Grid Visibility="{x:Bind ViewModel.EditorViewModel.ShowPasswordSection, Mode=OneWay}" ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Hasło startowe:" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.EditorViewModel.Password, Mode=OneWay}" IsReadOnly="True"/>
-                                <Button Grid.Column="2" Content="Kopiuj" Click="CopyPassword_Click"/>
-                            </Grid>
-
-                            <Button Content="Resetuj hasło użytkownika..."
-                                    Command="{x:Bind ViewModel.ResetPasswordCommand}"
-                                    Visibility="{x:Bind ViewModel.EditorViewModel.ShowResetButton, Mode=OneWay}"
-                                    HorizontalAlignment="Left"/>
-                        </Grid>
-                    </Grid>
-
-                    <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
-
-                    <TextBlock Text="Przypisania i Aktywność" Style="{ThemeResource TitleTextBlockStyle}" Margin="0,24,0,0"/>
-
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments, Mode=OneWay}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:UnitAssignmentViewModel">
-                                <Grid Margin="0,8" Padding="12" CornerRadius="4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                            <Grid Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="4">
+                                <Grid Visibility="{x:Bind ViewModel.EditorViewModel.ShowPasswordSection, Mode=OneWay}" ColumnSpacing="8">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-
-                                    <CheckBox Grid.Column="0" 
-                                              IsChecked="{x:Bind IsAssigned, Mode=TwoWay}"
-                                              IsEnabled="{x:Bind CanBeChanged, Mode=OneWay}">
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="{x:Bind UnitName}" FontWeight="SemiBold"/>
-                                            <TextBlock Text="{x:Bind DepartmentName}" FontSize="12" Opacity="0.8"/>
-                                        </StackPanel>
-                                    </CheckBox>
-
-                                    <ToggleSwitch Grid.Column="1" Header="Aktywna" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
+                                    <TextBlock Grid.Column="0" Text="Hasło startowe:" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Style="{StaticResource CompactTextBoxStyle}" Text="{x:Bind ViewModel.EditorViewModel.Password, Mode=OneWay}" IsReadOnly="True"/>
+                                    <Button Grid.Column="2" Content="Kopiuj" Click="CopyPassword_Click"/>
                                 </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                <Button Content="Resetuj hasło użytkownika..." Command="{x:Bind ViewModel.ResetPasswordCommand}" Visibility="{x:Bind ViewModel.EditorViewModel.ShowResetButton, Mode=OneWay}" HorizontalAlignment="Left"/>
+                            </Grid>
+                        </Grid>
+                        <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
+                    </StackPanel>
 
-                    <controls:InfoBar
-                        x:Name="StatusInfoBar"
-                        Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}"
-                        Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                        IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}"
-                        Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}"
-                        CornerRadius="4"
-                        Margin="0,12,0,0"/>
+                    <Grid Grid.Row="1" Margin="0,24,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Przypisania i Aktywność" Style="{ThemeResource TitleTextBlockStyle}"/>
+                        <ScrollViewer Grid.Row="1" Margin="0,8,0,0" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.EditorViewModel.Assignments, Mode=OneWay}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:UnitAssignmentViewModel">
+                                        <Grid Margin="0,0,0,8" Padding="12" CornerRadius="4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Grid.Column="0" IsChecked="{x:Bind IsAssigned, Mode=TwoWay}" IsEnabled="{x:Bind CanBeChanged, Mode=OneWay}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{x:Bind UnitName}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{x:Bind DepartmentName}" FontSize="12" Opacity="0.8"/>
+                                                </StackPanel>
+                                            </CheckBox>
+                                            <ToggleSwitch Grid.Column="1" Header="Aktywna" IsOn="{x:Bind IsActive, Mode=TwoWay}" IsEnabled="{x:Bind IsAssigned, Mode=OneWay}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
 
-                    <Button Content="Zapisz zmiany"
-                            Command="{x:Bind ViewModel.SaveDoctorCommand}"
-                            Style="{StaticResource AccentButtonStyle}"
-                            HorizontalAlignment="Right"
-                            Margin="0,24,0,0"/>
-                </StackPanel>
-            </ScrollViewer>
+                    <Button Grid.Row="2" Content="Zapisz zmiany" Command="{x:Bind ViewModel.SaveDoctorCommand}" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,24,0,0"/>
+                </Grid>
+
+                <Grid Background="#88FFFFFF" 
+                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
+                      Canvas.ZIndex="98">
+                    <ProgressRing IsActive="{x:Bind ViewModel.ShowProgressRing, Mode=OneWay}" 
+                                  Visibility="{x:Bind ViewModel.ShowProgressRing, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
+                                  Width="56" Height="56" 
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+
+                <controls:InfoBar x:Name="StatusInfoBar" 
+                                  Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}" 
+                                  Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" 
+                                  IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}" 
+                                  Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}" 
+                                  CornerRadius="4" 
+                                  HorizontalAlignment="Center" 
+                                  VerticalAlignment="Center" 
+                                  IsClosable="False" 
+                                  Canvas.ZIndex="99"/>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>
