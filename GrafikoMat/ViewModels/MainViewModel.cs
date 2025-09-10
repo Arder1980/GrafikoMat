@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
 using GrafikoMat.Services;
 using System;
@@ -21,7 +21,6 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        // ZMIANA: Usunięcie _dataService na rzecz repozytoriów
         private IDoctorRepository? _doctorRepository;
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
@@ -29,7 +28,6 @@ namespace GrafikoMat.ViewModels
 
         private readonly List<DoctorProfile> _allDoctors = new();
         private readonly List<UnitDoctorAssignment> _allAssignments = new();
-
         private readonly List<Unit> _userUnits = new();
         private int _activeUnitIndex = -1;
 
@@ -48,7 +46,6 @@ namespace GrafikoMat.ViewModels
         {
             get => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
         }
-
 
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
 
@@ -83,7 +80,6 @@ namespace GrafikoMat.ViewModels
             this.PropertyChanged += OnMainViewModelPropertyChanged;
         }
 
-        // ZMIANA: Nowa metoda do wstrzykiwania repozytoriów
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
         {
             _doctorRepository = doctorRepo;
@@ -179,27 +175,41 @@ namespace GrafikoMat.ViewModels
             LoadDataForActiveUnit();
         }
 
+        // ZMIANA: Całkowicie nowa wersja metody
         public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();
-            if (ActiveUnit != null)
-            {
-                var doctorIdsForUnit = _allAssignments
-                    .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
-                    .Select(a => a.DoctorId)
-                    .ToHashSet();
+            if (ActiveUnit == null) return;
 
-                if (doctorIdsForUnit.Any())
-                {
-                    var doctorsForUnit = _allDoctors
-                        .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
-                    foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
-                    {
-                        var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
-                        bool hasDecls = _declByKey.ContainsKey(key);
-                        DoctorRows.Add(new DoctorRow(doctor.FullName, hasDecls));
-                    }
-                }
+            var doctorIdsForUnit = _allAssignments
+                .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
+                .Select(a => a.DoctorId)
+                .ToHashSet();
+
+            if (!doctorIdsForUnit.Any()) return;
+
+            var doctorsForUnit = _allDoctors
+                .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived)
+                .OrderBy(d => d.LastName).ThenBy(d => d.FirstName)
+                .ToList();
+
+            var duplicateFullNames = doctorsForUnit
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doctor in doctorsForUnit)
+            {
+                var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                bool hasDecls = _declByKey.ContainsKey(key);
+                bool needsDifferentiator = duplicateFullNames.Contains(doctor.FullName);
+
+                string displayName = needsDifferentiator
+                    ? $"{doctor.LastName} {doctor.FirstName} ({doctor.Abbreviation})"
+                    : $"{doctor.LastName} {doctor.FirstName}";
+
+                DoctorRows.Add(new DoctorRow(doctor, displayName, hasDecls));
             }
 
             UpdateRosterForSelectedMonth();
@@ -236,7 +246,6 @@ namespace GrafikoMat.ViewModels
             await _settingsService.SaveSettingsAsync(newSettings);
         }
 
-
         private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
@@ -250,14 +259,31 @@ namespace GrafikoMat.ViewModels
         public (bool has, DayMode mode, string? full, string? day, string? night) TryGetEntry(string doctor, int year, int monthIndex, int dayIndex) { if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) && dayIndex >= 0 && dayIndex < dm.Days.Length) { var d = dm.Days[dayIndex]; return (true, d.Mode, d.Full, d.Day, d.Night); } return (false, DayMode.Full24, null, null, null); }
     }
 
+    // ZMIANA: Aktualizacja klasy DoctorRow
     public class DoctorRow : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+
+        /// <summary>
+        /// Oryginalny FullName, używany jako klucz wewnętrzny.
+        /// </summary>
         public string Name { get; }
+
+        /// <summary>
+        /// Nazwa sformatowana do wyświetlania w UI (może zawierać skrót).
+        /// </summary>
+        public string DisplayName { get; }
+
         private bool _has;
         public bool HasDeclarations { get => _has; set { if (_has != value) { _has = value; Raise(nameof(HasDeclarations)); } } }
-        public DoctorRow(string name, bool hasDeclarations) { Name = name; _has = hasDeclarations; }
+
+        public DoctorRow(DoctorProfile profile, string displayName, bool hasDeclarations)
+        {
+            Name = profile.FullName;
+            DisplayName = displayName;
+            _has = hasDeclarations;
+        }
     }
 
     public class RosterRow

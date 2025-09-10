@@ -1,12 +1,11 @@
 ﻿using System;
-using System.Collections.Specialized; // NOWY USING
+using System.Collections.Specialized;
 using System.ComponentModel;
 using GrafikoMat.Common;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
 using Windows.UI;
 
 namespace GrafikoMat.Views
@@ -23,38 +22,30 @@ namespace GrafikoMat.Views
             DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
         }
 
-        // ZMIANA: Metoda Attach została rozbudowana o obsługę zdarzenia CollectionChanged
         public void Attach(MainViewModel vm)
         {
             if (_vm != null)
             {
                 _vm.PropertyChanged -= OnVmPropertyChanged;
-                // Zawsze odpinamy stare zdarzenie, aby uniknąć wycieków pamięci
                 _vm.DoctorRows.CollectionChanged -= OnDoctorRowsChanged;
             }
 
             _vm = vm;
             this.DataContext = vm;
-
             if (_vm != null)
             {
                 _vm.PropertyChanged += OnVmPropertyChanged;
-                // Podpinamy nowe zdarzenie do nowej instancji ViewModelu
                 _vm.DoctorRows.CollectionChanged += OnDoctorRowsChanged;
             }
         }
 
-        // NOWA METODA: Ta metoda będzie wywoływana za każdym razem,
-        // gdy lista DoctorRows zostanie zmodyfikowana (wyczyszczona, dodany element itp.)
         private void OnDoctorRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            // Upewniamy się, że przebudowanie siatki odbywa się w wątku UI
             DispatcherQueue.TryEnqueue(() =>
             {
                 BuildLeftTable();
             });
         }
-
 
         private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -88,7 +79,7 @@ namespace GrafikoMat.Views
                 DeclarationsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             }
 
-            DeclarationsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Wiersz nagłówka
+            DeclarationsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             for (int r = 1; r < rowsCount; r++)
             {
                 DeclarationsGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
@@ -127,7 +118,9 @@ namespace GrafikoMat.Views
 
                 var nameCell = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
                 Grid.SetRow(nameCell, row); Grid.SetColumn(nameCell, 0);
-                nameCell.Child = new TextBlock { Text = doctor.Name, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Opacity = doctor.HasDeclarations ? 1.0 : 0.6 };
+
+                // ZMIANA: Używamy DisplayName zamiast Name
+                nameCell.Child = new TextBlock { Text = doctor.DisplayName, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Opacity = doctor.HasDeclarations ? 1.0 : 0.6 };
                 DeclarationsGrid.Children.Add(nameCell);
 
                 for (int d = 1; d <= daysInMonth; d++)

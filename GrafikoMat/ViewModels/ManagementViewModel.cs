@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
@@ -16,26 +16,29 @@ namespace GrafikoMat.ViewModels
 {
     public class ManagementViewModel : ObservableObject
     {
-        // ZMIANA: Usunięcie _dataService na rzecz repozytoriów
         private readonly IDoctorRepository _doctorRepository;
         private readonly IUnitRepository _unitRepository;
         private readonly IAssignmentRepository _assignmentRepository;
-        private readonly SupabaseService _supabaseService; // Potrzebny do SignUp
+        private readonly SupabaseService _supabaseService;
         private readonly DispatcherQueue? _dispatcher;
 
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
-        public ObservableCollection<DoctorProfile> FilteredDoctors { get; } = new();
+
+        // ZMIANA TYPU
+        public ObservableCollection<DoctorListItemViewModel> FilteredDoctors { get; } = new();
         private List<Unit> _allUnits = new();
 
-        private DoctorProfile? _selectedDoctor;
-        public DoctorProfile? SelectedDoctor
+        // ZMIANA TYPU
+        private DoctorListItemViewModel? _selectedDoctor;
+        public DoctorListItemViewModel? SelectedDoctor
         {
             get => _selectedDoctor;
             set
             {
                 if (SetProperty(ref _selectedDoctor, value))
                 {
-                    LoadEditorFor(value);
+                    // ZMIANA: Przekazujemy teraz wewnętrzny profil
+                    LoadEditorFor(value?.Profile);
                     ResetPasswordCommand.NotifyCanExecuteChanged();
                     ArchiveDoctorCommand.NotifyCanExecuteChanged();
                     RestoreDoctorCommand.NotifyCanExecuteChanged();
@@ -73,9 +76,8 @@ namespace GrafikoMat.ViewModels
 
         public bool CanArchive => SelectedDoctor != null && !SelectedDoctor.IsArchived;
         public bool CanRestore => SelectedDoctor != null && SelectedDoctor.IsArchived;
-
-
         public bool IsDoctorSelectedAndNotNew => SelectedDoctor != null && (EditorViewModel != null && !EditorViewModel.IsNewDoctor);
+
         private DoctorEditorViewModel? _editorViewModel;
         public DoctorEditorViewModel? EditorViewModel
         {
@@ -127,33 +129,23 @@ namespace GrafikoMat.ViewModels
         public bool ShowProgressRing => IsLoading && !IsStatusMessageOpen;
         private string _statusMessageTitle = string.Empty;
         public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
-
         private string _statusMessage = string.Empty;
         public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
-
         private InfoBarSeverity _statusMessageSeverity;
         public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set => SetProperty(ref _statusMessageSeverity, value); }
-
         public AsyncRelayCommand AddNewDoctorCommand { get; }
         public AsyncRelayCommand SaveDoctorCommand { get; }
         public AsyncRelayCommand ResetPasswordCommand { get; }
         public AsyncRelayCommand ArchiveDoctorCommand { get; }
         public AsyncRelayCommand RestoreDoctorCommand { get; }
 
-        // ZMIANA: Nowy konstruktor
-        public ManagementViewModel(
-            IDoctorRepository doctorRepo,
-            IUnitRepository unitRepo,
-            IAssignmentRepository assignmentRepo,
-            SupabaseService supabaseService,
-            DispatcherQueue? dispatcher)
+        public ManagementViewModel(IDoctorRepository doctorRepo, IUnitRepository unitRepo, IAssignmentRepository assignmentRepo, SupabaseService supabaseService, DispatcherQueue? dispatcher)
         {
             _doctorRepository = doctorRepo;
             _unitRepository = unitRepo;
             _assignmentRepository = assignmentRepo;
             _supabaseService = supabaseService;
             _dispatcher = dispatcher;
-
             AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctor, () => EditorViewModel?.IsValid ?? false);
             ResetPasswordCommand = new AsyncRelayCommand(ResetPassword, () => IsDoctorSelectedAndNotNew && (EditorViewModel?.ShowResetButton ?? false));
@@ -168,14 +160,8 @@ namespace GrafikoMat.ViewModels
 
         private void Editor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(EditorViewModel.IsValid))
-            {
-                SaveDoctorCommand.NotifyCanExecuteChanged();
-            }
-            if (e.PropertyName == nameof(EditorViewModel.ShowResetButton))
-            {
-                ResetPasswordCommand.NotifyCanExecuteChanged();
-            }
+            if (e.PropertyName == nameof(EditorViewModel.IsValid)) { SaveDoctorCommand.NotifyCanExecuteChanged(); }
+            if (e.PropertyName == nameof(EditorViewModel.ShowResetButton)) { ResetPasswordCommand.NotifyCanExecuteChanged(); }
         }
 
         private async Task EnsureUnitsLoadedAsync()
@@ -194,20 +180,19 @@ namespace GrafikoMat.ViewModels
         private async Task LoadInitialDataAsync()
         {
             var previouslySelectedId = SelectedDoctor?.Id;
-
             try
             {
                 var doctors = await _doctorRepository.GetAllAsync();
                 _allUnits = await _unitRepository.GetAllAsync();
-
                 _dispatcher?.TryEnqueue(() =>
                 {
                     _allDoctorsMasterList.Clear();
-                    _allDoctorsMasterList.AddRange(doctors.OrderBy(d => d.LastName));
+                    _allDoctorsMasterList.AddRange(doctors);
                     FilterDoctors();
 
                     if (previouslySelectedId != null)
                     {
+                        // ZMIANA: Wyszukiwanie w nowej kolekcji
                         SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
                     }
                 });
@@ -218,17 +203,29 @@ namespace GrafikoMat.ViewModels
             }
         }
 
+        // ZMIANA: Całkowicie nowa logika filtrowania i formatowania
         private void FilterDoctors()
         {
             FilteredDoctors.Clear();
+
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
-            var filteredResult = string.IsNullOrWhiteSpace(SearchText)
+
+            var filteredResult = (string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
-                    d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase));
-            foreach (var doctor in filteredResult)
+                    d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase)))
+                .ToList();
+
+            var duplicateFullNames = filteredResult
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doctor in filteredResult.OrderBy(d => d.LastName).ThenBy(d => d.FirstName))
             {
-                FilteredDoctors.Add(doctor);
+                bool needsDifferentiator = duplicateFullNames.Contains(doctor.FullName);
+                FilteredDoctors.Add(new DoctorListItemViewModel(doctor, needsDifferentiator));
             }
         }
 
@@ -262,9 +259,6 @@ namespace GrafikoMat.ViewModels
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
             HideStatusMessage();
-
-            // ... (logika z dialogiem potwierdzającym bez zmian)
-
             IsLoading = true;
             string successMessage = string.Empty;
             try
@@ -272,8 +266,6 @@ namespace GrafikoMat.ViewModels
                 var isNew = EditorViewModel.IsNewDoctor;
                 var profile = EditorViewModel.Profile;
                 var savedProfileId = profile.Id;
-
-                // Specjalna obsługa dla nowego lekarza (rejestracja w Auth)
                 if (isNew)
                 {
                     await _supabaseService.Client.Auth.SignUp(profile.Email, EditorViewModel.Password);
@@ -283,8 +275,6 @@ namespace GrafikoMat.ViewModels
 
                     profile.Id = Guid.Parse(userId);
                     profile.RequiresPasswordChange = true;
-
-                    // Zapisujemy profil w tabeli doctors
                     await _supabaseService.Client.From<DoctorProfile>().Insert(profile);
                     savedProfileId = profile.Id;
                 }
@@ -293,14 +283,11 @@ namespace GrafikoMat.ViewModels
                     .Where(a => a.IsAssigned)
                     .Select(a => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = a.UnitId, IsActive = a.IsActive });
 
-                // Wywołanie metody z repozytorium do aktualizacji profilu i przypisań
                 await _doctorRepository.SaveAsync(profile, desiredAssignments);
-
                 await LoadInitialDataAsync();
-
                 _dispatcher?.TryEnqueue(() =>
                 {
-                    SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
+                    SelectedDoctor = _allDoctorsMasterList.Select(p => new DoctorListItemViewModel(p, false)).FirstOrDefault(d => d.Id == savedProfileId);
                 });
                 successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
             }
@@ -322,7 +309,7 @@ namespace GrafikoMat.ViewModels
             var confirmDialog = new ContentDialog
             {
                 Title = "Potwierdź archiwizację",
-                Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.FullName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
+                Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.DisplayName}? Profil zostanie ukryty na listach, ale będzie można go przywrócić.",
                 PrimaryButtonText = "Archiwizuj",
                 CloseButtonText = "Anuluj",
                 XamlRoot = App.MainRoot.Content.XamlRoot
@@ -331,7 +318,7 @@ namespace GrafikoMat.ViewModels
             if (result != ContentDialogResult.Primary) return;
 
             IsLoading = true;
-            string archivedDoctorName = SelectedDoctor.FullName;
+            string archivedDoctorName = SelectedDoctor.DisplayName;
             bool success = false;
             try
             {
@@ -356,13 +343,15 @@ namespace GrafikoMat.ViewModels
         {
             if (SelectedDoctor == null) return;
             IsLoading = true;
-            string restoredDoctorName = SelectedDoctor.FullName;
+            string restoredDoctorName = SelectedDoctor.DisplayName;
             Guid restoredDoctorId = SelectedDoctor.Id;
             bool success = false;
             try
             {
                 await _doctorRepository.SetArchiveStatusAsync(SelectedDoctor.Id, false);
                 await LoadInitialDataAsync();
+
+                // ZMIANA: Wyszukiwanie w nowej kolekcji
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
                 success = true;
             }
@@ -384,13 +373,12 @@ namespace GrafikoMat.ViewModels
             var confirmDialog = new ContentDialog
             {
                 Title = "Potwierdź resetowanie hasła",
-                Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.FirstName} {SelectedDoctor.LastName}?",
+                Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.DisplayName}?",
                 PrimaryButtonText = "Resetuj",
                 CloseButtonText = "Anuluj",
                 XamlRoot = App.MainRoot.Content.XamlRoot
             };
             var result = await confirmDialog.ShowAsync();
-
             if (result == ContentDialogResult.Primary)
             {
                 IsLoading = true;
@@ -411,6 +399,7 @@ namespace GrafikoMat.ViewModels
             }
         }
 
+        // ZMIANA: Sygnatura metody przyjmuje teraz DoctorProfile
         private async void LoadEditorFor(DoctorProfile? doctorProfile)
         {
             if (doctorProfile == null)
@@ -433,9 +422,11 @@ namespace GrafikoMat.ViewModels
                     return;
                 }
 
+                // ZMIANA: Logika sprawdzania unikalności skrótu
                 var existingAbbreviations = _allDoctorsMasterList
                     .Where(d => d.Id != doctorProfile.Id)
                     .Select(d => d.Abbreviation);
+
                 var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
 
                 EditorViewModel = new DoctorEditorViewModel(
@@ -466,7 +457,6 @@ namespace GrafikoMat.ViewModels
                 IsStatusMessageOpen = true;
             });
             await Task.Delay(3000);
-
             _dispatcher?.TryEnqueue(() =>
             {
                 if (StatusMessageSeverity == InfoBarSeverity.Success)

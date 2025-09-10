@@ -5,7 +5,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
-    xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
@@ -13,7 +12,6 @@
     <UserControl.Resources>
         <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-
         <Style x:Key="CompactTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="Margin" Value="0"/>
         </Style>
@@ -42,13 +40,19 @@
                 <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
             </CommandBar>
             <TextBox Grid.Row="1" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtruj listę..." Margin="8,0,8,8"/>
+
             <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="data:DoctorProfile">
-                        <TextBlock Margin="12,10" Style="{ThemeResource BaseTextBlockStyle}" FontWeight="SemiBold" Text="{x:Bind FullName}" Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
+                    <DataTemplate x:DataType="vm:DoctorListItemViewModel">
+                        <TextBlock Margin="12,10" 
+                                   Style="{ThemeResource BaseTextBlockStyle}" 
+                                   FontWeight="SemiBold" 
+                                   Text="{x:Bind DisplayName}" 
+                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
+
             <CheckBox Grid.Row="3" Content="Pokaż zarchiwizowanych" IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}" Margin="8,8,8,8"/>
         </Grid>
 
@@ -153,17 +157,17 @@
                     <ProgressRing IsActive="{x:Bind ViewModel.ShowProgressRing, Mode=OneWay}" 
                                   Visibility="{x:Bind ViewModel.ShowProgressRing, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
                                   Width="56" Height="56" 
-                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Grid>
 
                 <controls:InfoBar x:Name="StatusInfoBar" 
                                   Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}" 
-                                  Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" 
+                                   Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" 
                                   IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}" 
                                   Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}" 
-                                  CornerRadius="4" 
+                                   CornerRadius="4" 
                                   HorizontalAlignment="Center" 
-                                  VerticalAlignment="Center" 
+                                   VerticalAlignment="Center" 
                                   IsClosable="False" 
                                   Canvas.ZIndex="99"/>
             </Grid>
