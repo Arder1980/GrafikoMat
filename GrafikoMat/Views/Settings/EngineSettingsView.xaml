@@ -2,11 +2,132 @@
     x:Class="GrafikoMat.Views.Settings.EngineSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    mc:Ignorable="d"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:common="using:GrafikoMat.Common"
+    mc:Ignorable="d">
 
-    <Grid>
-        <TextBlock Text="Widok Wyboru Silnika Grafiku - w budowie" VerticalAlignment="Center" HorizontalAlignment="Center" />
+    <UserControl.Resources>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Grid Padding="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="20"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Wybór Silnika Obliczeniowego" FontSize="20" FontWeight="SemiBold"/>
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.EngineOptions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EngineOption">
+                                <RadioButton GroupName="EngineSelection"
+                                             IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                             Checked="EngineRadioButton_Checked"
+                                             Margin="0,0,0,10">
+                                    <StackPanel Margin="4,0,0,0" Spacing="2">
+                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{x:Bind Category}" FontSize="12" Opacity="0.7"/>
+                                    </StackPanel>
+                                </RadioButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Grid Grid.Column="2">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="16">
+                            <StackPanel>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=OneWay, FallbackValue='Wybierz silnik'}" FontSize="18" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Category, Mode=OneWay, FallbackValue='...'}" Opacity="0.8" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue='Wybierz silnik z listy po lewej stronie, aby zobaczyć jego szczegółowy opis.'}"
+                                       TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify"/>
+
+                            <TextBlock Text="Charakterystyka Porównawcza" FontWeight="SemiBold" Margin="0,16,0,8"/>
+                            <ListView ItemsSource="{x:Bind ViewModel.ComparisonData}"
+                                      SelectionMode="None" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                      BorderThickness="1" CornerRadius="4">
+                                <ListView.HeaderTemplate>
+                                    <DataTemplate>
+                                        <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.8*"/>
+                                                <ColumnDefinition Width="1.5*"/>
+                                                <ColumnDefinition Width="1.6*"/>
+                                                <ColumnDefinition Width="2.2*"/>
+                                                <ColumnDefinition Width="1.1*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Typ algorytmu" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="1" Text="Powtarzalność" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="2" Text="Wielowątkowość" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="3" Text="Jakość i Gwarancja" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="4" Text="Czas" FontWeight="SemiBold"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.HeaderTemplate>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:EngineComparisonInfo">
+                                        <Grid Padding="12,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.8*"/>
+                                                <ColumnDefinition Width="1.5*"/>
+                                                <ColumnDefinition Width="1.6*"/>
+                                                <ColumnDefinition Width="2.2*"/>
+                                                <ColumnDefinition Width="1.1*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{x:Bind Determinism}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{x:Bind Multithreading}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{x:Bind QualityGuarantee}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="4" Text="{x:Bind TimeToResult}" VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <Grid Grid.Row="3" Margin="0,20,0,0">
+                <Button Content="Zapisz ustawienia"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Command="{x:Bind ViewModel.SaveCommand}"
+                        HorizontalAlignment="Right"/>
+            </Grid>
+        </Grid>
+
+        <Grid Background="#88FFFFFF"
+              Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ProgressRing IsActive="True" Width="48" Height="48"/>
+        </Grid>
+
+        <Grid Background="#88FFFFFF"
+              Visibility="{x:Bind ViewModel.ShowStatusMessage, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <InfoBar Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                     IsOpen="True"
+                     Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}"
+                     IsClosable="False"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     MinWidth="340"
+                     MaxWidth="500" />
+        </Grid>
     </Grid>
 </UserControl>

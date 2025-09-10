@@ -1,4 +1,4 @@
-﻿using GrafikoMat.Core.Repositories; // NOWY USING
+﻿using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
@@ -8,7 +8,6 @@ namespace GrafikoMat.Views
 {
     public sealed partial class SettingsView : UserControl
     {
-        // ZMIANA: Zależności
         private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
@@ -19,16 +18,11 @@ namespace GrafikoMat.Views
             this.InitializeComponent();
             SettingsMenu.ItemsSource = new[]
             {
-                "Baza danych",
-                "Jednostki",
-                "Priorytety",
-                "Wybór silnika",
-                "Wygląd"
+                "Baza danych", "Jednostki", "Priorytety", "Wybór silnika", "Wygląd"
             };
             SettingsMenu.SelectedIndex = -1;
         }
 
-        // ZMIANA: Nowa sygnatura metody Initialize
         public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, AppSettings settings)
         {
             _unitRepository = unitRepository;
@@ -48,13 +42,16 @@ namespace GrafikoMat.Views
             LoadSubView(selectedItem);
         }
 
-        private void LoadSubView(string? selectedItem)
+        private async void LoadSubView(string? selectedItem)
         {
-            if (_settingsService == null || _appSettings == null)
+            if (_settingsService == null)
             {
                 SettingsDetailContent.Content = null;
                 return;
             }
+
+            // KLUCZOWA ZMIANA: Zawsze pobieramy najnowszą wersję ustawień z serwisu
+            _appSettings = await _settingsService.LoadSettingsAsync();
 
             switch (selectedItem)
             {
@@ -65,28 +62,20 @@ namespace GrafikoMat.Views
                     SettingsDetailContent.Content = connectionView;
                     break;
                 case "Jednostki":
-                    // ZMIANA: Sprawdzamy i przekazujemy repozytorium
                     if (_unitRepository != null)
                     {
-                        var unitsView = new UnitsSettingsView();
-                        unitsView.Initialize(_unitRepository);
-                        SettingsDetailContent.Content = unitsView;
+                        SettingsDetailContent.Content = new UnitsSettingsView(_unitRepository);
                     }
                     else
                     {
-                        SettingsDetailContent.Content = new TextBlock
-                        {
-                            Text = "Skonfiguruj i zapisz połączenie z bazą danych, aby zarządzać jednostkami.",
-                            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
-                            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center
-                        };
+                        SettingsDetailContent.Content = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
                     }
                     break;
                 case "Priorytety":
                     SettingsDetailContent.Content = new PrioritiesSettingsView();
                     break;
                 case "Wybór silnika":
-                    SettingsDetailContent.Content = new EngineSettingsView();
+                    SettingsDetailContent.Content = new EngineSettingsView(_settingsService, _appSettings);
                     break;
                 case "Wygląd":
                     SettingsDetailContent.Content = new AppearanceSettingsView();

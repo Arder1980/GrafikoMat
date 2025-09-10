@@ -145,6 +145,8 @@ namespace GrafikoMat
             await RunEntranceAnimationAsync();
         }
 
+        // Wewnątrz klasy MainWindow
+
         private async Task RunEntranceAnimationAsync()
         {
             var sb = new Storyboard();
@@ -181,8 +183,14 @@ namespace GrafikoMat
             sb.Completed += (_, _) => tcs.TrySetResult();
             sb.Begin();
             await tcs.Task;
-        }
 
+            // ----- POCZĄTEK POPRAWKI -----
+            // Po zakończeniu animacji, element DragBar jest już na swoim miejscu.
+            // Ponowne wywołanie SetTitleBar zmusza system do przeliczenia
+            // obszarów przeciągania na podstawie aktualnych, poprawnych wymiarów.
+            SetTitleBar(DragBar);
+            // ------ KONIEC POPRAWKI ------
+        }
         private async Task ReloadSettingsAndServicesAsync()
         {
             _appSettings = await _settingsService.LoadSettingsAsync();

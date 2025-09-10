@@ -1,6 +1,5 @@
 ﻿using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories; // NOWY USING
-using GrafikoMat.Services;
+using GrafikoMat.Core.Repositories;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -8,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -24,8 +22,7 @@ namespace GrafikoMat.Views.Settings
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
-        // ZMIANA: Usunięcie _dataService na rzecz repozytorium
-        private IUnitRepository? _unitRepository;
+        private readonly IUnitRepository? _unitRepository;
 
         private bool _isLoading;
         public bool IsLoading
@@ -68,15 +65,18 @@ namespace GrafikoMat.Views.Settings
 
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
-        public UnitsSettingsView()
+
+        // ZMIANA: Konstruktor przyjmuje zależność
+        public UnitsSettingsView(IUnitRepository unitRepository)
         {
             this.InitializeComponent();
+            _unitRepository = unitRepository;
+            this.Loaded += UnitsSettingsView_Loaded;
         }
 
-        // ZMIANA: Nowa metoda Initialize
-        public async void Initialize(IUnitRepository repository)
+        // ZMIANA: Logika ładowania przeniesiona do zdarzenia Loaded
+        private async void UnitsSettingsView_Loaded(object sender, RoutedEventArgs e)
         {
-            _unitRepository = repository;
             IsLoading = true;
             try
             {

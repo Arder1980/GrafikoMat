@@ -1,20 +1,19 @@
 ﻿using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Declarations;
 using GrafikoMat.Core.Repositories;
 using Supabase;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using SbClient = Supabase.Client; // <-- NOWY ALIAS
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Repositories
 {
     public class SupabaseDoctorRepository : IDoctorRepository
     {
-        private readonly SbClient _supabase; // <-- ZMIANA TYPU
+        private readonly SbClient _supabase;
 
-        public SupabaseDoctorRepository(SbClient supabaseClient) // <-- ZMIANA TYPU
+        public SupabaseDoctorRepository(SbClient supabaseClient)
         {
             _supabase = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
         }
@@ -37,14 +36,12 @@ namespace GrafikoMat.Repositories
 
         public async Task SaveAsync(DoctorProfile profile, IEnumerable<UnitDoctorAssignment> desiredAssignments)
         {
-            // Logika dla zapisu profilu (nowy lub istniejący)
             if (profile.Id == Guid.Empty)
             {
                 throw new NotImplementedException("Tworzenie nowych użytkowników wymaga oddzielnej logiki SignUp, która znajduje się w ViewModelu.");
             }
             else
             {
-                // Aktualizacja istniejącego profilu
                 var doctorDataForUpdate = new DoctorForUpdate
                 {
                     Id = profile.Id,
@@ -59,7 +56,6 @@ namespace GrafikoMat.Repositories
                 await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
             }
 
-            // Logika dla zapisu przypisań
             var assignmentRepo = new SupabaseAssignmentRepository(_supabase);
             var currentAssignments = await assignmentRepo.GetForDoctorAsync(profile.Id);
 

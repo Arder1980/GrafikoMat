@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-10 19:05:48
+# Data:       2025-09-10 22:08:07
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -10,7 +10,11 @@ DIR  GrafikoMat
 DIR  GrafikoMat.Core
 DIR  GrafikoMat.Core\Data
 DIR  GrafikoMat.Core\Repositories
+DIR  GrafikoMat.Core\Scheduling\Engines
+DIR  GrafikoMat.Core\Scheduling\Engines\Algorithms
+DIR  GrafikoMat.Core\Scheduling\Evaluation
 DIR  GrafikoMat.Core\Scheduling\Models
+DIR  GrafikoMat.Core\Scheduling\Validation
 DIR  GrafikoMat\Common
 DIR  GrafikoMat\Controls
 DIR  GrafikoMat\Converters
@@ -22,22 +26,38 @@ DIR  GrafikoMat\ViewModels
 DIR  GrafikoMat\Views
 DIR  GrafikoMat\Views\Settings
 
-## FILES (liczba): 67
+## FILES (liczba): 86
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
 FILE GrafikoMat.Core\Data\UnitDoctorAssignment.cs
-FILE GrafikoMat.Core\Declarations.Models.cs
 FILE GrafikoMat.Core\GrafikoMat.Core.csproj
 FILE GrafikoMat.Core\Repositories\IAssignmentRepository.cs
 FILE GrafikoMat.Core\Repositories\IDoctorRepository.cs
 FILE GrafikoMat.Core\Repositories\IUnitRepository.cs
 FILE GrafikoMat.Core\Roster.Models.cs
 FILE GrafikoMat.Core\Scheduling.Abstractions.cs
+FILE GrafikoMat.Core\Scheduling\Engines\Algorithms\FlowUpperBound.cs
+FILE GrafikoMat.Core\Scheduling\Engines\Algorithms\MaxFlowDinic.cs
+FILE GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\AStarSolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\IScheduleSolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs
+FILE GrafikoMat.Core\Scheduling\Engines\SchedulingRules.cs
+FILE GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs
+FILE GrafikoMat.Core\Scheduling\Engines\SolverUtility.cs
+FILE GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs
+FILE GrafikoMat.Core\Scheduling\Evaluation\EvaluationAndScoringService.cs
+FILE GrafikoMat.Core\Scheduling\Evaluation\SolutionComparer.cs
 FILE GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs
 FILE GrafikoMat.Core\Scheduling\Models\Declarations.cs
 FILE GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs
 FILE GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs
+FILE GrafikoMat.Core\Scheduling\Models\SolverPriority.cs
+FILE GrafikoMat.Core\Scheduling\Models\SolverType.cs
+FILE GrafikoMat.Core\Scheduling\Validation\ConstraintValidationService.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
@@ -65,6 +85,9 @@ FILE GrafikoMat\ViewModels\ChangePasswordViewModel.cs
 FILE GrafikoMat\ViewModels\DeclarationsViewModel.cs
 FILE GrafikoMat\ViewModels\DoctorEditorViewModel.cs
 FILE GrafikoMat\ViewModels\DoctorListItemViewModel.cs
+FILE GrafikoMat\ViewModels\EngineComparisonInfo.cs
+FILE GrafikoMat\ViewModels\EngineOption.cs
+FILE GrafikoMat\ViewModels\EngineSettingsViewModel.cs
 FILE GrafikoMat\ViewModels\MainViewModel.cs
 FILE GrafikoMat\ViewModels\ManagementViewModel.cs
 FILE GrafikoMat\ViewModels\UnitAssignmentViewModel.cs
@@ -91,10 +114,8 @@ FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs
 FILE GrafikoMat\Views\SettingsView.xaml
 FILE GrafikoMat\Views\SettingsView.xaml.cs
 
-===== FILE: GrafikoMat.Core\Data\Doctor.cs (1319 bytes)
+===== FILE: GrafikoMat.Core\Data\Doctor.cs (2253 bytes)
 ----- BEGIN -----
-// Plik: GrafikoMat.Core\Data\Doctor.cs
-
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
@@ -131,13 +152,44 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // BEZ ATRYBUTÓW - To jest teraz tylko właściwość pomocnicza w C#
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()
         {
             return this.MemberwiseClone();
         }
+    }
+
+    /// <summary>
+    /// Klasa DTO (Data Transfer Object) używana wyłącznie do aktualizacji podzbioru danych lekarza w bazie.
+    /// Zapobiega to nadpisywaniu przez pomyłkę kolumn zarządzanych przez bazę danych (np. created_at).
+    /// </summary>
+    [Table("doctors")]
+    public class DoctorForUpdate : BaseModel
+    {
+        [PrimaryKey("id")]
+        public Guid Id { get; set; }
+
+        [Column("first_name")]
+        public string FirstName { get; set; } = string.Empty;
+
+        [Column("last_name")]
+        public string LastName { get; set; } = string.Empty;
+
+        [Column("abbreviation")]
+        public string Abbreviation { get; set; } = string.Empty;
+
+        [Column("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Column("is_admin")]
+        public bool IsAdmin { get; set; }
+
+        [Column("is_archived")]
+        public bool IsArchived { get; set; }
+
+        [Column("requires_password_change")]
+        public bool RequiresPasswordChange { get; set; }
     }
 }
 ----- END -----
@@ -238,106 +290,6 @@ namespace GrafikoMat.Core.Data
     }
 }
 
------ END -----
-
-===== FILE: GrafikoMat.Core\Declarations.Models.cs (3365 bytes)
------ BEGIN -----
-using GrafikoMat.Core.Data;
-using Supabase.Postgrest.Attributes;
-using Supabase.Postgrest.Models;
-using System;
-using System.Collections.Generic;
-using GrafikoMat.Core.Scheduling;
-
-namespace GrafikoMat.Core.Declarations
-{
-    // NOWA KLASA - DTO (Data Transfer Object) do aktualizacji danych lekarza.
-    // Zawiera tylko te pola, które mają swoje odpowiedniki w bazie danych.
-    [Table("doctors")]
-    public class DoctorForUpdate : BaseModel
-    {
-        [PrimaryKey("id", shouldInsert: false)] // Klucz główny, ale nie wstawiamy go przy tworzeniu
-        public Guid Id { get; set; }
-
-        [Column("first_name")]
-        public string FirstName { get; set; } = string.Empty;
-
-        [Column("last_name")]
-        public string LastName { get; set; } = string.Empty;
-
-        [Column("abbreviation")]
-        public string Abbreviation { get; set; } = string.Empty;
-
-        [Column("email")]
-        public string Email { get; set; } = string.Empty;
-
-        [Column("is_admin")]
-        public bool IsAdmin { get; set; }
-
-        [Column("is_archived")]
-        public bool IsArchived { get; set; }
-
-        [Column("requires_password_change")]
-        public bool RequiresPasswordChange { get; set; }
-
-        // Celowo pomijamy 'created_at' i 'FullName'
-    }
-
-
-    /// <summary>
-    /// Deklaracje dyżurowe lekarza dla jednego miesiąca (wejście do generatora).
-    /// </summary>
-    public sealed class DoctorDeclarationMonth
-    {
-        /// <summary>Id lekarza (np. GUID lub skrót – format po Twojej stronie).</summary>
-        public string DoctorId { get; init; } = string.Empty;
-
-        /// <summary>Rok/miesiąc, którego dotyczą deklaracje.</summary>
-        public int Year { get; init; }
-        public int Month { get; init; }
-
-        /// <summary>Limit dyżurów dla tego lekarza w tym miesiącu.</summary>
-        public int DutyLimit { get; set; }
-
-        /// <summary>Lista wpisów dziennych/slotowych z symbolami deklaracji.</summary>
-        public List<DeclarationEntry> Entries { get; } = new();
-
-        public DoctorDeclarationMonth(string doctorId, int year, int month, int dutyLimit = 0)
-        {
-            DoctorId = doctorId;
-            Year = year;
-            Month = month;
-            DutyLimit = dutyLimit;
-        }
-    }
-
-    /// <summary>
-    /// Pojedyncza deklaracja na slot: symbol jednoliterowy + opcjonalny preferowany współdyżurny.
-    /// </summary>
-    public sealed class DeclarationEntry
-    {
-        /// <summary>Slot (dzień + część doby).</summary>
-        public DutySlot Slot { get; init; }
-
-        /// <summary>
-        /// Jednoliterowy symbol deklaracji (np. 'D', 'N', 'X', 'P' – zgodnie z Twoją legendą).
-        /// </summary>
-        public char Symbol { get; set; }
-
-        /// <summary>
-        /// Opcjonalny preferowany współdyżurny (co-dyżurny) – preferencja wejściowa.
-        /// Generator może, ale nie musi ją spełnić.
-        /// </summary>
-        public string? CoDutyPreferredDoctorId { get; set; }
-
-        public DeclarationEntry(DutySlot slot, char symbol, string? coDutyPreferredDoctorId = null)
-        {
-            Slot = slot;
-            Symbol = symbol;
-            CoDutyPreferredDoctorId = coDutyPreferredDoctorId;
-        }
-    }
-}
 ----- END -----
 
 ===== FILE: GrafikoMat.Core\GrafikoMat.Core.csproj (437 bytes)
@@ -668,7 +620,2026 @@ namespace GrafikoMat.Core.Scheduling
 
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs (1225 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\Algorithms\FlowUpperBound.cs (2245 bytes)
+----- BEGIN -----
+using System;
+
+namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
+{
+    [Flags]
+    internal enum AvailabilityMask : byte { None = 0, Wants = 2, Available = 4, Any = 7 }
+
+    /// <summary>
+    /// Oblicza górne ograniczenie (upper bound) liczby możliwych do przydzielenia dyżurów za pomocą algorytmu max-flow.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    internal static class FlowUpperBound
+    {
+        // Buduje graf: S -> dni -> lekarze -> T
+        public static int Calculate(
+             int dayCount, int doctorCount,
+             Func<int, int, AvailabilityMask> getAvailabilityMask, // (dzień, lekarz) -> Maska dostępności
+             Func<int, int> getRemainingCapacityPerDoctor,      // lekarz -> limit - obciążenie
+             Func<int, bool> isDayAllowed)                      // dzień -> czy dopuszczamy
+        {
+            int nodeCount = 2 + dayCount + doctorCount;
+            int sourceNode = dayCount + doctorCount;
+            int sinkNode = sourceNode + 1;
+
+            var dinic = new MaxFlowDinic(nodeCount);
+
+            for (int d = 0; d < dayCount; d++)
+            {
+                if (!isDayAllowed(d)) continue;
+                dinic.AddEdge(sourceNode, d, 1); // Pojemność od źródła do dnia = 1
+            }
+
+            for (int p = 0; p < doctorCount; p++)
+            {
+                int capacity = getRemainingCapacityPerDoctor(p);
+                if (capacity > 0)
+                {
+                    dinic.AddEdge(dayCount + p, sinkNode, capacity); // Pojemność od lekarza do ujścia = pozostały limit
+                }
+            }
+
+            for (int d = 0; d < dayCount; d++)
+            {
+                if (!isDayAllowed(d)) continue;
+                for (int p = 0; p < doctorCount; p++)
+                {
+                    var mask = getAvailabilityMask(d, p);
+                    if (mask != AvailabilityMask.None)
+                    {
+                        dinic.AddEdge(d, dayCount + p, 1); // Krawędź istnieje, jeśli lekarz jest dostępny
+                    }
+                }
+            }
+
+            return dinic.GetMaxFlow(sourceNode, sinkNode);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\Algorithms\MaxFlowDinic.cs (3148 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+
+namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
+{
+    /// <summary>
+    /// Implementacja algorytmu Dinica do znajdowania maksymalnego przepływu w sieci.
+    /// Używany do obliczania górnych ograniczeń (upper bounds) w solverach.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    internal sealed class MaxFlowDinic
+    {
+        private readonly int _nodeCount;
+        private readonly List<Edge>[] _graph;
+        private int[] _level;
+        private int[] _iterator;
+
+        private sealed class Edge
+        {
+            public int To, ReverseEdgeIndex, Capacity;
+            public Edge(int to, int rev, int cap) { To = to; ReverseEdgeIndex = rev; Capacity = cap; }
+        }
+
+        public MaxFlowDinic(int nodeCount)
+        {
+            _nodeCount = nodeCount;
+            _graph = new List<Edge>[nodeCount];
+            for (int i = 0; i < nodeCount; i++) _graph[i] = new List<Edge>(8);
+            _level = new int[nodeCount];
+            _iterator = new int[nodeCount];
+        }
+
+        public void AddEdge(int u, int v, int capacity)
+        {
+            var forwardEdge = new Edge(v, _graph[v].Count, capacity);
+            var backwardEdge = new Edge(u, _graph[u].Count, 0); // Krawędź zwrotna o zerowej pojemności
+            _graph[u].Add(forwardEdge);
+            _graph[v].Add(backwardEdge);
+        }
+
+        private bool Bfs(int s, int t)
+        {
+            Array.Fill(_level, -1);
+            var q = new Queue<int>();
+            _level[s] = 0;
+            q.Enqueue(s);
+            while (q.Count > 0)
+            {
+                int v = q.Dequeue();
+                foreach (var e in _graph[v])
+                {
+                    if (e.Capacity <= 0 || _level[e.To] >= 0) continue;
+
+                    _level[e.To] = _level[v] + 1;
+                    if (e.To == t) return true;
+                    q.Enqueue(e.To);
+                }
+            }
+            return _level[t] >= 0;
+        }
+
+        private int Dfs(int v, int t, int f)
+        {
+            if (v == t) return f;
+
+            for (int i = _iterator[v]; i < _graph[v].Count; i++, _iterator[v] = i)
+            {
+                var e = _graph[v][i];
+                if (e.Capacity <= 0 || _level[v] + 1 != _level[e.To]) continue;
+
+                int d = Dfs(e.To, t, Math.Min(f, e.Capacity));
+                if (d <= 0) continue;
+
+                e.Capacity -= d;
+                _graph[e.To][e.ReverseEdgeIndex].Capacity += d;
+                return d;
+            }
+            return 0;
+        }
+
+        public int GetMaxFlow(int s, int t, int requiredFlow = int.MaxValue)
+        {
+            int flow = 0;
+            while (flow < requiredFlow && Bfs(s, t))
+            {
+                Array.Fill(_iterator, 0);
+                int f;
+                while (flow < requiredFlow && (f = Dfs(s, t, requiredFlow - flow)) > 0)
+                {
+                    flow += f;
+                }
+            }
+            return flow;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs (8158 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Core.Scheduling.Validation;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Implementacja silnika generującego grafik za pomocą algorytmu kolonii mrówek.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class AntColonySolver : IScheduleSolver
+    {
+        private readonly int _numAnts;
+        private readonly int _maxGenerations;
+        private const double EvaporationRate = 0.5; // Współczynnik odparowywania feromonu
+        private const double Alpha = 1.0; // Wpływ feromonu
+        private const double Beta = 5.0;  // Wpływ heurystyki
+        private const double Q0 = 0.7;    // Prawdopodobieństwo wyboru najlepszej ścieżki
+
+        private readonly ScheduleInput _scheduleInput;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progressReporter;
+        private readonly CancellationToken _cancellationToken;
+        private readonly SolverUtility _utility;
+        private readonly Random _random = new();
+        private Dictionary<DateTime, Dictionary<string, double>> _pheromoneMatrix = new();
+
+        public AntColonySolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            _scheduleInput = scheduleInput;
+            _priorities = priorities;
+            _progressReporter = progress;
+            _cancellationToken = cancellationToken;
+            _utility = new SolverUtility(scheduleInput);
+
+            _numAnts = Math.Max(50, _scheduleInput.Doctors.Count * 3);
+            _maxGenerations = Math.Max(200, _scheduleInput.DaysInMonth.Count * 15);
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            InitializePheromones();
+            var bestSolution = new Dictionary<DateTime, DoctorProfile?>();
+            double bestFitness = double.MinValue;
+
+            for (int i = 0; i < _maxGenerations; i++)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                var solutions = new ConcurrentBag<Dictionary<DateTime, DoctorProfile?>>();
+
+                Parallel.For(0, _numAnts, ant =>
+                {
+                    _cancellationToken.ThrowIfCancellationRequested();
+                    var solution = BuildSolutionForAnt();
+                    solutions.Add(solution);
+                });
+
+                var bestInGeneration = solutions.AsParallel().OrderByDescending(s =>
+                {
+                    var metrics = EvaluationAndScoringService.CalculateMetrics(s, _utility.CalculateWorkload(s), _scheduleInput);
+                    return EvaluationAndScoringService.CalculateScore(metrics, _priorities, _scheduleInput);
+                }).First();
+
+                var bestMetricsInGeneration = EvaluationAndScoringService.CalculateMetrics(bestInGeneration, _utility.CalculateWorkload(bestInGeneration), _scheduleInput);
+                var bestFitnessInGeneration = EvaluationAndScoringService.CalculateScore(bestMetricsInGeneration, _priorities, _scheduleInput);
+
+                if (bestFitnessInGeneration > bestFitness)
+                {
+                    bestFitness = bestFitnessInGeneration;
+                    bestSolution = bestInGeneration;
+                }
+
+                EvaporatePheromones();
+                UpdatePheromones(bestSolution, bestFitness);
+
+                _progressReporter?.Report((double)(i + 1) / _maxGenerations);
+            }
+
+            var finalWorkload = _utility.CalculateWorkload(bestSolution);
+            return EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+        }
+
+        private void InitializePheromones()
+        {
+            _pheromoneMatrix = new Dictionary<DateTime, Dictionary<string, double>>();
+            foreach (var day in _scheduleInput.DaysInMonth)
+            {
+                _pheromoneMatrix[day] = new Dictionary<string, double>();
+                foreach (var doctor in _scheduleInput.Doctors)
+                {
+                    _pheromoneMatrix[day][doctor.Abbreviation] = 1.0;
+                }
+            }
+        }
+
+        private Dictionary<DateTime, DoctorProfile?> BuildSolutionForAnt()
+        {
+            var newSolution = new Dictionary<DateTime, DoctorProfile?>();
+            var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            var usedConditionals = new HashSet<string>();
+
+            foreach (var day in _scheduleInput.DaysInMonth)
+            {
+                var candidates = ConstraintValidationService.GetValidCandidatesForDay(day, _scheduleInput, newSolution, workload, usedConditionals);
+                if (!candidates.Any())
+                {
+                    newSolution[day] = null;
+                    continue;
+                }
+
+                var attractiveness = candidates.ToDictionary(
+                    candidate => candidate,
+                    candidate => Math.Pow(_pheromoneMatrix[day][candidate.Abbreviation], Alpha) * Math.Pow(GetHeuristicValue(day, candidate), Beta)
+                );
+
+                DoctorProfile? chosenDoctor;
+                if (_random.NextDouble() < Q0)
+                {
+                    chosenDoctor = attractiveness.OrderByDescending(kvp => kvp.Value).First().Key;
+                }
+                else
+                {
+                    double totalAttractiveness = attractiveness.Values.Sum();
+                    double randomValue = _random.NextDouble() * totalAttractiveness;
+                    chosenDoctor = null;
+
+                    foreach (var choice in attractiveness)
+                    {
+                        randomValue -= choice.Value;
+                        if (randomValue <= 0)
+                        {
+                            chosenDoctor = choice.Key;
+                            break;
+                        }
+                    }
+                    chosenDoctor ??= candidates.Last();
+                }
+
+                newSolution[day] = chosenDoctor;
+                workload[chosenDoctor!.Abbreviation]++;
+                if (_scheduleInput.Availability[day][chosenDoctor.Abbreviation] == AvailabilityType.ConditionallyAvailable)
+                {
+                    usedConditionals.Add(chosenDoctor.Abbreviation);
+                }
+            }
+            return newSolution;
+        }
+
+        private double GetHeuristicValue(DateTime day, DoctorProfile doctor)
+        {
+            return _scheduleInput.Availability[day][doctor.Abbreviation] switch
+            {
+                AvailabilityType.Wants => 20.0,
+                AvailabilityType.Available => 1.0,
+                AvailabilityType.ConditionallyAvailable => 0.5,
+                _ => 0.1
+            };
+        }
+
+        private void EvaporatePheromones()
+        {
+            foreach (var day in _pheromoneMatrix.Keys.ToList())
+            {
+                foreach (var doctorAbbr in _pheromoneMatrix[day].Keys.ToList())
+                {
+                    _pheromoneMatrix[day][doctorAbbr] *= (1.0 - EvaporationRate);
+                }
+            }
+        }
+
+        private void UpdatePheromones(Dictionary<DateTime, DoctorProfile?> solution, double fitness)
+        {
+            if (fitness <= 0) return;
+            double pheromoneDeposit = Math.Pow(fitness / 1_000_000_000_000, 2);
+
+            foreach (var entry in solution)
+            {
+                if (entry.Value != null)
+                {
+                    _pheromoneMatrix[entry.Key][entry.Value.Abbreviation] += pheromoneDeposit;
+                }
+            }
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\AStarSolver.cs (7513 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Implementacja silnika A* do wyszukiwania optymalnego grafiku.
+    /// Jest to algorytm przeszukiwania heurystycznego, który stara się inteligentnie wybierać najbardziej obiecujące ścieżki.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public sealed class AStarSolver : IScheduleSolver
+    {
+        private const int EMPTY = -1;
+        private long _sequence;
+
+        private readonly ScheduleInput _input;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progress;
+        private readonly CancellationToken _cancellationToken;
+
+        public AStarSolver(
+            ScheduleInput scheduleInput,
+            List<SolverPriority> priorities,
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            _input = scheduleInput;
+            _priorities = priorities;
+            _progress = progress;
+            _cancellationToken = cancellationToken;
+            _sequence = 0;
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            var days = _input.DaysInMonth;
+            var doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
+            int dayCount = days.Count;
+            int doctorCount = doctors.Count;
+
+            var initialAssignments = Enumerable.Repeat(SchedulingRules.UNASSIGNED, dayCount).ToArray();
+            var initialWorkload = new int[doctorCount];
+            var initialConditionals = new int[doctorCount];
+
+            var context0 = new SchedulingRules.Context(
+                days, doctors, _input.Availability, _input.DutyLimits, _priorities,
+                initialAssignments, initialWorkload, initialConditionals, isPrefixActive: true);
+
+            ScheduleSolution? bestSolution = null;
+
+            var priorityQueue = new PriorityQueue<SchedulingRules.Context, PriorityKey>();
+            Enqueue(context0);
+
+            long expandedNodes = 0;
+            var stopwatch = Stopwatch.StartNew();
+
+            while (priorityQueue.Count > 0)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                var context = priorityQueue.Dequeue();
+                expandedNodes++;
+
+                int nextDayIndex = context.GetEarliestUnassignedDayIndex();
+                if (nextDayIndex < 0) // Liść drzewa - znaleziono pełne rozwiązanie
+                {
+                    var solution = BuildSolution(context);
+                    if (bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(solution, bestSolution, _priorities, _input) > 0)
+                    {
+                        bestSolution = solution;
+                    }
+                    continue;
+                }
+
+                var candidates = SchedulingRules.OrderCandidates(nextDayIndex, context);
+
+                // Gałąź dla pustego dnia
+                var emptyChild = CloneContext(context);
+                emptyChild.Assignments[nextDayIndex] = EMPTY;
+                emptyChild.IsPrefixActive = false; // Dziura w grafiku przerywa prefiks
+                Enqueue(emptyChild);
+
+                // Gałęzie dla każdego kandydata
+                foreach (int docIndex in candidates)
+                {
+                    var child = CloneContext(context);
+                    child.Assignments[nextDayIndex] = docIndex;
+                    child.Workload[docIndex]++;
+
+                    if (child.GetAvailability(nextDayIndex, docIndex) == AvailabilityType.ConditionallyAvailable)
+                    {
+                        child.ConditionalsUsed[docIndex]++;
+                    }
+
+                    bool keepsPrefix = (nextDayIndex == 0) || (child.Assignments[nextDayIndex - 1] != SchedulingRules.UNASSIGNED);
+                    child.IsPrefixActive = child.IsPrefixActive && keepsPrefix;
+
+                    Enqueue(child);
+                }
+
+                if ((expandedNodes & 0x3FF) == 0) // Raportuj postęp co ~1024 węzły
+                {
+                    double assignedRatio = (double)(context.DayCount - context.Assignments.Count(a => a == SchedulingRules.UNASSIGNED)) / Math.Max(1, context.DayCount);
+                    _progress?.Report(assignedRatio);
+                }
+            }
+
+            _progress?.Report(1.0);
+            return bestSolution ?? BuildSolution(context0);
+
+            void Enqueue(SchedulingRules.Context sctx)
+            {
+                int assignedCount = sctx.Assignments.Count(a => a >= 0);
+                // Heurystyka: preferuj stany z większą liczbą już przypisanych dyżurów
+                var key = new PriorityKey(cost: -assignedCount, sequence: _sequence++);
+                priorityQueue.Enqueue(sctx, key);
+            }
+        }
+
+        private readonly struct PriorityKey : IComparable<PriorityKey>
+        {
+            public readonly int Cost; // Koszt (im niższy, tym lepszy)
+            public readonly long Sequence; // Do rozstrzygania remisów
+            public PriorityKey(int cost, long sequence) { Cost = cost; Sequence = sequence; }
+
+            public int CompareTo(PriorityKey other)
+            {
+                int c = Cost.CompareTo(other.Cost);
+                if (c != 0) return c;
+                return Sequence.CompareTo(other.Sequence);
+            }
+        }
+
+        private static SchedulingRules.Context CloneContext(SchedulingRules.Context src)
+        {
+            var assignments = new int[src.DayCount];
+            Array.Copy(src.Assignments, assignments, src.DayCount);
+
+            var workload = new int[src.DoctorCount];
+            Array.Copy(src.Workload, workload, src.DoctorCount);
+
+            var conditionals = new int[src.DoctorCount];
+            Array.Copy(src.ConditionalsUsed, conditionals, src.DoctorCount);
+
+            return new SchedulingRules.Context(
+                src.Days, src.Doctors, src.Availability, src.DutyLimitsByAbbr, src.Priorities,
+                assignments, workload, conditionals, src.IsPrefixActive
+            );
+        }
+
+        private ScheduleSolution BuildSolution(SchedulingRules.Context ctx)
+        {
+            var map = new Dictionary<DateTime, DoctorProfile?>(ctx.DayCount);
+            var perDoctorWorkload = new Dictionary<string, int>(ctx.DoctorCount);
+            foreach (var doc in ctx.Doctors) perDoctorWorkload[doc.Abbreviation] = 0;
+
+            for (int d = 0; d < ctx.DayCount; d++)
+            {
+                int assignmentIndex = ctx.Assignments[d];
+                var date = ctx.Days[d];
+
+                if (assignmentIndex >= 0)
+                {
+                    var doctor = ctx.Doctors[assignmentIndex];
+                    map[date] = doctor;
+                    perDoctorWorkload[doctor.Abbreviation]++;
+                }
+                else
+                {
+                    map[date] = null;
+                }
+            }
+
+            return EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (11305 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Engines.Algorithms;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Core.Scheduling.Validation;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Deterministyczny silnik generujący grafik z użyciem algorytmu z nawrotami (backtracking).
+    /// Gwarantuje znalezienie optymalnego rozwiązania poprzez pełne przeszukanie przestrzeni możliwych decyzji.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public sealed class BacktrackingSolver : IScheduleSolver
+    {
+        private const int EMPTY = -1;
+        private const int UNASSIGNED = int.MinValue;
+
+        private readonly ScheduleInput _input;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progress;
+        private readonly CancellationToken _cancellationToken;
+
+        private readonly List<DateTime> _days;
+        private readonly List<DoctorProfile> _doctors;
+        private readonly Dictionary<string, int> _dutyLimitsByAbbr;
+
+        // Tablice przechowujące bieżący stan w trakcie przeszukiwania
+        private readonly int[] _assignments;       // przypisanie na dany dzień: indeks lekarza, EMPTY, lub UNASSIGNED
+        private readonly int[] _workload;          // dyżury per lekarz
+        private readonly int[] _conditionalsUsed;  // licznik "Mogę warunkowo" per lekarz
+
+        // Przechowuje najlepszy znaleziony dotychczas wynik
+        private ScheduleSolution? _bestSolution;
+
+        private readonly bool _useFlowUpperBound = true;
+        private readonly int _flowCheckFrequency = 6; // Sprawdzaj co 6 poziomów głębokości
+
+        private readonly HashSet<string> _visitedStates = new HashSet<string>();
+
+        public BacktrackingSolver(
+            ScheduleInput scheduleInput,
+            List<SolverPriority> priorities,
+            IProgress<double>? progress = null,
+            CancellationToken token = default)
+        {
+            _input = scheduleInput;
+            _priorities = priorities;
+            _progress = progress;
+            _cancellationToken = token;
+
+            _days = _input.DaysInMonth;
+            _doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
+            _dutyLimitsByAbbr = _input.DutyLimits;
+
+            _assignments = Enumerable.Repeat(UNASSIGNED, _days.Count).ToArray();
+            _workload = new int[_doctors.Count];
+            _conditionalsUsed = new int[_doctors.Count];
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            // TODO: Dodać logowanie startu
+            Dfs(depth: 0);
+
+            _bestSolution ??= BuildSolutionFromState();
+
+            // TODO: Dodać logowanie końca
+            return _bestSolution;
+        }
+
+        private void Dfs(int depth)
+        {
+            _cancellationToken.ThrowIfCancellationRequested();
+
+            var stateKey = BuildStateKey();
+            if (_visitedStates.Contains(stateKey)) return;
+            _visitedStates.Add(stateKey);
+
+            if ((depth & 0x7FF) == 0) // Raportuj postęp co ~2048 węzłów
+            {
+                int filled = _assignments.Count(a => a != UNASSIGNED);
+                _progress?.Report((double)filled / _assignments.Length);
+            }
+
+            int nextDayIndex = ChooseDayToAssign();
+            if (nextDayIndex < 0) // Wszystkie dni przypisane, liść drzewa
+            {
+                ConsiderAsBest(BuildSolutionFromState());
+                return;
+            }
+
+            // Sonda z użyciem Max-Flow, aby sprawdzić, czy dalsze przypisania są w ogóle możliwe
+            if (_useFlowUpperBound && (depth % _flowCheckFrequency == 0))
+            {
+                int remainingAssignmentsPossible = FlowUpperBound.Calculate(
+                    _days.Count, _doctors.Count,
+                    getAvailabilityMask: (d, p) => IsHardFeasible(d, p) ? AvailabilityMask.Any : AvailabilityMask.None,
+                    getRemainingCapacityPerDoctor: p =>
+                    {
+                        int limit = _dutyLimitsByAbbr.GetValueOrDefault(_doctors[p].Abbreviation, 0);
+                        return limit == 0 ? int.MaxValue : Math.Max(0, limit - _workload[p]);
+                    },
+                    isDayAllowed: d => _assignments[d] == UNASSIGNED
+                );
+
+                if (remainingAssignmentsPossible == 0)
+                {
+                    // Nie da się już nikogo przypisać. Zamykamy resztę jako puste i oceniamy.
+                    var changedIndices = new List<int>();
+                    for (int i = 0; i < _assignments.Length; i++)
+                        if (_assignments[i] == UNASSIGNED) { _assignments[i] = EMPTY; changedIndices.Add(i); }
+
+                    ConsiderAsBest(BuildSolutionFromState());
+
+                    // Przywracamy stan do dalszego przeszukiwania
+                    foreach (var i in changedIndices) _assignments[i] = UNASSIGNED;
+                    return;
+                }
+            }
+
+            var candidates = GetOrderedCandidates(nextDayIndex);
+
+            // Rozgałęzienie po lekarzach
+            foreach (var doctorIndex in candidates)
+            {
+                if (!TryAssign(nextDayIndex, doctorIndex)) continue;
+                Dfs(depth + 1);
+                Unassign(nextDayIndex, doctorIndex);
+            }
+
+            // Rozgałęzienie dla pustego dnia (na końcu)
+            TryAssignEmpty(nextDayIndex);
+            Dfs(depth + 1);
+            UnassignEmpty(nextDayIndex);
+        }
+
+        /// <summary>
+        /// Wybiera "najtrudniejszy" dzień (MRV - Minimum Remaining Values): najkrótsza lista legalnych kandydatów.
+        /// </summary>
+        private int ChooseDayToAssign()
+        {
+            int bestDayIndex = -1;
+            int minCandidatesCount = int.MaxValue;
+
+            for (int i = 0; i < _days.Count; i++)
+            {
+                if (_assignments[i] != UNASSIGNED) continue;
+
+                int count = GetOrderedCandidates(i).Count + 1; // +1 dla opcji "pusty dzień"
+                if (count < minCandidatesCount)
+                {
+                    minCandidatesCount = count;
+                    bestDayIndex = i;
+                    if (minCandidatesCount <= 1) break; // Optymalizacja: nie da się bardziej ograniczyć
+                }
+            }
+            return bestDayIndex;
+        }
+
+        private List<int> GetOrderedCandidates(int dayIndex)
+        {
+            var candidates = new List<int>();
+            for (int i = 0; i < _doctors.Count; i++)
+            {
+                if (IsHardFeasible(dayIndex, i))
+                {
+                    candidates.Add(i);
+                }
+            }
+            // TODO: Dodać logikę sortowania kandydatów (LCV - Least Constraining Value)
+            return candidates;
+        }
+
+        private bool IsHardFeasible(int dayIndex, int doctorIndex)
+        {
+            var doctor = _doctors[doctorIndex];
+            var day = _days[dayIndex];
+
+            // Limit lekarza
+            int limit = _dutyLimitsByAbbr.GetValueOrDefault(doctor.Abbreviation, 0);
+            if (limit > 0 && _workload[doctorIndex] >= limit) return false;
+
+            // Dostępność
+            var availability = _input.Availability[day][doctor.Abbreviation];
+            if (Declarations.IsHardBlock(availability)) return false;
+
+            // Dzień po dniu
+            if (dayIndex > 0 && _assignments[dayIndex - 1] == doctorIndex) return false;
+
+            // Sąsiedztwo "Innego dyżuru"
+            if (_input.Availability.TryGetValue(day.AddDays(-1), out var yesterdayAvail) && yesterdayAvail[doctor.Abbreviation] == AvailabilityType.OtherDuty) return false;
+            if (_input.Availability.TryGetValue(day.AddDays(1), out var tomorrowAvail) && tomorrowAvail[doctor.Abbreviation] == AvailabilityType.OtherDuty) return false;
+
+            // "Mogę warunkowo"
+            if (availability == AvailabilityType.ConditionallyAvailable && _conditionalsUsed[doctorIndex] >= 1) return false;
+
+            return true;
+        }
+
+        private bool TryAssign(int dayIndex, int doctorIndex)
+        {
+            if (!IsHardFeasible(dayIndex, doctorIndex)) return false;
+
+            _assignments[dayIndex] = doctorIndex;
+            _workload[doctorIndex]++;
+            if (_input.Availability[_days[dayIndex]][_doctors[doctorIndex].Abbreviation] == AvailabilityType.ConditionallyAvailable)
+            {
+                _conditionalsUsed[doctorIndex]++;
+            }
+            return true;
+        }
+
+        private void Unassign(int dayIndex, int doctorIndex)
+        {
+            if (_input.Availability[_days[dayIndex]][_doctors[doctorIndex].Abbreviation] == AvailabilityType.ConditionallyAvailable)
+            {
+                _conditionalsUsed[doctorIndex]--;
+            }
+            _workload[doctorIndex]--;
+            _assignments[dayIndex] = UNASSIGNED;
+        }
+
+        private void TryAssignEmpty(int dayIndex) => _assignments[dayIndex] = EMPTY;
+        private void UnassignEmpty(int dayIndex) => _assignments[dayIndex] = UNASSIGNED;
+
+        private void ConsiderAsBest(ScheduleSolution candidate)
+        {
+            if (_bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(candidate, _bestSolution, _priorities, _input) > 0)
+            {
+                _bestSolution = candidate;
+                // TODO: Logowanie poprawy
+            }
+        }
+
+        private ScheduleSolution BuildSolutionFromState()
+        {
+            var assignmentsMap = new Dictionary<DateTime, DoctorProfile?>(_days.Count);
+            for (int i = 0; i < _days.Count; i++)
+            {
+                if (_assignments[i] >= 0)
+                    assignmentsMap[_days[i]] = _doctors[_assignments[i]];
+                else
+                    assignmentsMap[_days[i]] = null;
+            }
+
+            var finalWorkload = new Dictionary<string, int>();
+            for (int i = 0; i < _doctors.Count; i++)
+            {
+                finalWorkload[_doctors[i].Abbreviation] = _workload[i];
+            }
+
+            return EvaluationAndScoringService.CalculateMetrics(assignmentsMap, finalWorkload, _input);
+        }
+
+        private string BuildStateKey()
+        {
+            var sb = new StringBuilder(_assignments.Length * 3 + _workload.Length * 2 + _conditionalsUsed.Length * 2);
+            sb.Append('A');
+            for (int i = 0; i < _assignments.Length; i++) { sb.Append(_assignments[i]); sb.Append(';'); }
+            sb.Append('W');
+            for (int i = 0; i < _workload.Length; i++) { sb.Append(_workload[i]); sb.Append(','); }
+            sb.Append('M');
+            for (int i = 0; i < _conditionalsUsed.Length; i++) { sb.Append(_conditionalsUsed[i]); sb.Append(','); }
+            return sb.ToString();
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs (6284 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Core.Scheduling.Validation;
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Implementacja silnika generującego grafik za pomocą algorytmu genetycznego.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class GeneticSolver : IScheduleSolver
+    {
+        private class Chromosome
+        {
+            public Dictionary<DateTime, DoctorProfile?> Genes { get; set; }
+            public double Fitness { get; set; }
+
+            public Chromosome(Dictionary<DateTime, DoctorProfile?> genes)
+            {
+                Genes = genes;
+                Fitness = 0.0;
+            }
+
+            public Chromosome Clone()
+            {
+                return new Chromosome(new Dictionary<DateTime, DoctorProfile?>(Genes));
+            }
+        }
+
+        private readonly int _populationSize;
+        private readonly int _generations;
+        private const double CrossoverRate = 0.85;
+        private const double MutationRate = 0.05;
+        private const int TournamentSize = 5;
+
+        private readonly ScheduleInput _scheduleInput;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progressReporter;
+        private readonly CancellationToken _cancellationToken;
+        private readonly SolverUtility _utility;
+
+        private List<Chromosome> _population = new();
+        private readonly Random _random = new();
+
+        public GeneticSolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            _scheduleInput = scheduleInput;
+            _priorities = priorities;
+            _progressReporter = progress;
+            _cancellationToken = cancellationToken;
+            _utility = new SolverUtility(scheduleInput);
+
+            int problemSize = _scheduleInput.Doctors.Count * _scheduleInput.DaysInMonth.Count;
+            _populationSize = Math.Max(50, problemSize / 5);
+            _generations = Math.Max(150, problemSize * 2);
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            CreateInitialPopulation();
+            CalculateFitness();
+
+            for (int i = 0; i < _generations; i++)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+                var newPopulation = new ConcurrentBag<Chromosome>();
+
+                // Elityzm: najlepszy osobnik z poprzedniej generacji przechodzi do nowej bez zmian
+                var best = _population.OrderByDescending(c => c.Fitness).First();
+                newPopulation.Add(best.Clone());
+
+                Parallel.For(1, _populationSize, _ =>
+                {
+                    var parent1 = Selection();
+                    var parent2 = Selection();
+                    var child = Crossover(parent1, parent2);
+                    Mutation(child);
+                    newPopulation.Add(child);
+                });
+
+                _population = newPopulation.ToList();
+                CalculateFitness();
+                _progressReporter?.Report((double)(i + 1) / _generations);
+            }
+
+            var finalBest = _population.OrderByDescending(c => c.Fitness).First();
+            var finalWorkload = _utility.CalculateWorkload(finalBest.Genes);
+            return EvaluationAndScoringService.CalculateMetrics(finalBest.Genes, finalWorkload, _scheduleInput);
+        }
+
+        private void CreateInitialPopulation()
+        {
+            _population = new List<Chromosome>();
+            for (int i = 0; i < _populationSize; i++)
+            {
+                _population.Add(new Chromosome(_utility.CreateRandomSolution()));
+            }
+        }
+
+        private void CalculateFitness()
+        {
+            Parallel.ForEach(_population, chromosome =>
+            {
+                var workload = _utility.CalculateWorkload(chromosome.Genes);
+                var metrics = EvaluationAndScoringService.CalculateMetrics(chromosome.Genes, workload, _scheduleInput);
+                chromosome.Fitness = EvaluationAndScoringService.CalculateScore(metrics, _priorities, _scheduleInput);
+            });
+        }
+
+        private Chromosome Selection()
+        {
+            var tournament = new List<Chromosome>();
+            for (int i = 0; i < TournamentSize; i++)
+            {
+                tournament.Add(_population[_random.Next(_populationSize)]);
+            }
+            return tournament.OrderByDescending(c => c.Fitness).First();
+        }
+
+        private Chromosome Crossover(Chromosome parent1, Chromosome parent2)
+        {
+            if (_random.NextDouble() > CrossoverRate)
+            {
+                return parent1.Clone();
+            }
+
+            var crossoverPoint = _random.Next(_scheduleInput.DaysInMonth.Count);
+            var days = _scheduleInput.DaysInMonth;
+            var childGenes = new Dictionary<DateTime, DoctorProfile?>();
+
+            for (int i = 0; i < days.Count; i++)
+            {
+                childGenes[days[i]] = i < crossoverPoint ? parent1.Genes[days[i]] : parent2.Genes[days[i]];
+            }
+
+            ConstraintValidationService.RepairSchedule(childGenes, _scheduleInput);
+            return new Chromosome(childGenes);
+        }
+
+        private void Mutation(Chromosome chromosome)
+        {
+            foreach (var day in _scheduleInput.DaysInMonth)
+            {
+                if (_random.NextDouble() < MutationRate)
+                {
+                    // Generujemy sąsiada dla tego jednego dnia
+                    var neighborForDay = _utility.GenerateNeighbor(chromosome.Genes);
+                    chromosome.Genes[day] = neighborForDay[day];
+                }
+            }
+            ConstraintValidationService.RepairSchedule(chromosome.Genes, _scheduleInput);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\IScheduleSolver.cs (581 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Scheduling.Models;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Definiuje wspólny kontrakt dla wszystkich silników obliczeniowych generujących grafik.
+    /// </summary>
+    public interface IScheduleSolver
+    {
+        /// <summary>
+        /// Uruchamia proces obliczeniowy w celu znalezienia najlepszego możliwego grafiku.
+        /// </summary>
+        /// <returns>Obiekt ScheduleSolution zawierający najlepsze znalezione rozwiązanie.</returns>
+        ScheduleSolution FindOptimalSolution();
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs (1720 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Fabryka odpowiedzialna za tworzenie instancji odpowiednich silników generujących grafik.
+    /// </summary>
+    public static class ScheduleSolverFactory
+    {
+        public static IScheduleSolver Create(
+            SolverType solverType,
+            ScheduleInput input,
+            List<SolverPriority> priorities,
+            IProgress<double>? progress = null,
+            CancellationToken token = default)
+        {
+            switch (solverType)
+            {
+                case SolverType.Backtracking:
+                    return new BacktrackingSolver(input, priorities, progress, token);
+
+                case SolverType.SimulatedAnnealing:
+                    return new SimulatedAnnealingSolver(input, priorities, progress, token);
+
+                case SolverType.Genetic:
+                    return new GeneticSolver(input, priorities, progress, token);
+
+                case SolverType.TabuSearch:
+                    return new TabuSearchSolver(input, priorities, progress, token);
+
+                case SolverType.AntColony:
+                    return new AntColonySolver(input, priorities, progress, token);
+
+                case SolverType.AStar:
+                    return new AStarSolver(input, priorities, progress, token);
+
+                default:
+                    // Domyślnie, w razie braku implementacji, używamy Backtrackingu.
+                    return new BacktrackingSolver(input, priorities, progress, token);
+            }
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\SchedulingRules.cs (8854 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Zawiera zaawansowane reguły i heurystyki do oceny i porządkowania kandydatów
+    /// na potrzeby zaawansowanych silników, takich jak A*.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    internal static class SchedulingRules
+    {
+        public const int UNASSIGNED = int.MinValue;
+
+        /// <summary>
+        /// Kontekst przechowujący pełny, bieżący stan przeszukiwania dla solvera.
+        /// </summary>
+        public sealed class Context
+        {
+            public IReadOnlyList<DateTime> Days { get; }
+            public IReadOnlyList<DoctorProfile> Doctors { get; }
+            public IReadOnlyDictionary<DateTime, Dictionary<string, AvailabilityType>> Availability { get; }
+            public IReadOnlyDictionary<string, int> DutyLimitsByAbbr { get; }
+            public IReadOnlyList<SolverPriority> Priorities { get; }
+
+            public int[] Assignments;
+            public int[] Workload;
+            public int[] ConditionalsUsed;
+            public bool IsPrefixActive;
+
+            public readonly int DayCount, DoctorCount;
+            public readonly Dictionary<string, int> DoctorIndexByAbbr;
+
+            public Context(
+                IReadOnlyList<DateTime> days,
+                IReadOnlyList<DoctorProfile> doctors,
+                IReadOnlyDictionary<DateTime, Dictionary<string, AvailabilityType>> availability,
+                IReadOnlyDictionary<string, int> limits,
+                IReadOnlyList<SolverPriority> priorities,
+                int[] assignments,
+                int[] workload,
+                int[] conditionalsUsed,
+                bool isPrefixActive)
+            {
+                Days = days;
+                Doctors = doctors;
+                Availability = availability;
+                DutyLimitsByAbbr = limits;
+                Priorities = priorities;
+
+                Assignments = assignments;
+                Workload = workload;
+                ConditionalsUsed = conditionalsUsed;
+                IsPrefixActive = isPrefixActive;
+
+                DayCount = days.Count;
+                DoctorCount = doctors.Count;
+                DoctorIndexByAbbr = new Dictionary<string, int>(DoctorCount);
+                for (int i = 0; i < DoctorCount; i++) DoctorIndexByAbbr[doctors[i].Abbreviation] = i;
+            }
+
+            public int GetLimitFor(int doctorIndex) =>
+                DutyLimitsByAbbr.TryGetValue(Doctors[doctorIndex].Abbreviation, out var lim) ? lim : 0;
+
+            public AvailabilityType GetAvailability(int dayIndex, int doctorIndex)
+            {
+                if (!Availability.TryGetValue(Days[dayIndex], out var map)) return AvailabilityType.Unavailable;
+                return map.TryGetValue(Doctors[doctorIndex].Abbreviation, out var t) ? t : AvailabilityType.Unavailable;
+            }
+
+            public int GetEarliestUnassignedDayIndex()
+            {
+                for (int d = 0; d < DayCount; d++) if (Assignments[d] == UNASSIGNED) return d;
+                return -1;
+            }
+        }
+
+        /// <summary>
+        /// Sprawdza, czy przypisanie lekarza do dnia jest zgodne z twardymi regułami.
+        /// </summary>
+        public static bool IsHardFeasible(int dayIndex, int doctorIndex, Context ctx)
+        {
+            if (doctorIndex < 0 || doctorIndex >= ctx.DoctorCount) return false;
+            if (dayIndex < 0 || dayIndex >= ctx.DayCount) return false;
+
+            if (ctx.Workload[doctorIndex] >= ctx.GetLimitFor(doctorIndex)) return false;
+
+            var availability = ctx.GetAvailability(dayIndex, doctorIndex);
+            if (Declarations.IsHardBlock(availability)) return false;
+
+            if (!Declarations.BypassesAdjacencyRules(availability))
+            {
+                if (dayIndex > 0 && ctx.Assignments[dayIndex - 1] == doctorIndex) return false;
+                if (dayIndex + 1 < ctx.DayCount && ctx.Assignments[dayIndex + 1] == doctorIndex) return false;
+            }
+
+            if (!Declarations.BypassesAdjacencyRules(availability) && IsNextToOtherDuty(dayIndex, doctorIndex, ctx)) return false;
+
+            if (availability == AvailabilityType.ConditionallyAvailable && ctx.ConditionalsUsed[doctorIndex] >= 1) return false;
+
+            return true;
+        }
+
+        private static bool IsNextToOtherDuty(int dayIndex, int doctorIndex, Context ctx)
+        {
+            var abbr = ctx.Doctors[doctorIndex].Abbreviation;
+            if (dayIndex > 0)
+            {
+                var map = ctx.Availability[ctx.Days[dayIndex - 1]];
+                if (map.TryGetValue(abbr, out var t) && t == AvailabilityType.OtherDuty) return true;
+            }
+            if (dayIndex + 1 < ctx.DayCount)
+            {
+                var map = ctx.Availability[ctx.Days[dayIndex + 1]];
+                if (map.TryGetValue(abbr, out var t) && t == AvailabilityType.OtherDuty) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Zwraca posortowaną listę najlepszych kandydatów na dany dzień zgodnie z hierarchią priorytetów.
+        /// </summary>
+        public static List<int> OrderCandidates(int dayIndex, Context ctx)
+        {
+            var legalCandidates = new List<int>(ctx.DoctorCount);
+            for (int p = 0; p < ctx.DoctorCount; p++)
+            {
+                if (IsHardFeasible(dayIndex, p, ctx))
+                {
+                    legalCandidates.Add(p);
+                }
+            }
+
+            if (legalCandidates.Count == 0) return legalCandidates;
+
+            legalCandidates.Sort((a, b) => CompareCandidates(dayIndex, a, b, ctx));
+            return legalCandidates;
+        }
+
+        private static int CompareCandidates(int dayIndex, int a, int b, Context ctx)
+        {
+            var availabilityA = ctx.GetAvailability(dayIndex, a);
+            var availabilityB = ctx.GetAvailability(dayIndex, b);
+
+            // Rezerwacje mają absolutny priorytet
+            int rzA = availabilityA == AvailabilityType.Reservation ? 1 : 0;
+            int rzB = availabilityB == AvailabilityType.Reservation ? 1 : 0;
+            if (rzA != rzB) return rzB.CompareTo(rzA);
+
+            // Porównanie zgodnie z priorytetami użytkownika
+            foreach (var priority in ctx.Priorities)
+            {
+                int cmp = 0;
+                switch (priority)
+                {
+                    case SolverPriority.Fairness:
+                        double ratioA = (ctx.Workload[a] + 1.0) / Math.Max(1, ctx.GetLimitFor(a));
+                        double ratioB = (ctx.Workload[b] + 1.0) / Math.Max(1, ctx.GetLimitFor(b));
+                        cmp = ratioA.CompareTo(ratioB); // Preferujemy lekarza z mniejszym obciążeniem procentowym
+                        break;
+
+                    case SolverPriority.Spacing:
+                        int distA = NearestAssignedDistance(dayIndex, a, ctx);
+                        int distB = NearestAssignedDistance(dayIndex, b, ctx);
+                        cmp = distB.CompareTo(distA); // Preferujemy lekarza, który miał dyżur dawniej
+                        break;
+
+                    case SolverPriority.DeclarationCompliance:
+                        int prefA = Declarations.GetPreferenceWeight(availabilityA);
+                        int prefB = Declarations.GetPreferenceWeight(availabilityB);
+                        cmp = prefB.CompareTo(prefA); // Preferujemy deklarację o wyższej wadze
+                        break;
+                }
+                if (cmp != 0) return cmp;
+            }
+
+            // Domyślne reguły rozstrzygające remisy
+            int workloadCmp = ctx.Workload[a].CompareTo(ctx.Workload[b]);
+            if (workloadCmp != 0) return workloadCmp; // Mniej dyżurów do tej pory
+
+            return string.Compare(ctx.Doctors[a].Abbreviation, ctx.Doctors[b].Abbreviation, StringComparison.Ordinal);
+        }
+
+        private static int NearestAssignedDistance(int dayIndex, int doctorIndex, Context ctx)
+        {
+            int best = int.MaxValue;
+            for (int d = dayIndex - 1; d >= 0; d--)
+                if (ctx.Assignments[d] == doctorIndex) { best = Math.Min(best, dayIndex - d); break; }
+            for (int d = dayIndex + 1; d < ctx.DayCount; d++)
+                if (ctx.Assignments[d] == doctorIndex) { best = Math.Min(best, d - dayIndex); break; }
+            return best == int.MaxValue ? 9999 : best;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs (4182 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Implementacja silnika generującego grafik za pomocą algorytmu symulowanego wyżarzania.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class SimulatedAnnealingSolver : IScheduleSolver
+    {
+        private const double InitialTemperature = 1000.0;
+        private const double CoolingRate = 0.995;
+        private readonly int _iterationsPerTemperature;
+
+        private readonly ScheduleInput _scheduleInput;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progressReporter;
+        private readonly CancellationToken _cancellationToken;
+        private readonly Random _random = new();
+        private readonly SolverUtility _utility;
+
+        public SimulatedAnnealingSolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            _scheduleInput = scheduleInput;
+            _priorities = priorities;
+            _progressReporter = progress;
+            _cancellationToken = cancellationToken;
+            _utility = new SolverUtility(scheduleInput);
+            _iterationsPerTemperature = Math.Max(100, _scheduleInput.Doctors.Count * 10);
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            // Zaczynamy od rozwiązania "chciwego", a nie w pełni losowego.
+            var currentSolution = _utility.CreateGreedyInitialSolution();
+            var bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
+
+            var currentMetrics = EvaluationAndScoringService.CalculateMetrics(currentSolution, _utility.CalculateWorkload(currentSolution), _scheduleInput);
+            double bestFitness = EvaluationAndScoringService.CalculateScore(currentMetrics, _priorities, _scheduleInput);
+            double currentFitness = bestFitness;
+
+            double temperature = InitialTemperature;
+            int totalIterations = (int)Math.Log(0.1 / InitialTemperature, CoolingRate) * _iterationsPerTemperature;
+            int currentIteration = 0;
+
+            while (temperature > 0.1)
+            {
+                for (int i = 0; i < _iterationsPerTemperature; i++)
+                {
+                    _cancellationToken.ThrowIfCancellationRequested();
+
+                    var newSolution = _utility.GenerateNeighbor(currentSolution);
+                    Validation.ConstraintValidationService.RepairSchedule(newSolution, _scheduleInput);
+
+                    var newMetrics = EvaluationAndScoringService.CalculateMetrics(newSolution, _utility.CalculateWorkload(newSolution), _scheduleInput);
+                    double newFitness = EvaluationAndScoringService.CalculateScore(newMetrics, _priorities, _scheduleInput);
+
+                    if (newFitness > currentFitness || _random.NextDouble() < Math.Exp((newFitness - currentFitness) / temperature))
+                    {
+                        currentSolution = newSolution;
+                        currentFitness = newFitness;
+
+                        if (currentFitness > bestFitness)
+                        {
+                            bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
+                            bestFitness = currentFitness;
+                        }
+                    }
+                    currentIteration++;
+                }
+                temperature *= CoolingRate;
+
+                if (totalIterations > 0)
+                {
+                    _progressReporter?.Report((double)currentIteration / totalIterations);
+                }
+            }
+
+            var finalWorkload = _utility.CalculateWorkload(bestSolution);
+            return EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\SolverUtility.cs (6004 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Core.Scheduling.Validation;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Klasa pomocnicza dla silników metaheurystycznych, dostarczająca metody do tworzenia
+    /// rozwiązań początkowych (losowych, chciwych) oraz do generowania sąsiadów.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    internal class SolverUtility
+    {
+        private readonly ScheduleInput _scheduleInput;
+        private readonly Random _random = new();
+
+        public SolverUtility(ScheduleInput scheduleInput)
+        {
+            _scheduleInput = scheduleInput;
+        }
+
+        /// <summary>
+        /// Tworzy rozwiązanie początkowe w sposób "chciwy" - dla każdego dnia wybiera
+        /// najlepszego dostępnego kandydata na podstawie hierarchii preferencji.
+        /// </summary>
+        public Dictionary<DateTime, DoctorProfile?> CreateGreedyInitialSolution()
+        {
+            var assignments = new Dictionary<DateTime, DoctorProfile?>();
+            var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            var usedConditionals = new HashSet<string>();
+
+            foreach (var day in _scheduleInput.DaysInMonth)
+            {
+                var candidates = ConstraintValidationService.GetValidCandidatesForDay(day, _scheduleInput, assignments, workload, usedConditionals);
+                if (candidates.Any())
+                {
+                    var bestCandidate = candidates
+                        .OrderByDescending(l => Declarations.GetPreferenceWeight(_scheduleInput.Availability[day][l.Abbreviation]))
+                        .ThenBy(l => workload[l.Abbreviation])
+                        .First();
+
+                    assignments[day] = bestCandidate;
+                    workload[bestCandidate.Abbreviation]++;
+                    if (_scheduleInput.Availability[day][bestCandidate.Abbreviation] == AvailabilityType.ConditionallyAvailable)
+                    {
+                        usedConditionals.Add(bestCandidate.Abbreviation);
+                    }
+                }
+                else
+                {
+                    assignments[day] = null;
+                }
+            }
+            return assignments;
+        }
+
+        /// <summary>
+        /// Tworzy w pełni losowe, ale poprawne (zgodne z twardymi regułami) rozwiązanie.
+        /// </summary>
+        public Dictionary<DateTime, DoctorProfile?> CreateRandomSolution()
+        {
+            var assignments = new Dictionary<DateTime, DoctorProfile?>();
+            var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            var usedConditionals = new HashSet<string>();
+            foreach (var day in _scheduleInput.DaysInMonth)
+            {
+                var candidates = ConstraintValidationService.GetValidCandidatesForDay(day, _scheduleInput, assignments, workload, usedConditionals);
+                if (candidates.Any())
+                {
+                    var chosen = candidates[_random.Next(candidates.Count)];
+                    assignments[day] = chosen;
+                    workload[chosen.Abbreviation]++;
+                    if (_scheduleInput.Availability[day][chosen.Abbreviation] == AvailabilityType.ConditionallyAvailable)
+                    {
+                        usedConditionals.Add(chosen.Abbreviation);
+                    }
+                }
+                else
+                {
+                    assignments[day] = null;
+                }
+            }
+            return assignments;
+        }
+
+
+        /// <summary>
+        /// Generuje sąsiada danego rozwiązania poprzez losową modyfikację jednego dnia.
+        /// </summary>
+        public Dictionary<DateTime, DoctorProfile?> GenerateNeighbor(Dictionary<DateTime, DoctorProfile?> currentSchedule)
+        {
+            var newSchedule = new Dictionary<DateTime, DoctorProfile?>(currentSchedule);
+            var dayToChange = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
+
+            var workload = CalculateWorkload(newSchedule);
+            var usedConditionals = CalculateUsedConditionals(newSchedule).Keys.ToHashSet();
+
+            var candidates = ConstraintValidationService.GetValidCandidatesForDay(dayToChange, _scheduleInput, newSchedule, workload, usedConditionals);
+            if (candidates.Any())
+            {
+                newSchedule[dayToChange] = candidates[_random.Next(candidates.Count)];
+            }
+            else
+            {
+                newSchedule[dayToChange] = null;
+            }
+
+            return newSchedule;
+        }
+
+        public Dictionary<string, int> CalculateWorkload(IReadOnlyDictionary<DateTime, DoctorProfile?> assignments)
+        {
+            var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            foreach (var doctor in assignments.Values)
+            {
+                if (doctor != null)
+                {
+                    workload[doctor.Abbreviation]++;
+                }
+            }
+            return workload;
+        }
+
+        private Dictionary<string, int> CalculateUsedConditionals(IReadOnlyDictionary<DateTime, DoctorProfile?> assignments)
+        {
+            var used = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            foreach (var pair in assignments)
+            {
+                if (pair.Value != null && _scheduleInput.Availability.ContainsKey(pair.Key) && _scheduleInput.Availability[pair.Key][pair.Value.Abbreviation] == AvailabilityType.ConditionallyAvailable)
+                {
+                    used[pair.Value.Abbreviation]++;
+                }
+            }
+            return used;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs (6246 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Evaluation;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+
+namespace GrafikoMat.Core.Scheduling.Engines
+{
+    /// <summary>
+    /// Implementacja silnika generującego grafik za pomocą algorytmu przeszukiwania z zakazami (Tabu Search).
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class TabuSearchSolver : IScheduleSolver
+    {
+        private readonly int _tabuListSize;
+        private readonly int _maxIterations;
+        private readonly ScheduleInput _scheduleInput;
+        private readonly List<SolverPriority> _priorities;
+        private readonly IProgress<double>? _progressReporter;
+        private readonly CancellationToken _cancellationToken;
+        private readonly SolverUtility _utility;
+
+        public TabuSearchSolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            _scheduleInput = scheduleInput;
+            _priorities = priorities;
+            _progressReporter = progress;
+            _cancellationToken = cancellationToken;
+            _utility = new SolverUtility(scheduleInput);
+
+            int problemSize = _scheduleInput.Doctors.Count * _scheduleInput.DaysInMonth.Count;
+            _tabuListSize = Math.Max(20, problemSize / 10);
+            _maxIterations = Math.Max(300, problemSize * 2);
+        }
+
+        public ScheduleSolution FindOptimalSolution()
+        {
+            // Start od rozwiązania „chciwego”
+            var currentSolution = _utility.CreateGreedyInitialSolution();
+            var bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
+
+            var metrics = EvaluationAndScoringService.CalculateMetrics(bestSolution, _utility.CalculateWorkload(bestSolution), _scheduleInput);
+            double bestFitness = EvaluationAndScoringService.CalculateScore(metrics, _priorities, _scheduleInput);
+
+            var tabuList = new Queue<Dictionary<DateTime, DoctorProfile?>>();
+            int iterationsWithoutImprovement = 0;
+            int diversificationThreshold = _maxIterations / 4;
+
+            for (int i = 0; i < _maxIterations; i++)
+            {
+                _cancellationToken.ThrowIfCancellationRequested();
+
+                var neighbors = GenerateNeighbors(currentSolution);
+                Dictionary<DateTime, DoctorProfile?>? bestNeighbor = null;
+                double bestNeighborFitness = double.MinValue;
+
+                foreach (var neighbor in neighbors)
+                {
+                    if (!IsInTabuList(neighbor, tabuList))
+                    {
+                        var neighborMetrics = EvaluationAndScoringService.CalculateMetrics(neighbor, _utility.CalculateWorkload(neighbor), _scheduleInput);
+                        double neighborFitness = EvaluationAndScoringService.CalculateScore(neighborMetrics, _priorities, _scheduleInput);
+
+                        if (neighborFitness > bestNeighborFitness)
+                        {
+                            bestNeighborFitness = neighborFitness;
+                            bestNeighbor = neighbor;
+                        }
+                    }
+                }
+
+                if (bestNeighbor != null)
+                {
+                    currentSolution = bestNeighbor;
+                    if (tabuList.Count >= _tabuListSize)
+                    {
+                        tabuList.Dequeue();
+                    }
+                    tabuList.Enqueue(currentSolution);
+
+                    if (bestNeighborFitness > bestFitness)
+                    {
+                        bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
+                        bestFitness = bestNeighborFitness;
+                        iterationsWithoutImprovement = 0;
+                    }
+                    else
+                    {
+                        iterationsWithoutImprovement++;
+                    }
+                }
+
+                // Jeśli algorytm utknął w lokalnym optimum, dokonaj dywersyfikacji
+                if (iterationsWithoutImprovement > diversificationThreshold)
+                {
+                    currentSolution = Diversify(currentSolution);
+                    iterationsWithoutImprovement = 0;
+                }
+
+                _progressReporter?.Report((double)(i + 1) / _maxIterations);
+            }
+
+            var finalWorkload = _utility.CalculateWorkload(bestSolution);
+            return EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+        }
+
+        private List<Dictionary<DateTime, DoctorProfile?>> GenerateNeighbors(Dictionary<DateTime, DoctorProfile?> current)
+        {
+            var neighbors = new List<Dictionary<DateTime, DoctorProfile?>>();
+            int neighborsToGenerate = Math.Max(10, _scheduleInput.Doctors.Count / 2);
+            for (int i = 0; i < neighborsToGenerate; i++)
+            {
+                neighbors.Add(_utility.GenerateNeighbor(current));
+            }
+            return neighbors;
+        }
+
+        private bool IsInTabuList(Dictionary<DateTime, DoctorProfile?> solution, Queue<Dictionary<DateTime, DoctorProfile?>> tabuList)
+        {
+            foreach (var tabuSolution in tabuList)
+            {
+                if (solution.Count == tabuSolution.Count && !solution.Except(tabuSolution).Any())
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private Dictionary<DateTime, DoctorProfile?> Diversify(Dictionary<DateTime, DoctorProfile?> current)
+        {
+            var diversified = new Dictionary<DateTime, DoctorProfile?>(current);
+            int numberOfSwaps = _scheduleInput.DaysInMonth.Count / 5;
+            for (int i = 0; i < numberOfSwaps; i++)
+            {
+                diversified = _utility.GenerateNeighbor(diversified);
+            }
+            return diversified;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Evaluation\EvaluationAndScoringService.cs (8863 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Evaluation
+{
+    /// <summary>
+    /// Zawiera statyczne metody do obliczania metryk jakościowych i oceny (score) gotowego grafiku.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public static class EvaluationAndScoringService
+    {
+        // Wagi do porównywania rozwiązań (większe = ważniejsze w finalnym score)
+        private static readonly Dictionary<SolverPriority, double> PriorityWeights = new()
+        {
+            { SolverPriority.InitialContinuity,           1_000_000_000_000 },
+            { SolverPriority.TotalAssignments,             1_000_000_000 },
+            { SolverPriority.Fairness,                       1_000_000 },
+            { SolverPriority.Spacing,                          1_000 }
+        };
+
+        // Dodatkowe gratyfikatory (poza priorytetami)
+        private const double RESERVATION_WEIGHT = 100_000_000_000_000;
+        private const double WANTS_WEIGHT = 10;
+        private const double AVAILABLE_WEIGHT = 1;
+
+        /// <summary>
+        /// Oblicza agregatową ocenę (score) rozwiązania, zgodnie z zadaną kolejnością priorytetów.
+        /// Wyższa wartość oznacza lepszy grafik.
+        /// </summary>
+        public static double CalculateScore(ScheduleSolution solution, List<SolverPriority> priorities, ScheduleInput scheduleInput)
+        {
+            if (solution == null) return double.MinValue;
+
+            double totalDays = scheduleInput.DaysInMonth.Count;
+            if (totalDays == 0) return 0;
+
+            double normContinuity = solution.InitialContinuity / totalDays;
+            double normCoverage = solution.TotalAssignments / totalDays;
+
+            // Uwaga: dla wskaźników „im mniej, tym lepiej” normalizujemy tak, by 1 = idealnie, a 0 = bardzo źle.
+            double normFairness = 1.0 / (1.0 + solution.FairnessIndex);
+            double normSpacing = 1.0 / (1.0 + solution.SpacingIndex);
+
+            double score = 0;
+
+            // Rezerwacje traktujemy jako twardy bonus o ogromnej wadze
+            score += solution.FulfilledReservations * RESERVATION_WEIGHT;
+
+            var normalizedValues = new Dictionary<SolverPriority, double>
+            {
+                { SolverPriority.InitialContinuity, normContinuity },
+                { SolverPriority.TotalAssignments,  normCoverage   },
+                { SolverPriority.Fairness,          normFairness   },
+                { SolverPriority.Spacing,           normSpacing    }
+            };
+
+            foreach (var priority in priorities)
+                if (PriorityWeights.TryGetValue(priority, out double weight))
+                    score += normalizedValues[priority] * weight;
+
+            // Miękkie preferencje — drobne punkty „za chęci”
+            score += solution.FulfilledWants * WANTS_WEIGHT;
+            score += solution.FulfilledAvailables * AVAILABLE_WEIGHT;
+
+            return score;
+        }
+
+        /// <summary>
+        /// Konwertuje metryki rozwiązania na wektor liczb całkowitych w celu porównania leksykograficznego.
+        /// Służy do deterministycznego decydowania, które z dwóch rozwiązań jest lepsze.
+        /// </summary>
+        public static long[] ToIntVector(ScheduleSolution solution, List<SolverPriority> priorities)
+        {
+            var vector = new long[priorities.Count + 3]; // 3 dodatkowe metryki (Rezerwacje, Chce, Może)
+            int i = 0;
+
+            var metricsMap = new Dictionary<SolverPriority, long>
+            {
+                { SolverPriority.TotalAssignments, solution.TotalAssignments },
+                { SolverPriority.InitialContinuity, solution.InitialContinuity },
+
+                // Dla „im mniej, tym lepiej” bierzemy ujemne wartości, aby mniejsza (lepsza) wartość była większa w porządku leksykograficznym.
+                { SolverPriority.Fairness,  -(long)Math.Round(1_000_000.0 * solution.FairnessIndex) },
+                { SolverPriority.Spacing,   -(long)Math.Round(1_000_000.0 * solution.SpacingIndex)  },
+            };
+
+            foreach (var p in priorities)
+                vector[i++] = metricsMap.GetValueOrDefault(p, 0);
+
+            vector[i++] = solution.FulfilledReservations;
+            vector[i++] = solution.FulfilledWants;
+            vector[i++] = solution.FulfilledAvailables;
+
+            return vector;
+        }
+
+        /// <summary>
+        /// Główna metoda obliczająca wszystkie metryki jakości na podstawie surowych przypisań.
+        /// </summary>
+        public static ScheduleSolution CalculateMetrics(
+            IReadOnlyDictionary<DateTime, DoctorProfile?> assignments,
+            IReadOnlyDictionary<string, int> workload,
+            ScheduleInput scheduleInput)
+        {
+            var days = scheduleInput.DaysInMonth;
+
+            // Obliczanie najdłuższego prefiksu ciągłej obsady
+            int initialContinuity = 0;
+            foreach (var key in days.OrderBy(d => d))
+            {
+                if (assignments.TryGetValue(key, out var doctor) && doctor != null)
+                    initialContinuity++;
+                else
+                    break;
+            }
+
+            // Zliczanie zrealizowanych preferencji
+            int fulfilledReservations = 0;
+            int fulfilledWants = 0;
+            int fulfilledAvailables = 0;
+
+            foreach (var entry in assignments.Where(x => x.Value != null))
+            {
+                var type = scheduleInput.Availability[entry.Key][entry.Value!.Abbreviation];
+                if (type == AvailabilityType.Reservation) fulfilledReservations++;
+                else if (type == AvailabilityType.Wants) fulfilledWants++;
+                else if (type == AvailabilityType.Available) fulfilledAvailables++;
+            }
+
+            // Obliczanie wskaźnika sprawiedliwości (odchylenie std. obciążeń procentowych)
+            var percentageWorkloads = new List<double>();
+            foreach (var doctor in scheduleInput.Doctors.Where(l => !l.IsArchived))
+            {
+                int limit = scheduleInput.DutyLimits.GetValueOrDefault(doctor.Abbreviation, 0);
+                if (limit > 0)
+                {
+                    double assignedDuties = workload.GetValueOrDefault(doctor.Abbreviation, 0);
+                    percentageWorkloads.Add(assignedDuties * 100.0 / limit);
+                }
+            }
+
+            double fairnessIndex = 0.0;
+            if (percentageWorkloads.Count > 1)
+            {
+                double avg = percentageWorkloads.Average();
+                double sumSq = percentageWorkloads.Sum(val => (val - avg) * (val - avg));
+                fairnessIndex = Math.Sqrt(sumSq / percentageWorkloads.Count);
+            }
+
+            // Obliczanie wskaźnika równomierności (średnie odchylenie std. odstępów między dyżurami)
+            double spacingIndex = 0.0;
+            var spacingDeviations = new List<double>();
+
+            foreach (var doctor in scheduleInput.Doctors.Where(l => !l.IsArchived))
+            {
+                var doctorDuties = assignments.Where(kvp => kvp.Value?.Id == doctor.Id)
+                                  .Select(kvp => kvp.Key)
+                                  .OrderBy(d => d)
+                                  .ToList();
+
+                if (doctorDuties.Count > 2)
+                {
+                    var gaps = new List<double>();
+                    for (int i = 0; i < doctorDuties.Count - 1; i++)
+                        gaps.Add((doctorDuties[i + 1] - doctorDuties[i]).TotalDays);
+
+                    if (gaps.Any())
+                    {
+                        double avgGap = gaps.Average();
+                        double sumSqG = gaps.Sum(val => (val - avgGap) * (val - avgGap));
+                        spacingDeviations.Add(Math.Sqrt(sumSqG / gaps.Count));
+                    }
+                }
+            }
+            if (spacingDeviations.Any())
+                spacingIndex = spacingDeviations.Average();
+
+            return new ScheduleSolution
+            {
+                Assignments = new Dictionary<DateTime, DoctorProfile?>(assignments),
+                InitialContinuity = initialContinuity,
+                FulfilledReservations = fulfilledReservations,
+                FulfilledWants = fulfilledWants,
+                FulfilledAvailables = fulfilledAvailables,
+                FinalWorkload = new Dictionary<string, int>(workload),
+                FairnessIndex = fairnessIndex,
+                SpacingIndex = spacingIndex
+            };
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Evaluation\SolutionComparer.cs (6904 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Models;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Evaluation
+{
+    /// <summary>
+    /// Wspólny (dla wszystkich silników) komparator rozwiązań zgodny z ustawioną kolejnością priorytetów.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public static class SolutionComparer
+    {
+        /// <summary>
+        /// Porównuje dwa rozwiązania zgodnie z kolejnością priorytetów.
+        /// Zwraca >0 jeśli A lepsze, <0 jeśli B lepsze, 0 przy absolutnym remisie.
+        /// </summary>
+        public static int CompareSolutionsByPriorities(
+            ScheduleSolution solA,
+            ScheduleSolution solB,
+            IReadOnlyList<SolverPriority> priorities,
+            ScheduleInput input)
+        {
+            var prioList = priorities as List<SolverPriority> ?? priorities.ToList();
+
+            // 1) Porównanie wektorów int wg priorytetów (główna metoda oceny)
+            var vA = EvaluationAndScoringService.ToIntVector(solA, prioList);
+            var vB = EvaluationAndScoringService.ToIntVector(solB, prioList);
+
+            int c = LexicoCompare(vA, vB);
+            if (c != 0) return c;
+
+            // 2) Jeśli wektory są identyczne, porównaj surowe metryki jako tie-breaker
+            var rawA = BuildRawVector(solA, priorities, input);
+            var rawB = BuildRawVector(solB, priorities, input);
+
+            c = RawCompareByPriorities(rawA, rawB, priorities);
+            if (c != 0) return c;
+
+            // 3) Jeśli nadal remis, użyj deterministycznego "odcisku palca" grafiku
+            string fpA = Fingerprint(solA);
+            string fpB = Fingerprint(solB);
+            return string.Compare(fpA, fpB, StringComparison.Ordinal);
+        }
+
+        private static int LexicoCompare(long[] a, long[] b)
+        {
+            int n = Math.Min(a.Length, b.Length);
+            for (int i = 0; i < n; i++)
+            {
+                if (a[i] > b[i]) return 1;
+                if (a[i] < b[i]) return -1;
+            }
+            return a.Length.CompareTo(b.Length);
+        }
+
+        /// <summary>
+        /// Buduje surowy wektor metryk (jako double) tylko dla priorytetów podanych przez użytkownika.
+        /// </summary>
+        private static double[] BuildRawVector(
+            ScheduleSolution solution,
+            IReadOnlyList<SolverPriority> priorities,
+            ScheduleInput input)
+        {
+            var list = new List<double>(priorities.Count);
+            foreach (var pr in priorities)
+            {
+                switch (pr)
+                {
+                    case SolverPriority.TotalAssignments:
+                        list.Add(solution.TotalAssignments);
+                        break;
+                    case SolverPriority.InitialContinuity:
+                        list.Add(solution.InitialContinuity);
+                        break;
+                    case SolverPriority.Fairness:
+                        list.Add(solution.FairnessIndex);
+                        break;
+                    case SolverPriority.Spacing:
+                        list.Add(solution.SpacingIndex);
+                        break;
+                    case SolverPriority.DeclarationCompliance:
+                        list.Add(ComputeDeclarationComplianceRaw(solution, input));
+                        break;
+                    default:
+                        list.Add(0);
+                        break;
+                }
+            }
+            return list.ToArray();
+        }
+
+        private static int RawCompareByPriorities(
+            double[] a, double[] b, IReadOnlyList<SolverPriority> priorities)
+        {
+            for (int i = 0; i < priorities.Count; i++)
+            {
+                var pr = priorities[i];
+                double va = a[i];
+                double vb = b[i];
+                int cmp;
+
+                switch (pr)
+                {
+                    // WIĘCEJ = lepiej
+                    case SolverPriority.TotalAssignments:
+                    case SolverPriority.InitialContinuity:
+                    case SolverPriority.DeclarationCompliance:
+                        cmp = va.CompareTo(vb);
+                        if (cmp != 0) return cmp;
+                        break;
+
+                    // MNIEJ = lepiej
+                    case SolverPriority.Fairness:
+                    case SolverPriority.Spacing:
+                        cmp = (-va).CompareTo(-vb); // Odwracamy porównanie
+                        if (cmp != 0) return cmp;
+                        break;
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Surowa "zgodność ważności deklaracji": ważona suma trafień CHC(2), MOG(1), WAR(0),
+        /// przeskalowana do [0..1] przez maksymalną możliwą wagę (2 * liczba przydzielonych dni).
+        /// </summary>
+        private static double ComputeDeclarationComplianceRaw(ScheduleSolution solution, ScheduleInput input)
+        {
+            if (solution?.Assignments == null || solution.Assignments.Count == 0) return 0.0;
+
+            double sum = 0.0;
+            int count = 0;
+
+            foreach (var kv in solution.Assignments)
+            {
+                var date = kv.Key;
+                var doctor = kv.Value;
+                if (doctor == null) continue;
+
+                if (!input.Availability.TryGetValue(date, out var dayMap) || dayMap == null) continue;
+                if (!dayMap.TryGetValue(doctor.Abbreviation, out var availabilityType)) continue;
+
+                int weight = Declarations.GetPreferenceWeight(availabilityType);
+                if (weight >= 0) // liczymy tylko pozytywne preferencje
+                {
+                    sum += weight;
+                    count++;
+                }
+            }
+
+            if (count == 0) return 0.0;
+
+            // Maksymalna możliwa waga to 2 (za 'Chce'), więc normalizujemy przez 2 * liczba dni.
+            double maxPossibleScore = 2.0 * count;
+            if (maxPossibleScore == 0) return 0.0;
+
+            return sum / maxPossibleScore;
+        }
+
+        private static string Fingerprint(ScheduleSolution solution)
+        {
+            var parts = new List<string>(solution.Assignments.Count);
+            foreach (var kv in solution.Assignments.OrderBy(k => k.Key))
+            {
+                string day = kv.Key.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+                string doctorAbbr = kv.Value?.Abbreviation ?? "---";
+                parts.Add($"{day}:{doctorAbbr}");
+            }
+            return string.Join("|", parts);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs (1244 bytes)
 ----- BEGIN -----
 namespace GrafikoMat.Core.Scheduling.Models
 {
@@ -681,162 +2652,112 @@ namespace GrafikoMat.Core.Scheduling.Models
         /// <summary>
         /// Lekarz jest niedostępny (domyślny stan).
         /// </summary>
-        Niedostepny,
+        Unavailable,
 
         /// <summary>
         /// Lekarz jest dostępny bez specjalnych preferencji.
         /// </summary>
-        Moge,
+        Available,
 
         /// <summary>
         /// Lekarz preferuje dyżur w tym dniu.
         /// </summary>
-        Chce,
+        Wants,
 
         /// <summary>
         /// Lekarz jest na urlopie (twarda blokada).
         /// </summary>
-        Urlop,
+        Vacation,
 
         /// <summary>
         /// Lekarz ma dyżur w innym miejscu (twarda blokada + blokada dni sąsiednich).
         /// </summary>
-        DyzurInny,
+        OtherDuty,
 
         /// <summary>
         /// Lekarz może wziąć dyżur, ale tylko jeden taki w miesiącu.
         /// </summary>
-        MogeWarunkowo,
+        ConditionallyAvailable,
 
         /// <summary>
         /// Dzień jest zarezerwowany dla tego lekarza (twarde przypisanie, dostępne dla admina).
         /// </summary>
-        Rezerwacja
+        Reservation
     }
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\Declarations.cs (4906 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\Declarations.cs (2629 bytes)
 ----- BEGIN -----
-using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace GrafikoMat.Core.Scheduling.Models
 {
     /// <summary>
-    /// Jedno źródło prawdy dla deklaracji dostępności:
-    /// - kody skrótów (---, WAR, MOG, CHC, REZ, DYZ, URL),
-    /// - pełne nazwy do UI,
-    /// - semantyka (co wolno / czego nie wolno),
-    /// - pomocnicze parse/format.
+    /// Jedno źródło prawdy dla deklaracji dostępności.
+    /// Definiuje semantykę, kody i nazwy wyświetlane dla każdego typu dostępności.
     /// Wersja zaadaptowana z GrafikWPF.
     /// </summary>
     public static class Declarations
     {
-        private static readonly IReadOnlyDictionary<AvailabilityType, string> _kody =
+        private static readonly IReadOnlyDictionary<AvailabilityType, string> _codes =
             new Dictionary<AvailabilityType, string>
             {
-                { AvailabilityType.Niedostepny,     "---" },
-                { AvailabilityType.MogeWarunkowo,   "WAR" },
-                { AvailabilityType.Moge,            "MOG" },
-                { AvailabilityType.Chce,            "CHC" },
-                { AvailabilityType.Rezerwacja,      "REZ" },
-                { AvailabilityType.DyzurInny,       "DYZ" },
-                { AvailabilityType.Urlop,           "URL" },
+                { AvailabilityType.Unavailable, "---" },
+                { AvailabilityType.ConditionallyAvailable, "WAR" },
+                { AvailabilityType.Available, "MOG" },
+                { AvailabilityType.Wants, "CHC" },
+                { AvailabilityType.Reservation, "REZ" },
+                { AvailabilityType.OtherDuty, "DYZ" },
+                { AvailabilityType.Vacation, "URL" },
             };
 
-        public static string Kod(AvailabilityType t) => _kody[t];
+        public static string GetCode(AvailabilityType t) => _codes[t];
 
-        public static string PelnaNazwa(AvailabilityType t) => t switch
+        public static string GetFullName(AvailabilityType t) => t switch
         {
-            AvailabilityType.Niedostepny => "---",
-            AvailabilityType.MogeWarunkowo => "Mogę warunkowo",
-            AvailabilityType.Moge => "Mogę",
-            AvailabilityType.Chce => "Chcę",
-            AvailabilityType.Rezerwacja => "Rezerwacja",
-            AvailabilityType.DyzurInny => "Dyżur (inny)",
-            AvailabilityType.Urlop => "Urlop",
+            AvailabilityType.Unavailable => "---",
+            AvailabilityType.ConditionallyAvailable => "Mogę warunkowo",
+            AvailabilityType.Available => "Mogę",
+            AvailabilityType.Wants => "Chcę",
+            AvailabilityType.Reservation => "Rezerwacja",
+            AvailabilityType.OtherDuty => "Dyżur (inny)",
+            AvailabilityType.Vacation => "Urlop",
             _ => t.ToString()
         };
 
-        /// <summary>
-        /// Czy ten typ pozwala w ogóle przypisać dyżur w danym dniu?
-        /// </summary>
-        public static bool CzyDopuszczaPrzydzial(AvailabilityType t) =>
-            t is AvailabilityType.Moge
-             or AvailabilityType.MogeWarunkowo
-             or AvailabilityType.Chce
-             or AvailabilityType.Rezerwacja;
+        public static bool AllowsAssignment(AvailabilityType t) =>
+            t is AvailabilityType.Available
+             or AvailabilityType.ConditionallyAvailable
+             or AvailabilityType.Wants
+             or AvailabilityType.Reservation;
 
-        /// <summary>
-        /// Czy jest twardą blokadą dnia (nie można przydzielić)?
-        /// </summary>
-        public static bool CzyBlokujeTwardoDzien(AvailabilityType t) =>
-            t is AvailabilityType.Niedostepny
-             or AvailabilityType.Urlop
-             or AvailabilityType.DyzurInny;
+        public static bool IsHardBlock(AvailabilityType t) =>
+            t is AvailabilityType.Unavailable
+             or AvailabilityType.Vacation
+             or AvailabilityType.OtherDuty;
 
-        /// <summary>
-        /// Czy to rezerwacja (dzień jest z góry przydzielony konkretnej osobie)?
-        /// </summary>
-        public static bool CzyRezerwacja(AvailabilityType t) =>
-            t == AvailabilityType.Rezerwacja;
+        public static bool IsReservation(AvailabilityType t) =>
+            t == AvailabilityType.Reservation;
 
-        /// <summary>
-        /// Czy wolno złamać zakaz „dzień po dniu” oraz „±1 od DYZ”?
-        /// Po usunięciu 'BardzoChce', żaden typ nie łagodzi tych zakazów.
-        /// </summary>
-        public static bool CzyLagodziZakazSasiedztwa(AvailabilityType t) => false;
+        public static bool BypassesAdjacencyRules(AvailabilityType t) => false;
 
-        /// <summary>
-        /// Czy to warunkowe „Mogę” (limit 1 / lekarz / miesiąc)?
-        /// </summary>
-        public static bool CzyWarunkowa(AvailabilityType t) =>
-            t == AvailabilityType.MogeWarunkowo;
+        public static bool IsConditional(AvailabilityType t) =>
+            t == AvailabilityType.ConditionallyAvailable;
 
-        /// <summary>
-        /// Waga preferencji do metryki „Zgodność z ważnością deklaracji”
-        /// (Rezerwacja nie jest preferencją, to twarde przypisanie).
-        /// </summary>
-        public static int WagaPreferencji(AvailabilityType t) => t switch
+        public static int GetPreferenceWeight(AvailabilityType t) => t switch
         {
-            AvailabilityType.Chce => 2,
-            AvailabilityType.Moge => 1,
-            AvailabilityType.MogeWarunkowo => 0,
-            _ => -100 // Blokady, rezerwacje itp. mają bardzo niską wagę preferencji
+            AvailabilityType.Wants => 2,
+            AvailabilityType.Available => 1,
+            AvailabilityType.ConditionallyAvailable => 0,
+            _ => -100
         };
-
-        /// <summary>
-        /// Mapowanie „przyjaznych” nazw UI → enum (do ComboBoxów, importu CSV itd.).
-        /// </summary>
-        public static Dictionary<string, AvailabilityType> UiMap()
-        {
-            return new()
-            {
-                { "---",               AvailabilityType.Niedostepny },
-                { "Mogę warunkowo",    AvailabilityType.MogeWarunkowo },
-                { "Mogę",              AvailabilityType.Moge },
-                { "Chcę",              AvailabilityType.Chce },
-                { "Rezerwacja",        AvailabilityType.Rezerwacja },
-                { "Dyżur (inny)",      AvailabilityType.DyzurInny },
-                { "Urlop",             AvailabilityType.Urlop },
-            };
-        }
-
-        /// <summary>
-        /// Lista elementów do UI: (Label, Code, Enum) – gdy chcesz jednocześnie pokazywać pełną nazwę i kod.
-        /// </summary>
-        public static IReadOnlyList<(string Label, string Code, AvailabilityType Typ)> UiLista() =>
-            Enum.GetValues(typeof(AvailabilityType))
-                .Cast<AvailabilityType>()
-                .Select(t => (PelnaNazwa(t), Kod(t), t))
-                .ToList();
     }
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs (1536 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs (1476 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using System;
@@ -847,37 +2768,36 @@ namespace GrafikoMat.Core.Scheduling.Models
 {
     /// <summary>
     /// Reprezentuje kompletny zestaw danych wejściowych dla algorytmu generującego grafik.
-    /// Wersja zaadaptowana z GrafikWPF.
+    /// Wersja zaadaptowana z GrafikWPF (GrafikWejsciowy).
     /// </summary>
     public class ScheduleInput
     {
         /// <summary>
         /// Lista profili lekarzy biorących udział w grafiku.
-        /// ZMIANA: Używa zunifikowanego modelu DoctorProfile zamiast Lekarz.
         /// </summary>
-        public List<DoctorProfile> Lekarze { get; set; } = new();
+        public List<DoctorProfile> Doctors { get; set; } = new();
 
         /// <summary>
         /// Słownik przechowujący zadeklarowaną dostępność lekarzy w danym miesiącu.
-        /// Klucz: Data (DateTime), Wartość: Słownik (Symbol Lekarza -> TypDostepnosci).
+        /// Klucz: Data (DateTime), Wartość: Słownik (Symbol Lekarza -> AvailabilityType).
         /// </summary>
-        public Dictionary<DateTime, Dictionary<string, AvailabilityType>> Dostepnosc { get; set; } = new();
+        public Dictionary<DateTime, Dictionary<string, AvailabilityType>> Availability { get; set; } = new();
 
         /// <summary>
         /// Słownik przechowujący limity dyżurów dla lekarzy w danym miesiącu.
         /// Klucz: Symbol Lekarza (Abbreviation), Wartość: Limit (int).
         /// </summary>
-        public Dictionary<string, int> LimityDyzurow { get; set; } = new();
+        public Dictionary<string, int> DutyLimits { get; set; } = new();
 
         /// <summary>
         /// Właściwość pomocnicza zwracająca posortowaną listę dni w miesiącu na podstawie kluczy w słowniku Dostępność.
         /// </summary>
-        public List<DateTime> DniWMiesiacu => Dostepnosc.Keys.OrderBy(d => d).ToList();
+        public List<DateTime> DaysInMonth => Availability.Keys.OrderBy(d => d).ToList();
     }
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs (2162 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs (2060 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using System;
@@ -888,47 +2808,275 @@ namespace GrafikoMat.Core.Scheduling.Models
 {
     /// <summary>
     /// Reprezentuje finalny, obliczony grafik wraz z metrykami jakościowymi.
-    /// Wersja zaadaptowana z GrafikWPF.
+    /// Wersja zaadaptowana z GrafikWPF (RozwiazanyGrafik).
     /// </summary>
     public class ScheduleSolution
     {
         /// <summary>
         /// Główny wynik - słownik przypisujący lekarza (lub null) do konkretnego dnia.
-        /// ZMIANA: Używa zunifikowanego modelu DoctorProfile zamiast Lekarz.
         /// </summary>
-        public Dictionary<DateTime, DoctorProfile?> Przypisania { get; set; } = new();
+        public Dictionary<DateTime, DoctorProfile?> Assignments { get; set; } = new();
 
         /// <summary>
         /// Długość nieprzerwanego ciągu obsadzonych dni od początku miesiąca.
         /// </summary>
-        public int DlugoscCiaguPoczatkowego { get; set; }
+        public int InitialContinuity { get; set; }
 
         /// <summary>
         /// Całkowita liczba dni, w których przydzielono dyżur.
         /// </summary>
-        public int LiczbaDniObsadzonych => Przypisania.Values.Count(l => l != null);
+        public int TotalAssignments => Assignments.Values.Count(l => l != null);
 
-        public int ZrealizowaneRezerwacje { get; set; }
-        public int ZrealizowaneChce { get; set; }
-        public int ZrealizowaneMoge { get; set; }
+        public int FulfilledReservations { get; set; }
+        public int FulfilledWants { get; set; }
+        public int FulfilledAvailables { get; set; }
 
         /// <summary>
         /// Wskaźnik sprawiedliwości: odchylenie standardowe procentowych obciążeń lekarzy względem ich limitów.
         /// Im niższa wartość, tym bardziej sprawiedliwy grafik.
         /// </summary>
-        public double WskaznikSprawiedliwosci { get; set; }
+        public double FairnessIndex { get; set; }
 
         /// <summary>
         /// Wskaźnik równomierności: średnie odchylenie standardowe odstępów między dyżurami dla poszczególnych lekarzy.
         /// Im niższa wartość, tym bardziej równomiernie rozłożone dyżury w czasie.
         /// </summary>
-        public double WskaznikRownomiernosci { get; set; }
+        public double SpacingIndex { get; set; }
 
         /// <summary>
         /// Słownik z finalnym obciążeniem każdego z lekarzy (ile dyżurów otrzymał).
         /// Klucz: Symbol (Abbreviation), Wartość: Liczba dyżurów.
         /// </summary>
-        public Dictionary<string, int> FinalneOblozenieLekarzy { get; set; } = new();
+        public Dictionary<string, int> FinalWorkload { get; set; } = new();
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\SolverPriority.cs (735 bytes)
+----- BEGIN -----
+using System.ComponentModel;
+
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Definiuje możliwe kryteria optymalizacji (priorytety), według których silnik ocenia jakość grafiku.
+    /// </summary>
+    public enum SolverPriority
+    {
+        [Description("Ciągłość obsady")]
+        InitialContinuity = 0,
+
+        [Description("Obsada (łączna)")]
+        TotalAssignments = 1,
+
+        [Description("Sprawiedliwość (σ obciążeń)")]
+        Fairness = 2,
+
+        [Description("Równomierność (czasowa)")]
+        Spacing = 3,
+
+        // PRZYWRÓCONY PRIORYTET
+        [Description("Zgodność z ważnością deklaracji")]
+        DeclarationCompliance = 4
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\SolverType.cs (341 bytes)
+----- BEGIN -----
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Definiuje dostępne typy silników (algorytmów) do generowania grafiku.
+    /// </summary>
+    public enum SolverType
+    {
+        Backtracking,
+        AStar,
+        Genetic,
+        SimulatedAnnealing,
+        TabuSearch,
+        AntColony
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Validation\ConstraintValidationService.cs (8401 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Models; // Upewnij się, że ta linia istnieje
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Validation
+{
+    /// <summary>
+    /// Zawiera metody statyczne do walidacji twardych ograniczeń grafiku.
+    /// Sprawdza, czy kandydat jest poprawny dla danego dnia w oparciu o niezmienne reguły.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public static class ConstraintValidationService
+    {
+        public static List<DoctorProfile> GetValidCandidatesForDay(
+            DateTime day,
+            ScheduleInput scheduleInput,
+            IReadOnlyDictionary<DateTime, DoctorProfile?> currentAssignments,
+            IReadOnlyDictionary<string, int> currentWorkload,
+            IReadOnlySet<string> usedConditionalDuties)
+        {
+            var daysInMonth = scheduleInput.DaysInMonth;
+            var previousDayDoctor = day > daysInMonth.First() && currentAssignments.TryGetValue(day.AddDays(-1), out var yesterdayDoctor) ? yesterdayDoctor : null;
+
+            var candidates = new List<DoctorProfile>();
+            foreach (var doctor in scheduleInput.Doctors.Where(l => !l.IsArchived))
+            {
+                if (IsValidCandidate(doctor, day, scheduleInput, previousDayDoctor, currentWorkload, usedConditionalDuties))
+                {
+                    candidates.Add(doctor);
+                }
+            }
+            return candidates;
+        }
+
+        private static bool IsValidCandidate(DoctorProfile doctor, DateTime day, ScheduleInput scheduleInput, DoctorProfile? previousDayDoctor, IReadOnlyDictionary<string, int> currentWorkload, IReadOnlySet<string> usedConditionalDuties)
+        {
+            int dutyLimit = scheduleInput.DutyLimits.GetValueOrDefault(doctor.Abbreviation, 0);
+
+            // Reguła: Przekroczony limit dyżurów
+            if (dutyLimit > 0 && currentWorkload.GetValueOrDefault(doctor.Abbreviation, 0) >= dutyLimit)
+                return false;
+
+            var availabilityToday = scheduleInput.Availability[day][doctor.Abbreviation];
+
+            // Reguła: Twarde blokady (Urlop, Inny Dyżur, Niedostępny)
+            if (Declarations.IsHardBlock(availabilityToday))
+                return false;
+
+            // Reguła: Zakaz dyżuru dzień po dniu
+            if (previousDayDoctor?.Id == doctor.Id)
+                return false;
+
+            // Reguła: Zakaz dyżuru w sąsiedztwie "Innego Dyżuru"
+            var tomorrow = day.AddDays(1);
+            if (scheduleInput.Availability.ContainsKey(tomorrow) && scheduleInput.Availability[tomorrow][doctor.Abbreviation] == AvailabilityType.OtherDuty)
+                return false;
+
+            var yesterday = day.AddDays(-1);
+            if (scheduleInput.Availability.ContainsKey(yesterday) && scheduleInput.Availability[yesterday][doctor.Abbreviation] == AvailabilityType.OtherDuty)
+                return false;
+
+            // Reguła: Tylko jeden dyżur warunkowy w miesiącu
+            if (availabilityToday == AvailabilityType.ConditionallyAvailable && usedConditionalDuties.Contains(doctor.Abbreviation))
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Metoda narzędziowa do naprawy wygenerowanego grafiku poprzez usunięcie przypisań,
+        /// które naruszają twarde ograniczenia. Może być użyteczna po operacjach takich jak krzyżowanie w Algorytmie Genetycznym.
+        /// </summary>
+        public static void RepairSchedule(Dictionary<DateTime, DoctorProfile?> schedule, ScheduleInput scheduleInput)
+        {
+            bool changeMade;
+            do
+            {
+                changeMade = false;
+                var workload = CalculateWorkload(schedule, scheduleInput);
+                var usedConditionals = CalculateUsedConditionals(schedule, scheduleInput);
+
+                // Naprawa limitów dyżurów
+                foreach (var doctorAbbr in workload.Keys.ToList())
+                {
+                    var limit = scheduleInput.DutyLimits.GetValueOrDefault(doctorAbbr, 0);
+                    while (limit > 0 && workload[doctorAbbr] > limit)
+                    {
+                        var dutiesToRemove = schedule.Where(g => g.Value?.Abbreviation == doctorAbbr).ToList();
+                        if (dutiesToRemove.Any())
+                        {
+                            var dutyToRemove = dutiesToRemove
+                                .OrderBy(d => Declarations.GetPreferenceWeight(scheduleInput.Availability[d.Key][d.Value!.Abbreviation]))
+                                .ThenByDescending(d => d.Key)
+                                .First();
+
+                            schedule[dutyToRemove.Key] = null;
+                            workload[doctorAbbr]--;
+                            changeMade = true;
+                        }
+                        else break;
+                    }
+                }
+
+                // Naprawa użycia dyżurów warunkowych
+                foreach (var doctorAbbr in usedConditionals.Keys.ToList())
+                {
+                    while (usedConditionals[doctorAbbr] > 1)
+                    {
+                        var conditionalDutyToRemove = schedule.FirstOrDefault(g => g.Value?.Abbreviation == doctorAbbr && scheduleInput.Availability[g.Key][g.Value.Abbreviation] == AvailabilityType.ConditionallyAvailable);
+                        if (conditionalDutyToRemove.Key != default)
+                        {
+                            schedule[conditionalDutyToRemove.Key] = null;
+                            usedConditionals[doctorAbbr]--;
+                            changeMade = true;
+                        }
+                        else break;
+                    }
+                }
+
+                // Naprawa reguł sąsiedztwa
+                foreach (var day in scheduleInput.DaysInMonth)
+                {
+                    var doctor = schedule[day];
+                    if (doctor == null) continue;
+
+                    var availability = scheduleInput.Availability[day][doctor.Abbreviation];
+                    if (Declarations.IsReservation(availability)) continue;
+
+                    var yesterday = day.AddDays(-1);
+                    if (schedule.ContainsKey(yesterday))
+                    {
+                        if (schedule[yesterday]?.Id == doctor.Id || scheduleInput.Availability[yesterday][doctor.Abbreviation] == AvailabilityType.OtherDuty)
+                        {
+                            schedule[day] = null;
+                            changeMade = true;
+                            continue;
+                        }
+                    }
+
+                    var tomorrow = day.AddDays(1);
+                    if (schedule.ContainsKey(tomorrow) && scheduleInput.Availability[tomorrow][doctor.Abbreviation] == AvailabilityType.OtherDuty)
+                    {
+                        schedule[day] = null;
+                        changeMade = true;
+                    }
+                }
+
+            } while (changeMade);
+        }
+
+        private static Dictionary<string, int> CalculateWorkload(IReadOnlyDictionary<DateTime, DoctorProfile?> schedule, ScheduleInput scheduleInput)
+        {
+            var workload = scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            foreach (var doctor in schedule.Values.Where(l => l != null))
+            {
+                if (doctor != null) workload[doctor.Abbreviation]++;
+            }
+            return workload;
+        }
+
+        private static Dictionary<string, int> CalculateUsedConditionals(IReadOnlyDictionary<DateTime, DoctorProfile?> schedule, ScheduleInput scheduleInput)
+        {
+            var used = scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
+            foreach (var pair in schedule)
+            {
+                if (pair.Value != null && scheduleInput.Availability.ContainsKey(pair.Key) && scheduleInput.Availability[pair.Key][pair.Value.Abbreviation] == AvailabilityType.ConditionallyAvailable)
+                {
+                    used[pair.Value.Abbreviation]++;
+                }
+            }
+            return used;
+        }
     }
 }
 ----- END -----
@@ -2733,25 +4881,24 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Repositories\SupabaseDoctorRepository.cs (4370 bytes)
+===== FILE: GrafikoMat\Repositories\SupabaseDoctorRepository.cs (4112 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Declarations;
 using GrafikoMat.Core.Repositories;
 using Supabase;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using SbClient = Supabase.Client; // <-- NOWY ALIAS
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Repositories
 {
     public class SupabaseDoctorRepository : IDoctorRepository
     {
-        private readonly SbClient _supabase; // <-- ZMIANA TYPU
+        private readonly SbClient _supabase;
 
-        public SupabaseDoctorRepository(SbClient supabaseClient) // <-- ZMIANA TYPU
+        public SupabaseDoctorRepository(SbClient supabaseClient)
         {
             _supabase = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
         }
@@ -2774,14 +4921,12 @@ namespace GrafikoMat.Repositories
 
         public async Task SaveAsync(DoctorProfile profile, IEnumerable<UnitDoctorAssignment> desiredAssignments)
         {
-            // Logika dla zapisu profilu (nowy lub istniejący)
             if (profile.Id == Guid.Empty)
             {
                 throw new NotImplementedException("Tworzenie nowych użytkowników wymaga oddzielnej logiki SignUp, która znajduje się w ViewModelu.");
             }
             else
             {
-                // Aktualizacja istniejącego profilu
                 var doctorDataForUpdate = new DoctorForUpdate
                 {
                     Id = profile.Id,
@@ -2796,7 +4941,6 @@ namespace GrafikoMat.Repositories
                 await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
             }
 
-            // Logika dla zapisu przypisań
             var assignmentRepo = new SupabaseAssignmentRepository(_supabase);
             var currentAssignments = await assignmentRepo.GetForDoctorAsync(profile.Id);
 
@@ -3013,8 +5157,9 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (2457 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (2505 bytes)
 ----- BEGIN -----
+using GrafikoMat.Core.Scheduling.Models;
 using System;
 using System.IO;
 using System.Text.Json;
@@ -3032,11 +5177,12 @@ namespace GrafikoMat.Services
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseAnonKey { get; init; } = string.Empty;
 
+        // NOWA WŁAŚCIWOŚĆ: Przechowuje wybrany przez użytkownika silnik
+        public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
+
         // Pozostałe, globalne ustawienia aplikacji
         public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
-
-        // NOWA WŁAŚCIWOŚĆ: Przechowuje ID ostatnio aktywnej jednostki
         public Guid? LastActiveUnitId { get; init; }
     }
 
@@ -3065,7 +5211,6 @@ namespace GrafikoMat.Services
             }
             catch (Exception)
             {
-                // W przypadku błędu odczytu, tworzymy nowe, puste ustawienia
                 _currentSettings = null;
             }
 
@@ -3894,6 +6039,175 @@ namespace GrafikoMat.ViewModels
             DisplayName = needsDifferentiator
                 ? $"{profile.LastName} {profile.FirstName} ({profile.Abbreviation})"
                 : $"{profile.LastName} {profile.FirstName}";
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\EngineComparisonInfo.cs (397 bytes)
+----- BEGIN -----
+namespace GrafikoMat.ViewModels
+{
+    /// <summary>
+    /// Reprezentuje wiersz w tabeli porównawczej silników.
+    /// </summary>
+    public record EngineComparisonInfo(
+        string Name,
+        string AlgorithmType,
+        string Determinism,
+        string Multithreading,
+        string QualityGuarantee,
+        string TimeToResult,
+        string MemoryUsage
+    );
+}
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\EngineOption.cs (867 bytes)
+----- BEGIN -----
+using GrafikoMat.Common;
+using GrafikoMat.Core.Scheduling.Models;
+
+namespace GrafikoMat.ViewModels
+{
+    /// <summary>
+    /// Reprezentuje pojedynczy silnik na liście wyboru w UI.
+    /// </summary>
+    public class EngineOption : ObservableObject
+    {
+        public SolverType Type { get; }
+        public string Name { get; }
+        public string Description { get; }
+        public string Category { get; }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set => SetProperty(ref _isSelected, value);
+        }
+
+        public EngineOption(SolverType type, string name, string description, string category)
+        {
+            Type = type;
+            Name = name;
+            Description = description;
+            Category = category;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (7649 bytes)
+----- BEGIN -----
+using GrafikoMat.Common;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Services;
+using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.Input;
+
+namespace GrafikoMat.ViewModels
+{
+    public class EngineSettingsViewModel : ObservableObject
+    {
+        private readonly SettingsService _settingsService;
+        private AppSettings _appSettings;
+
+        public ObservableCollection<EngineOption> EngineOptions { get; } = new();
+        public ObservableCollection<EngineComparisonInfo> ComparisonData { get; } = new();
+
+        private EngineOption? _selectedEngine;
+        public EngineOption? SelectedEngine
+        {
+            get => _selectedEngine;
+            set
+            {
+                if (SetProperty(ref _selectedEngine, value))
+                {
+                    foreach (var option in EngineOptions)
+                    {
+                        option.IsSelected = (option == value);
+                    }
+                    ShowStatusMessage = false; // Ukryj komunikat po zmianie wyboru
+                }
+            }
+        }
+
+        private bool _showStatusMessage;
+        public bool ShowStatusMessage
+        {
+            get => _showStatusMessage;
+            set => SetProperty(ref _showStatusMessage, value);
+        }
+        public IAsyncRelayCommand SaveCommand { get; }
+
+        public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings)
+        {
+            _settingsService = settingsService;
+            _appSettings = appSettings;
+
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+
+            LoadEngineData();
+            LoadInitialSelection();
+        }
+
+        private void LoadInitialSelection()
+        {
+            SelectedEngine = EngineOptions.FirstOrDefault(o => o.Type == _appSettings.SelectedSolver)
+                             ?? EngineOptions.FirstOrDefault();
+        }
+
+        private async Task SaveSettingsAsync()
+        {
+            if (_selectedEngine != null)
+            {
+                // Tworzymy nową, zaktualizowaną wersję obiektu ustawień
+                _appSettings = _appSettings with { SelectedSolver = _selectedEngine.Type };
+                // Zapisujemy ją za pomocą serwisu
+                await _settingsService.SaveSettingsAsync(_appSettings);
+
+                // Pokaż komunikat o sukcesie
+                ShowStatusMessage = true;
+                await Task.Delay(2500); // Komunikat widoczny przez 2.5 sekundy
+                ShowStatusMessage = false;
+            }
+        }
+
+        private void LoadEngineData()
+        {
+            EngineOptions.Add(new EngineOption(SolverType.Backtracking, "BacktrackingSolver",
+                "Działa jak skrupulatny detektyw w labiryncie. Systematycznie, krok po kroku, podąża jedną ścieżką, przypisując dyżury dzień po dniu. Gdy trafia w ślepy zaułek (sytuację, w której nie da się obsadzić dyżuru zgodnie z regułami), powraca (backtrack) do ostatniego skrzyżowania i próbuje innej drogi. Gwarantuje znalezienie idealnego rozwiązania, ale dla złożonych problemów jego praca może trwać bardzo długo.",
+                "Algorytm z nawrotami"));
+
+            EngineOptions.Add(new EngineOption(SolverType.AStar, "AStarSolver",
+                "Można go porównać do doświadczonego nawigatora z mapą i kompasem. W każdym momencie analizuje nie tylko już przebytą drogę, ale również inteligentnie szacuje odległość, jaka jeszcze pozostała do celu. Zamiast ślepo badać wszystkie ścieżki jak Backtracking, A* koncentruje swoje wysiłki na tych, które wydają się najbardziej obiecujące. Dzięki temu potrafi znaleźć optymalną trasę znacznie szybciej.",
+                "Wielokryterialny algorytm A*"));
+
+            EngineOptions.Add(new EngineOption(SolverType.Genetic, "GeneticSolver",
+                "Inspirowany teorią ewolucji. Algorytm tworzy początkową 'populację' losowych grafików, a następnie poddaje ją procesowi naturalnej selekcji przez wiele pokoleń. Najlepsze grafiki ('osobniki') są ze sobą 'krzyżowane', tworząc nowe 'potomstwo'. Z pokolenia na pokolenie słabsze rozwiązania są eliminowane, a populacja jako całość staje się coraz 'silniejsza', dążąc do wyłonienia niemal idealnego grafiku.",
+                "Algorytm genetyczny"));
+
+            EngineOptions.Add(new EngineOption(SolverType.SimulatedAnnealing, "SimulatedAnnealingSolver",
+                "Naśladuje proces powolnego studzenia (wyżarzania) metalu, aby uzyskać jego idealną, krystaliczną strukturę. Algorytm zaczyna od wysokiej 'temperatury', na której chętnie akceptuje nawet gorsze modyfikacje grafiku, co pozwala mu na unikanie utknięcia w lokalnych optimach. W miarę jak 'temperatura' opada, algorytm staje się coraz bardziej 'wybredny' i akceptuje już tylko zmiany, które faktycznie poprawiają wynik.",
+                "Algorytm symulowanego wyżarzania"));
+
+            EngineOptions.Add(new EngineOption(SolverType.TabuSearch, "TabuSearchSolver",
+                "Wyobraź sobie eksploratora, który notuje w dzienniku ostatnio odwiedzone miejsca, by do nich od razu nie wracać. Algorym w każdym kroku szuka najlepszej modyfikacji grafiku, a żeby uniknąć zapętlenia, prowadzi 'listę tabu' – krótkoterminową pamięć ruchów, które są tymczasowo 'zakazane'. Pozwala to na wydostanie się z lokalnych optimów i zbadanie szerszego obszaru potencjalnych grafików.",
+                "Algorytm przeszukiwania z zakazami"));
+
+            EngineOptions.Add(new EngineOption(SolverType.AntColony, "AntColonySolver",
+                "Działa w oparciu o obserwację kolonii mrówek. Wiele wirtualnych 'mrówek' jednocześnie buduje kompletne grafiki. Każda mrówka, która stworzy dobry grafik, zostawia cyfrowy 'ślad feromonowy' na fragmentach, z których korzystała. Kolejne 'pokolenia' mrówek są przyciągane do silniejszych śladów, co naturalnie wzmacnia najlepsze elementy i prowadzi całą kolonię do szybkiego znalezienia optymalnego rozwiązania.",
+                "Algorytm kolonii mrówek"));
+
+            ComparisonData.Add(new EngineComparisonInfo("BacktrackingSolver", "Przeszukiwanie zupełne", "Deterministyczny", "Nie", "Gwarancja znalezienia wyniku najlepszego z możliwych.", "Od b. krótkiego do astronomicznie długiego", "Niskie"));
+            ComparisonData.Add(new EngineComparisonInfo("AStarSolver", "Przeszukiwanie heurystyczne", "Deterministyczny", "Nie", "Wynik bardzo wysokiej jakości (bez gwarancji optimum).", "Krótki / Średni", "Wysokie"));
+            ComparisonData.Add(new EngineComparisonInfo("GeneticSolver", "Metaheurystyka ewolucyjna", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki", "Średnie / Wysokie"));
+            ComparisonData.Add(new EngineComparisonInfo("SimulatedAnnealingSolver", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik zazwyczaj bardzo dobry, lecz bez gwarancji bliskości do wyniku najlepszego z możliwych.", "Średni", "Niskie"));
+            ComparisonData.Add(new EngineComparisonInfo("TabuSearchSolver", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki", "Średnie"));
+            ComparisonData.Add(new EngineComparisonInfo("AntColonySolver", "Metaheurystyka (inteligencja rozproszona)", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki", "Wysokie"));
         }
     }
 }
@@ -6011,33 +8325,143 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (541 bytes)
+===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (7323 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.EngineSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    mc:Ignorable="d"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
+    mc:Ignorable="d">
 
-    <Grid>
-        <TextBlock Text="Widok Wyboru Silnika Grafiku - w budowie" VerticalAlignment="Center" HorizontalAlignment="Center" />
+    <Grid Padding="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Wybór Silnika Obliczeniowego" FontSize="20" FontWeight="SemiBold"/>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
+                <ItemsControl ItemsSource="{x:Bind ViewModel.EngineOptions}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EngineOption">
+                            <RadioButton GroupName="EngineSelection"
+                                         IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                         Margin="0,0,0,10">
+                                <StackPanel Margin="4,0,0,0" Spacing="2">
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{x:Bind Category}" FontSize="12" Opacity="0.7"/>
+                                </StackPanel>
+                            </RadioButton>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Grid Grid.Column="2">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16">
+                        <StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=OneWay, FallbackValue='Wybierz silnik'}" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Category, Mode=OneWay, FallbackValue='...'}" Opacity="0.8" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue='Wybierz silnik z listy po lewej stronie, aby zobaczyć jego szczegółowy opis.'}"
+                                   TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify"/>
+
+                        <TextBlock Text="Charakterystyka Porównawcza" FontWeight="SemiBold" Margin="0,16,0,8"/>
+                        <ListView ItemsSource="{x:Bind ViewModel.ComparisonData}" 
+                                  SelectionMode="None" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                  BorderThickness="1" CornerRadius="4">
+                            <ListView.HeaderTemplate>
+                                <DataTemplate>
+                                    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.8*"/>
+                                            <ColumnDefinition Width="1.5*"/>
+                                            <ColumnDefinition Width="1.6*"/>
+                                            <ColumnDefinition Width="2.2*"/>
+                                            <ColumnDefinition Width="1.1*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Typ algorytmu" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" Text="Powtarzalność" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="2" Text="Wielowątkowość" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="3" Text="Jakość i Gwarancja" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="4" Text="Czas" FontWeight="SemiBold"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.HeaderTemplate>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:EngineComparisonInfo">
+                                    <Grid Padding="12,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1.8*"/>
+                                            <ColumnDefinition Width="1.5*"/>
+                                            <ColumnDefinition Width="1.6*"/>
+                                            <ColumnDefinition Width="2.2*"/>
+                                            <ColumnDefinition Width="1.1*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind Determinism}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="{x:Bind Multithreading}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="3" Text="{x:Bind QualityGuarantee}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="{x:Bind TimeToResult}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <InfoBar IsOpen="{x:Bind ViewModel.ShowStatusMessage, Mode=OneWay}"
+                     Title="Sukces"
+                     Message="Ustawienia zostały zapisane."
+                     Severity="Success"
+                     IsClosable="False"
+                     VerticalAlignment="Center"/>
+            <Button Grid.Column="1" 
+                    Content="Zapisz ustawienia" 
+                    Style="{StaticResource AccentButtonStyle}" 
+                    Command="{x:Bind ViewModel.SaveCommand}"/>
+        </Grid>
     </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml.cs (261 bytes)
+===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml.cs (520 bytes)
 ----- BEGIN -----
+using GrafikoMat.Services;
+using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
 namespace GrafikoMat.Views.Settings
 {
     public sealed partial class EngineSettingsView : UserControl
     {
-        public EngineSettingsView()
+        public EngineSettingsViewModel ViewModel { get; }
+
+        public EngineSettingsView(SettingsService settingsService, AppSettings appSettings)
         {
             this.InitializeComponent();
+            ViewModel = new EngineSettingsViewModel(settingsService, appSettings);
         }
     }
 }
@@ -6163,11 +8587,10 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (14813 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (14881 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories; // NOWY USING
-using GrafikoMat.Services;
+using GrafikoMat.Core.Repositories;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -6175,7 +8598,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -6191,8 +8613,7 @@ namespace GrafikoMat.Views.Settings
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
-        // ZMIANA: Usunięcie _dataService na rzecz repozytorium
-        private IUnitRepository? _unitRepository;
+        private readonly IUnitRepository? _unitRepository;
 
         private bool _isLoading;
         public bool IsLoading
@@ -6235,15 +8656,18 @@ namespace GrafikoMat.Views.Settings
 
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
-        public UnitsSettingsView()
+
+        // ZMIANA: Konstruktor przyjmuje zależność
+        public UnitsSettingsView(IUnitRepository unitRepository)
         {
             this.InitializeComponent();
+            _unitRepository = unitRepository;
+            this.Loaded += UnitsSettingsView_Loaded;
         }
 
-        // ZMIANA: Nowa metoda Initialize
-        public async void Initialize(IUnitRepository repository)
+        // ZMIANA: Logika ładowania przeniesiona do zdarzenia Loaded
+        private async void UnitsSettingsView_Loaded(object sender, RoutedEventArgs e)
         {
-            _unitRepository = repository;
             IsLoading = true;
             try
             {
@@ -6601,9 +9025,9 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (3789 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (3478 bytes)
 ----- BEGIN -----
-using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
@@ -6613,7 +9037,6 @@ namespace GrafikoMat.Views
 {
     public sealed partial class SettingsView : UserControl
     {
-        // ZMIANA: Zależności
         private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
@@ -6624,16 +9047,11 @@ namespace GrafikoMat.Views
             this.InitializeComponent();
             SettingsMenu.ItemsSource = new[]
             {
-                "Baza danych",
-                "Jednostki",
-                "Priorytety",
-                "Wybór silnika",
-                "Wygląd"
+                "Baza danych", "Jednostki", "Priorytety", "Wybór silnika", "Wygląd"
             };
             SettingsMenu.SelectedIndex = -1;
         }
 
-        // ZMIANA: Nowa sygnatura metody Initialize
         public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, AppSettings settings)
         {
             _unitRepository = unitRepository;
@@ -6653,13 +9071,16 @@ namespace GrafikoMat.Views
             LoadSubView(selectedItem);
         }
 
-        private void LoadSubView(string? selectedItem)
+        private async void LoadSubView(string? selectedItem)
         {
-            if (_settingsService == null || _appSettings == null)
+            if (_settingsService == null)
             {
                 SettingsDetailContent.Content = null;
                 return;
             }
+
+            // KLUCZOWA ZMIANA: Zawsze pobieramy najnowszą wersję ustawień z serwisu
+            _appSettings = await _settingsService.LoadSettingsAsync();
 
             switch (selectedItem)
             {
@@ -6670,28 +9091,20 @@ namespace GrafikoMat.Views
                     SettingsDetailContent.Content = connectionView;
                     break;
                 case "Jednostki":
-                    // ZMIANA: Sprawdzamy i przekazujemy repozytorium
                     if (_unitRepository != null)
                     {
-                        var unitsView = new UnitsSettingsView();
-                        unitsView.Initialize(_unitRepository);
-                        SettingsDetailContent.Content = unitsView;
+                        SettingsDetailContent.Content = new UnitsSettingsView(_unitRepository);
                     }
                     else
                     {
-                        SettingsDetailContent.Content = new TextBlock
-                        {
-                            Text = "Skonfiguruj i zapisz połączenie z bazą danych, aby zarządzać jednostkami.",
-                            VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
-                            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center
-                        };
+                        SettingsDetailContent.Content = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
                     }
                     break;
                 case "Priorytety":
                     SettingsDetailContent.Content = new PrioritiesSettingsView();
                     break;
                 case "Wybór silnika":
-                    SettingsDetailContent.Content = new EngineSettingsView();
+                    SettingsDetailContent.Content = new EngineSettingsView(_settingsService, _appSettings);
                     break;
                 case "Wygląd":
                     SettingsDetailContent.Content = new AppearanceSettingsView();

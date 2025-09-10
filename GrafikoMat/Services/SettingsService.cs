@@ -1,4 +1,5 @@
-﻿using System;
+﻿using GrafikoMat.Core.Scheduling.Models;
+using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -15,11 +16,12 @@ namespace GrafikoMat.Services
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseAnonKey { get; init; } = string.Empty;
 
+        // NOWA WŁAŚCIWOŚĆ: Przechowuje wybrany przez użytkownika silnik
+        public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
+
         // Pozostałe, globalne ustawienia aplikacji
         public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
-
-        // NOWA WŁAŚCIWOŚĆ: Przechowuje ID ostatnio aktywnej jednostki
         public Guid? LastActiveUnitId { get; init; }
     }
 
@@ -48,7 +50,6 @@ namespace GrafikoMat.Services
             }
             catch (Exception)
             {
-                // W przypadku błędu odczytu, tworzymy nowe, puste ustawienia
                 _currentSettings = null;
             }
 
