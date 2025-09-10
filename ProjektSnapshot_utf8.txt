@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-10 17:43:41
+# Data:       2025-09-10 19:05:48
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -10,6 +10,7 @@ DIR  GrafikoMat
 DIR  GrafikoMat.Core
 DIR  GrafikoMat.Core\Data
 DIR  GrafikoMat.Core\Repositories
+DIR  GrafikoMat.Core\Scheduling\Models
 DIR  GrafikoMat\Common
 DIR  GrafikoMat\Controls
 DIR  GrafikoMat\Converters
@@ -21,7 +22,7 @@ DIR  GrafikoMat\ViewModels
 DIR  GrafikoMat\Views
 DIR  GrafikoMat\Views\Settings
 
-## FILES (liczba): 63
+## FILES (liczba): 67
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
@@ -33,6 +34,10 @@ FILE GrafikoMat.Core\Repositories\IDoctorRepository.cs
 FILE GrafikoMat.Core\Repositories\IUnitRepository.cs
 FILE GrafikoMat.Core\Roster.Models.cs
 FILE GrafikoMat.Core\Scheduling.Abstractions.cs
+FILE GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs
+FILE GrafikoMat.Core\Scheduling\Models\Declarations.cs
+FILE GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs
+FILE GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
@@ -661,6 +666,271 @@ namespace GrafikoMat.Core.Scheduling
     }
 }
 
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs (1225 bytes)
+----- BEGIN -----
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Definiuje możliwe typy dostępności (deklaracji) lekarza w danym dniu.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public enum AvailabilityType
+    {
+        /// <summary>
+        /// Lekarz jest niedostępny (domyślny stan).
+        /// </summary>
+        Niedostepny,
+
+        /// <summary>
+        /// Lekarz jest dostępny bez specjalnych preferencji.
+        /// </summary>
+        Moge,
+
+        /// <summary>
+        /// Lekarz preferuje dyżur w tym dniu.
+        /// </summary>
+        Chce,
+
+        /// <summary>
+        /// Lekarz jest na urlopie (twarda blokada).
+        /// </summary>
+        Urlop,
+
+        /// <summary>
+        /// Lekarz ma dyżur w innym miejscu (twarda blokada + blokada dni sąsiednich).
+        /// </summary>
+        DyzurInny,
+
+        /// <summary>
+        /// Lekarz może wziąć dyżur, ale tylko jeden taki w miesiącu.
+        /// </summary>
+        MogeWarunkowo,
+
+        /// <summary>
+        /// Dzień jest zarezerwowany dla tego lekarza (twarde przypisanie, dostępne dla admina).
+        /// </summary>
+        Rezerwacja
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\Declarations.cs (4906 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Jedno źródło prawdy dla deklaracji dostępności:
+    /// - kody skrótów (---, WAR, MOG, CHC, REZ, DYZ, URL),
+    /// - pełne nazwy do UI,
+    /// - semantyka (co wolno / czego nie wolno),
+    /// - pomocnicze parse/format.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public static class Declarations
+    {
+        private static readonly IReadOnlyDictionary<AvailabilityType, string> _kody =
+            new Dictionary<AvailabilityType, string>
+            {
+                { AvailabilityType.Niedostepny,     "---" },
+                { AvailabilityType.MogeWarunkowo,   "WAR" },
+                { AvailabilityType.Moge,            "MOG" },
+                { AvailabilityType.Chce,            "CHC" },
+                { AvailabilityType.Rezerwacja,      "REZ" },
+                { AvailabilityType.DyzurInny,       "DYZ" },
+                { AvailabilityType.Urlop,           "URL" },
+            };
+
+        public static string Kod(AvailabilityType t) => _kody[t];
+
+        public static string PelnaNazwa(AvailabilityType t) => t switch
+        {
+            AvailabilityType.Niedostepny => "---",
+            AvailabilityType.MogeWarunkowo => "Mogę warunkowo",
+            AvailabilityType.Moge => "Mogę",
+            AvailabilityType.Chce => "Chcę",
+            AvailabilityType.Rezerwacja => "Rezerwacja",
+            AvailabilityType.DyzurInny => "Dyżur (inny)",
+            AvailabilityType.Urlop => "Urlop",
+            _ => t.ToString()
+        };
+
+        /// <summary>
+        /// Czy ten typ pozwala w ogóle przypisać dyżur w danym dniu?
+        /// </summary>
+        public static bool CzyDopuszczaPrzydzial(AvailabilityType t) =>
+            t is AvailabilityType.Moge
+             or AvailabilityType.MogeWarunkowo
+             or AvailabilityType.Chce
+             or AvailabilityType.Rezerwacja;
+
+        /// <summary>
+        /// Czy jest twardą blokadą dnia (nie można przydzielić)?
+        /// </summary>
+        public static bool CzyBlokujeTwardoDzien(AvailabilityType t) =>
+            t is AvailabilityType.Niedostepny
+             or AvailabilityType.Urlop
+             or AvailabilityType.DyzurInny;
+
+        /// <summary>
+        /// Czy to rezerwacja (dzień jest z góry przydzielony konkretnej osobie)?
+        /// </summary>
+        public static bool CzyRezerwacja(AvailabilityType t) =>
+            t == AvailabilityType.Rezerwacja;
+
+        /// <summary>
+        /// Czy wolno złamać zakaz „dzień po dniu” oraz „±1 od DYZ”?
+        /// Po usunięciu 'BardzoChce', żaden typ nie łagodzi tych zakazów.
+        /// </summary>
+        public static bool CzyLagodziZakazSasiedztwa(AvailabilityType t) => false;
+
+        /// <summary>
+        /// Czy to warunkowe „Mogę” (limit 1 / lekarz / miesiąc)?
+        /// </summary>
+        public static bool CzyWarunkowa(AvailabilityType t) =>
+            t == AvailabilityType.MogeWarunkowo;
+
+        /// <summary>
+        /// Waga preferencji do metryki „Zgodność z ważnością deklaracji”
+        /// (Rezerwacja nie jest preferencją, to twarde przypisanie).
+        /// </summary>
+        public static int WagaPreferencji(AvailabilityType t) => t switch
+        {
+            AvailabilityType.Chce => 2,
+            AvailabilityType.Moge => 1,
+            AvailabilityType.MogeWarunkowo => 0,
+            _ => -100 // Blokady, rezerwacje itp. mają bardzo niską wagę preferencji
+        };
+
+        /// <summary>
+        /// Mapowanie „przyjaznych” nazw UI → enum (do ComboBoxów, importu CSV itd.).
+        /// </summary>
+        public static Dictionary<string, AvailabilityType> UiMap()
+        {
+            return new()
+            {
+                { "---",               AvailabilityType.Niedostepny },
+                { "Mogę warunkowo",    AvailabilityType.MogeWarunkowo },
+                { "Mogę",              AvailabilityType.Moge },
+                { "Chcę",              AvailabilityType.Chce },
+                { "Rezerwacja",        AvailabilityType.Rezerwacja },
+                { "Dyżur (inny)",      AvailabilityType.DyzurInny },
+                { "Urlop",             AvailabilityType.Urlop },
+            };
+        }
+
+        /// <summary>
+        /// Lista elementów do UI: (Label, Code, Enum) – gdy chcesz jednocześnie pokazywać pełną nazwę i kod.
+        /// </summary>
+        public static IReadOnlyList<(string Label, string Code, AvailabilityType Typ)> UiLista() =>
+            Enum.GetValues(typeof(AvailabilityType))
+                .Cast<AvailabilityType>()
+                .Select(t => (PelnaNazwa(t), Kod(t), t))
+                .ToList();
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs (1536 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Reprezentuje kompletny zestaw danych wejściowych dla algorytmu generującego grafik.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class ScheduleInput
+    {
+        /// <summary>
+        /// Lista profili lekarzy biorących udział w grafiku.
+        /// ZMIANA: Używa zunifikowanego modelu DoctorProfile zamiast Lekarz.
+        /// </summary>
+        public List<DoctorProfile> Lekarze { get; set; } = new();
+
+        /// <summary>
+        /// Słownik przechowujący zadeklarowaną dostępność lekarzy w danym miesiącu.
+        /// Klucz: Data (DateTime), Wartość: Słownik (Symbol Lekarza -> TypDostepnosci).
+        /// </summary>
+        public Dictionary<DateTime, Dictionary<string, AvailabilityType>> Dostepnosc { get; set; } = new();
+
+        /// <summary>
+        /// Słownik przechowujący limity dyżurów dla lekarzy w danym miesiącu.
+        /// Klucz: Symbol Lekarza (Abbreviation), Wartość: Limit (int).
+        /// </summary>
+        public Dictionary<string, int> LimityDyzurow { get; set; } = new();
+
+        /// <summary>
+        /// Właściwość pomocnicza zwracająca posortowaną listę dni w miesiącu na podstawie kluczy w słowniku Dostępność.
+        /// </summary>
+        public List<DateTime> DniWMiesiacu => Dostepnosc.Keys.OrderBy(d => d).ToList();
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs (2162 bytes)
+----- BEGIN -----
+using GrafikoMat.Core.Data;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Reprezentuje finalny, obliczony grafik wraz z metrykami jakościowymi.
+    /// Wersja zaadaptowana z GrafikWPF.
+    /// </summary>
+    public class ScheduleSolution
+    {
+        /// <summary>
+        /// Główny wynik - słownik przypisujący lekarza (lub null) do konkretnego dnia.
+        /// ZMIANA: Używa zunifikowanego modelu DoctorProfile zamiast Lekarz.
+        /// </summary>
+        public Dictionary<DateTime, DoctorProfile?> Przypisania { get; set; } = new();
+
+        /// <summary>
+        /// Długość nieprzerwanego ciągu obsadzonych dni od początku miesiąca.
+        /// </summary>
+        public int DlugoscCiaguPoczatkowego { get; set; }
+
+        /// <summary>
+        /// Całkowita liczba dni, w których przydzielono dyżur.
+        /// </summary>
+        public int LiczbaDniObsadzonych => Przypisania.Values.Count(l => l != null);
+
+        public int ZrealizowaneRezerwacje { get; set; }
+        public int ZrealizowaneChce { get; set; }
+        public int ZrealizowaneMoge { get; set; }
+
+        /// <summary>
+        /// Wskaźnik sprawiedliwości: odchylenie standardowe procentowych obciążeń lekarzy względem ich limitów.
+        /// Im niższa wartość, tym bardziej sprawiedliwy grafik.
+        /// </summary>
+        public double WskaznikSprawiedliwosci { get; set; }
+
+        /// <summary>
+        /// Wskaźnik równomierności: średnie odchylenie standardowe odstępów między dyżurami dla poszczególnych lekarzy.
+        /// Im niższa wartość, tym bardziej równomiernie rozłożone dyżury w czasie.
+        /// </summary>
+        public double WskaznikRownomiernosci { get; set; }
+
+        /// <summary>
+        /// Słownik z finalnym obciążeniem każdego z lekarzy (ile dyżurów otrzymał).
+        /// Klucz: Symbol (Abbreviation), Wartość: Liczba dyżurów.
+        /// </summary>
+        public Dictionary<string, int> FinalneOblozenieLekarzy { get; set; } = new();
+    }
+}
 ----- END -----
 
 ===== FILE: GrafikoMat.sln (3413 bytes)
