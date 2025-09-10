@@ -1,4 +1,5 @@
-﻿using GrafikoMat.Services;
+﻿using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -11,10 +12,16 @@ namespace GrafikoMat.Views
     {
         public ManagementViewModel ViewModel { get; }
 
-        public ManagementView(DataService dataService, DispatcherQueue dispatcher)
+        // ZMIANA: Nowy, rozbudowany konstruktor
+        public ManagementView(
+            IDoctorRepository doctorRepo,
+            IUnitRepository unitRepo,
+            IAssignmentRepository assignmentRepo,
+            SupabaseService supabaseService,
+            DispatcherQueue dispatcher)
         {
             this.InitializeComponent();
-            ViewModel = new ManagementViewModel(dataService, dispatcher);
+            ViewModel = new ManagementViewModel(doctorRepo, unitRepo, assignmentRepo, supabaseService, dispatcher);
             this.Loaded += ManagementView_Loaded;
         }
 

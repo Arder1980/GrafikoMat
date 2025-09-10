@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories;
+using GrafikoMat.Core.Repositories; // NOWY USING
 using GrafikoMat.Models;
 using GrafikoMat.Services;
 using System;
@@ -21,8 +21,10 @@ namespace GrafikoMat.ViewModels
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-        private DataService? _dataService;
-        // NOWE: Pole do przechowywania serwisu ustawień
+        // ZMIANA: Usunięcie _dataService na rzecz repozytoriów
+        private IDoctorRepository? _doctorRepository;
+        private IUnitRepository? _unitRepository;
+        private IAssignmentRepository? _assignmentRepository;
         private SettingsService? _settingsService;
 
         private readonly List<DoctorProfile> _allDoctors = new();
@@ -78,16 +80,17 @@ namespace GrafikoMat.ViewModels
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
 
-            // NOWY KROK: Subskrybujemy zdarzenie, aby wykryć zmianę jednostki i zapisać ją.
             this.PropertyChanged += OnMainViewModelPropertyChanged;
         }
 
-        public void SetDataService(DataService? dataService)
+        // ZMIANA: Nowa metoda do wstrzykiwania repozytoriów
+        public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
         {
-            _dataService = dataService;
+            _doctorRepository = doctorRepo;
+            _unitRepository = unitRepo;
+            _assignmentRepository = assignmentRepo;
         }
 
-        // NOWA METODA: Do wstrzykiwania SettingsService
         public void SetSettingsService(SettingsService settingsService)
         {
             _settingsService = settingsService;
@@ -95,14 +98,14 @@ namespace GrafikoMat.ViewModels
 
         public async Task LoadUserAndUnitDataAsync()
         {
-            if (_dataService == null || _settingsService == null) return;
+            if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null || _settingsService == null) return;
 
             _allDoctors.Clear();
             _allAssignments.Clear();
-            _allDoctors.AddRange(await _dataService.GetAllDoctorsAsync());
-            _allAssignments.AddRange(await _dataService.GetAllAssignmentsAsync());
+            _allDoctors.AddRange(await _doctorRepository.GetAllAsync());
+            _allAssignments.AddRange(await _assignmentRepository.GetAllAsync());
 
-            var userProfile = await _dataService.GetCurrentDoctorProfileAsync();
+            var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null)
             {
                 return;
@@ -112,10 +115,9 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
 
             _userUnits.Clear();
-
             if (IsCurrentUserAdmin)
             {
-                var allUnits = await _dataService.GetAllUnitsAsync();
+                var allUnits = await _unitRepository.GetAllAsync();
                 allUnits.Sort();
                 _userUnits.AddRange(allUnits);
             }
@@ -124,7 +126,7 @@ namespace GrafikoMat.ViewModels
                 var assignments = _allAssignments.Where(a => a.DoctorId == userProfile.Id).ToList();
                 if (assignments.Any())
                 {
-                    var allUnits = await _dataService.GetAllUnitsAsync();
+                    var allUnits = await _unitRepository.GetAllAsync();
                     var assignedUnitIds = assignments.Select(a => a.UnitId).ToHashSet();
                     var filteredUnits = allUnits.Where(u => assignedUnitIds.Contains(u.Id)).ToList();
                     filteredUnits.Sort();
@@ -132,27 +134,20 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
-            // ZMIANA: Dodajemy logikę odczytu i przywracania ostatniej jednostki
             var settings = await _settingsService.LoadSettingsAsync();
             var lastUnitId = settings.LastActiveUnitId;
 
-            int targetIndex = 0; // Domyślnie pierwsza jednostka z listy
+            int targetIndex = 0;
 
             if (lastUnitId.HasValue)
             {
-                // Szukamy, czy zapisana jednostka jest dostępna dla bieżącego użytkownika
                 int foundIndex = _userUnits.FindIndex(u => u.Id == lastUnitId.Value);
-
-                // Jeśli znaleziono (indeks >= 0), to ustawiamy ją jako docelową
                 if (foundIndex != -1)
                 {
                     targetIndex = foundIndex;
                 }
-                // Jeśli nie znaleziono, `targetIndex` pozostaje 0, co automatycznie
-                // obsługuje przypadek, gdy nowy użytkownik nie ma dostępu do starej jednostki.
             }
 
-            // Ustawiamy aktywny indeks, obsługując przypadek, gdy użytkownik nie ma żadnych jednostek
             _activeUnitIndex = _userUnits.Any() ? targetIndex : -1;
 
             OnPropertyChanged(nameof(ActiveUnit));
@@ -187,7 +182,6 @@ namespace GrafikoMat.ViewModels
         public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();
-
             if (ActiveUnit != null)
             {
                 var doctorIdsForUnit = _allAssignments
@@ -199,7 +193,6 @@ namespace GrafikoMat.ViewModels
                 {
                     var doctorsForUnit = _allDoctors
                         .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived);
-
                     foreach (var doctor in doctorsForUnit.OrderBy(d => d.LastName))
                     {
                         var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
@@ -226,7 +219,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // NOWE METODY: Logika zapisu ustawień
         private void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(ActiveUnit))
@@ -238,12 +230,9 @@ namespace GrafikoMat.ViewModels
         private async void SaveCurrentUnitAsync()
         {
             if (_settingsService == null) return;
-
             var settings = await _settingsService.LoadSettingsAsync();
 
-            // Używamy `ActiveUnit?.Id`, co da `null` jeśli żadna jednostka nie jest aktywna
             var newSettings = settings with { LastActiveUnitId = ActiveUnit?.Id };
-
             await _settingsService.SaveSettingsAsync(newSettings);
         }
 

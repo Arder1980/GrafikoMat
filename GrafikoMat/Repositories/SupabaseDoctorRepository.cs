@@ -1,40 +1,107 @@
 ﻿using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Declarations;
 using GrafikoMat.Core.Repositories;
-using Supabase; // ZMIANA: Dodajemy dyrektywę using
+using Supabase;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using Windows.Media.Protection.PlayReady;
+using SbClient = Supabase.Client; // <-- NOWY ALIAS
 
 namespace GrafikoMat.Repositories
 {
     public class SupabaseDoctorRepository : IDoctorRepository
     {
-        private readonly Client _client;
-        public SupabaseDoctorRepository(Client client)
+        private readonly SbClient _supabase; // <-- ZMIANA TYPU
+
+        public SupabaseDoctorRepository(SbClient supabaseClient) // <-- ZMIANA TYPU
         {
-            _client = client;
+            _supabase = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
         }
 
-        public async Task<IEnumerable<DoctorProfile>> GetAllAsync()
+        public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
-            var response = await _client.From<DoctorProfile>().Get();
-            return response.Models;
+            if (_supabase.Auth.CurrentUser?.Id is null) return null;
+            var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
+            var response = await _supabase.From<DoctorProfile>()
+                .Where(d => d.Id == userId)
+                .Single();
+            return response;
         }
 
-        public async Task AddAsync(DoctorProfile doctor)
+        public async Task<List<DoctorProfile>> GetAllAsync()
         {
-            await _client.From<DoctorProfile>().Insert(doctor);
+            var response = await _supabase.From<DoctorProfile>().Get();
+            return response.Models ?? new List<DoctorProfile>();
         }
 
-        public Task<DoctorProfile?> GetByIdAsync(Guid id)
+        public async Task SaveAsync(DoctorProfile profile, IEnumerable<UnitDoctorAssignment> desiredAssignments)
         {
-            throw new NotImplementedException();
+            // Logika dla zapisu profilu (nowy lub istniejący)
+            if (profile.Id == Guid.Empty)
+            {
+                throw new NotImplementedException("Tworzenie nowych użytkowników wymaga oddzielnej logiki SignUp, która znajduje się w ViewModelu.");
+            }
+            else
+            {
+                // Aktualizacja istniejącego profilu
+                var doctorDataForUpdate = new DoctorForUpdate
+                {
+                    Id = profile.Id,
+                    FirstName = profile.FirstName,
+                    LastName = profile.LastName,
+                    Abbreviation = profile.Abbreviation,
+                    Email = profile.Email,
+                    IsAdmin = profile.IsAdmin,
+                    IsArchived = profile.IsArchived,
+                    RequiresPasswordChange = profile.RequiresPasswordChange
+                };
+                await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
+            }
+
+            // Logika dla zapisu przypisań
+            var assignmentRepo = new SupabaseAssignmentRepository(_supabase);
+            var currentAssignments = await assignmentRepo.GetForDoctorAsync(profile.Id);
+
+            var assignmentsToAdd = desiredAssignments
+                .Where(d => !currentAssignments.Any(c => c.UnitId == d.UnitId))
+                .ToList();
+
+            if (assignmentsToAdd.Any())
+                await _supabase.From<UnitDoctorAssignment>().Insert(assignmentsToAdd);
+
+            var assignmentsToRemove = currentAssignments
+                .Where(c => !desiredAssignments.Any(d => d.UnitId == c.UnitId));
+
+            foreach (var toRemove in assignmentsToRemove)
+                await _supabase.From<UnitDoctorAssignment>().Delete(toRemove);
         }
 
-        public Task UpdateAsync(DoctorProfile doctor)
+        public async Task SetArchiveStatusAsync(Guid doctorId, bool isArchived)
         {
-            throw new NotImplementedException();
+            var partialUpdate = new DoctorProfile { Id = doctorId, IsArchived = isArchived };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
+
+        public async Task ResetPasswordAsync(Guid doctorId, string newPassword)
+        {
+            await _supabase.Rpc("admin_reset_user_password", new
+            {
+                user_id = doctorId,
+                password_to_set = newPassword
+            });
+        }
+
+        public async Task SetPasswordChangeFlagAsync(Guid doctorId, bool requiresChange)
+        {
+            var partialUpdate = new DoctorProfile { Id = doctorId, RequiresPasswordChange = requiresChange };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+        }
+
+        public async Task ClearPasswordChangeFlagAsync(Guid doctorId)
+        {
+            var partialUpdate = new DoctorProfile { Id = doctorId, RequiresPasswordChange = false };
+            await _supabase.From<DoctorProfile>().Update(partialUpdate);
         }
     }
 }

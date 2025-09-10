@@ -1,6 +1,8 @@
 ﻿using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Repositories; // NOWY USING
 using GrafikoMat.Models;
+using GrafikoMat.Repositories; // NOWY USING
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views;
@@ -52,8 +54,13 @@ namespace GrafikoMat
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
-        private DataService? _dataService;
         private AppSettings? _appSettings;
+
+        // ZMIANA: Usunięcie DataService na rzecz repozytoriów
+        private IDoctorRepository? _doctorRepository;
+        private IUnitRepository? _unitRepository;
+        private IAssignmentRepository? _assignmentRepository;
+
         public MainWindow()
         {
             _settingsService = new SettingsService();
@@ -106,11 +113,12 @@ namespace GrafikoMat
                 }
             }
 
-            if (_dataService != null && _supabaseService.IsAuthenticated)
+            // ZMIANA: Sprawdzamy repozytorium zamiast DataService
+            if (_doctorRepository != null && _supabaseService.IsAuthenticated)
             {
                 try
                 {
-                    var profile = await _dataService.GetCurrentDoctorProfileAsync();
+                    var profile = await _doctorRepository.GetCurrentDoctorProfileAsync();
                     if (profile != null && profile.RequiresPasswordChange)
                     {
                         bool passwordChanged = await ShowForcePasswordChangeAsync();
@@ -120,7 +128,7 @@ namespace GrafikoMat
                             this.Close();
                             return;
                         }
-                        await _dataService.ClearPasswordChangeFlagAsync(profile.Id);
+                        await _doctorRepository.ClearPasswordChangeFlagAsync(profile.Id);
                     }
                 }
                 catch (Exception ex)
@@ -133,7 +141,6 @@ namespace GrafikoMat
             }
 
             await LoadDataAndShowDashboardAsync();
-
             InitialLoadingOverlay.Visibility = Visibility.Collapsed;
             await RunEntranceAnimationAsync();
         }
@@ -143,7 +150,6 @@ namespace GrafikoMat
             var sb = new Storyboard();
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             var duration = new Duration(TimeSpan.FromMilliseconds(400));
-
             void AddAnimation(UIElement target, string property, double to, double beginTimeMs)
             {
                 var anim = new DoubleAnimation
@@ -166,7 +172,6 @@ namespace GrafikoMat
 
             AddAnimation(MainContentPanel, "Opacity", 1, 200);
             AddAnimation(MainContentPanel, "(UIElement.RenderTransform).(TranslateTransform.Y)", 0, 200);
-
             AddAnimation(ActionButtonsPanel, "Opacity", 1, 250);
 
             AddAnimation(BottomStatusBar, "Opacity", 1, 300);
@@ -184,15 +189,26 @@ namespace GrafikoMat
             if (_appSettings != null && !string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) && !string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
-                _dataService = new DataService(_supabaseService);
                 await _supabaseService.RestoreSessionIfAnyAsync();
+
+                // ZMIANA: Inicjalizujemy repozytoria zamiast DataService
+                if (_supabaseService.Client != null)
+                {
+                    _doctorRepository = new SupabaseDoctorRepository(_supabaseService.Client);
+                    _unitRepository = new SupabaseUnitRepository(_supabaseService.Client);
+                    _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
+                }
             }
             else
             {
                 _supabaseService.Initialize(string.Empty, string.Empty);
-                _dataService = null;
+                _doctorRepository = null;
+                _unitRepository = null;
+                _assignmentRepository = null;
             }
-            ViewModel.SetDataService(_dataService);
+
+            // ZMIANA: Przekazujemy repozytoria do MainViewModel
+            ViewModel.SetRepositories(_doctorRepository, _unitRepository, _assignmentRepository);
         }
 
         private async void RefreshDataServicesAsync()
@@ -283,7 +299,7 @@ namespace GrafikoMat
 
         private async Task LoadDataAndShowDashboardAsync()
         {
-            if (_dataService != null)
+            if (_doctorRepository != null) // ZMIANA: Sprawdzamy repozytorium
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
                 ViewModel.LoadDataForActiveUnit();
@@ -297,10 +313,11 @@ namespace GrafikoMat
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
-
             _settingsView = new SettingsView();
             _settingsView.ReloadRequired += RefreshDataServicesAsync;
-            _settingsView.Initialize(_dataService, _settingsService, _appSettings);
+
+            // ZMIANA: Przekazujemy repozytorium
+            _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
 
             if (!forceRefresh)
             {
@@ -317,13 +334,16 @@ namespace GrafikoMat
         private async void SwitchToManagement()
         {
             if (_isClosing) return;
-            if (_dataService == null)
+
+            // ZMIANA: Sprawdzamy repozytoria
+            if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null)
             {
                 await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację połączenia w ustawieniach.");
                 return;
             }
 
-            _managementView = new ManagementView(_dataService, this.DispatcherQueue);
+            // ZMIANA: Przekazujemy repozytoria
+            _managementView = new ManagementView(_doctorRepository, _unitRepository, _assignmentRepository, _supabaseService, this.DispatcherQueue);
             await AnimateToAsync(_managementView, forward: true);
             BuildActionsForManage();
         }
@@ -721,10 +741,13 @@ namespace GrafikoMat
         {
             try { await _supabaseService.SignOutAsync(); } catch { }
 
+            // ZMIANA: Zerujemy repozytoria
             try
             {
-                _dataService = null;
-                ViewModel.SetDataService(null);
+                _doctorRepository = null;
+                _unitRepository = null;
+                _assignmentRepository = null;
+                ViewModel.SetRepositories(null, null, null);
             }
             catch { }
 

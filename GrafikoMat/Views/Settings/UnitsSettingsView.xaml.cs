@@ -1,4 +1,5 @@
 ﻿using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Repositories; // NOWY USING
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -23,7 +24,8 @@ namespace GrafikoMat.Views.Settings
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
-        private DataService? _dataService;
+        // ZMIANA: Usunięcie _dataService na rzecz repozytorium
+        private IUnitRepository? _unitRepository;
 
         private bool _isLoading;
         public bool IsLoading
@@ -71,9 +73,10 @@ namespace GrafikoMat.Views.Settings
             this.InitializeComponent();
         }
 
-        public async void Initialize(DataService service)
+        // ZMIANA: Nowa metoda Initialize
+        public async void Initialize(IUnitRepository repository)
         {
-            _dataService = service;
+            _unitRepository = repository;
             IsLoading = true;
             try
             {
@@ -113,10 +116,9 @@ namespace GrafikoMat.Views.Settings
 
         private async Task LoadUnitsAsync()
         {
-            if (_dataService == null) return;
-            // Usunięto zarządzanie IsLoading z tej metody
+            if (_unitRepository == null) return;
             _masterUnitList.Clear();
-            var unitsFromDb = await _dataService.GetAllUnitsAsync();
+            var unitsFromDb = await _unitRepository.GetAllAsync();
             _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
 
             FilterUnits();
@@ -175,7 +177,7 @@ namespace GrafikoMat.Views.Settings
 
         private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
-            if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
+            if (UnitsListView.SelectedItem is Unit selectedUnit && _unitRepository != null)
             {
                 var dialog = new ContentDialog
                 {
@@ -192,7 +194,7 @@ namespace GrafikoMat.Views.Settings
                     IsLoading = true;
                     try
                     {
-                        await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, true);
+                        await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, true);
                         await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została zarchiwizowana.");
                         await LoadUnitsAsync();
                     }
@@ -210,12 +212,12 @@ namespace GrafikoMat.Views.Settings
 
         private async void RestoreButton_Click(object sender, RoutedEventArgs e)
         {
-            if (UnitsListView.SelectedItem is Unit selectedUnit && _dataService != null)
+            if (UnitsListView.SelectedItem is Unit selectedUnit && _unitRepository != null)
             {
                 IsLoading = true;
                 try
                 {
-                    await _dataService.SetUnitArchiveStatusAsync(selectedUnit.Id, false);
+                    await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, false);
                     await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została przywrócona.");
                     await LoadUnitsAsync();
                 }
@@ -232,7 +234,7 @@ namespace GrafikoMat.Views.Settings
 
         private async Task ShowUnitDialogAsync(Unit? existingUnit)
         {
-            if (_dataService == null) return;
+            if (_unitRepository == null) return;
             bool isEditMode = existingUnit != null;
             _currentSuggestion = null;
             _isAutocompleteActive = true;
@@ -272,7 +274,7 @@ namespace GrafikoMat.Views.Settings
                 IsLoading = true;
                 try
                 {
-                    await _dataService.SaveUnitAsync(unitToSave);
+                    await _unitRepository.SaveAsync(unitToSave);
                     var successMessage = isEditMode
                         ? "Poprawnie zapisano dane w bazie Supabase."
                         : "Nowa jednostka została pomyślnie dodana.";
@@ -292,7 +294,7 @@ namespace GrafikoMat.Views.Settings
 
         private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _dataService == null)
+            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _unitRepository == null)
             {
                 return;
             }
@@ -307,7 +309,7 @@ namespace GrafikoMat.Views.Settings
                 return;
             }
 
-            var match = await _dataService.GetFirstUnitByExactHospitalNameAsync(hospitalTextBox.Text);
+            var match = await _unitRepository.GetFirstByExactHospitalNameAsync(hospitalTextBox.Text);
             if (match != null)
             {
                 otherBoxes.Item1.Text = match.Name;
@@ -341,7 +343,7 @@ namespace GrafikoMat.Views.Settings
 
         private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (!_isAutocompleteActive || _dataService == null || sender is not TextBox hospitalTextBox) return;
+            if (!_isAutocompleteActive || _unitRepository == null || sender is not TextBox hospitalTextBox) return;
             var userText = hospitalTextBox.Text;
             var selectionStart = hospitalTextBox.SelectionStart;
 
@@ -357,7 +359,7 @@ namespace GrafikoMat.Views.Settings
                 return;
             }
 
-            var match = await _dataService.GetUniqueUnitByHospitalNameStartAsync(userText);
+            var match = await _unitRepository.GetUniqueByHospitalNameStartAsync(userText);
             _currentSuggestion = match;
 
             if (match != null && match.HospitalFullName.Length > userText.Length)

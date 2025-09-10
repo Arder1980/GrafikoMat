@@ -1,4 +1,5 @@
-﻿using GrafikoMat.Services;
+﻿using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Services;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
 using System.Linq;
@@ -7,7 +8,8 @@ namespace GrafikoMat.Views
 {
     public sealed partial class SettingsView : UserControl
     {
-        private DataService? _dataService;
+        // ZMIANA: Zależności
+        private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
         public event System.Action? ReloadRequired;
@@ -23,18 +25,16 @@ namespace GrafikoMat.Views
                 "Wybór silnika",
                 "Wygląd"
             };
-            // Domyślnie nic nie jest zaznaczone
             SettingsMenu.SelectedIndex = -1;
         }
 
-        // ZMIANA: Ta metoda jest teraz bardzo prosta
-        public void Initialize(DataService? dataService, SettingsService settingsService, AppSettings settings)
+        // ZMIANA: Nowa sygnatura metody Initialize
+        public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, AppSettings settings)
         {
-            _dataService = dataService;
+            _unitRepository = unitRepository;
             _settingsService = settingsService;
             _appSettings = settings;
 
-            // Domyślnie zaznaczamy pierwszą pozycję na liście, aby użytkownik od razu widział zawartość
             SettingsMenu.SelectedIndex = 0;
         }
 
@@ -65,10 +65,11 @@ namespace GrafikoMat.Views
                     SettingsDetailContent.Content = connectionView;
                     break;
                 case "Jednostki":
-                    if (_dataService != null)
+                    // ZMIANA: Sprawdzamy i przekazujemy repozytorium
+                    if (_unitRepository != null)
                     {
                         var unitsView = new UnitsSettingsView();
-                        unitsView.Initialize(_dataService);
+                        unitsView.Initialize(_unitRepository);
                         SettingsDetailContent.Content = unitsView;
                     }
                     else
