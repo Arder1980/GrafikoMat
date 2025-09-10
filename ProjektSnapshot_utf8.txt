@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-10 00:17:45
+# Data:       2025-09-10 15:58:19
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -3783,7 +3783,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (17972 bytes)
+===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (18847 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -3881,10 +3881,35 @@ namespace GrafikoMat.ViewModels
         }
 
         private bool _isLoading;
-        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set
+            {
+                if (SetProperty(ref _isLoading, value))
+                {
+                    // ZMIANA: Powiadom o zmianie właściwości zależnej
+                    OnPropertyChanged(nameof(ShowProgressRing));
+                }
+            }
+        }
 
         private bool _isStatusMessageOpen;
-        public bool IsStatusMessageOpen { get => _isStatusMessageOpen; set => SetProperty(ref _isStatusMessageOpen, value); }
+        public bool IsStatusMessageOpen
+        {
+            get => _isStatusMessageOpen;
+            set
+            {
+                if (SetProperty(ref _isStatusMessageOpen, value))
+                {
+                    // ZMIANA: Powiadom o zmianie właściwości zależnej
+                    OnPropertyChanged(nameof(ShowProgressRing));
+                }
+            }
+        }
+
+        // ZMIANA: Dodana brakująca właściwość
+        public bool ShowProgressRing => IsLoading && !IsStatusMessageOpen;
 
         private string _statusMessageTitle = string.Empty;
         public string StatusMessageTitle { get => _statusMessageTitle; set => SetProperty(ref _statusMessageTitle, value); }
@@ -3933,14 +3958,13 @@ namespace GrafikoMat.ViewModels
         private async Task EnsureUnitsLoadedAsync()
         {
             if (_allUnits.Count > 0 || _dataService == null) return;
-            _dispatcher?.TryEnqueue(() => IsLoading = true);
             try
             {
                 _allUnits = await _dataService.GetAllUnitsAsync();
             }
-            finally
+            catch (Exception ex)
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                ShowStatusMessage("Błąd krytyczny", $"Nie udało się wczytać listy jednostek: {ex.Message}", InfoBarSeverity.Error);
             }
         }
 
@@ -4033,17 +4057,16 @@ namespace GrafikoMat.ViewModels
                 };
                 var result = await confirmDialog.ShowAsync();
 
-                if (result != ContentDialogResult.Primary)
-                {
-                    return;
-                }
+                if (result != ContentDialogResult.Primary) return;
             }
 
             IsLoading = true;
+            string successMessage = string.Empty;
             try
             {
                 var isNew = EditorViewModel.IsNewDoctor;
                 var savedProfileId = EditorViewModel.Profile.Id;
+
                 await _dataService.SaveDoctorAsync(EditorViewModel);
                 await LoadInitialDataAsync();
 
@@ -4051,16 +4074,18 @@ namespace GrafikoMat.ViewModels
                 {
                     SelectedDoctor = _allDoctorsMasterList.FirstOrDefault(d => d.Id == savedProfileId);
                 });
-                var successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
-                await ShowTemporarySuccessMessage("Sukces!", successMessage);
+
+                successMessage = isNew ? "Nowy dyżurny został pomyślnie dodany." : "Poprawnie zapisano dane w bazie Supabase.";
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd zapisu", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (!string.IsNullOrEmpty(successMessage))
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                await ShowTemporarySuccessMessage("Sukces!", successMessage);
             }
         }
 
@@ -4079,20 +4104,24 @@ namespace GrafikoMat.ViewModels
             if (result != ContentDialogResult.Primary) return;
 
             IsLoading = true;
+            string archivedDoctorName = SelectedDoctor.FullName;
+            bool success = false;
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, true);
-                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został zarchiwizowany.");
-                SelectedDoctor = null;
                 await LoadInitialDataAsync();
+                SelectedDoctor = null;
+                success = true;
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd", $"Wystąpił błąd podczas archiwizacji: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (success)
             {
-                IsLoading = false;
+                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {archivedDoctorName} został zarchiwizowany.");
             }
         }
 
@@ -4100,21 +4129,25 @@ namespace GrafikoMat.ViewModels
         {
             if (SelectedDoctor == null || _dataService == null) return;
             IsLoading = true;
+            string restoredDoctorName = SelectedDoctor.FullName;
+            Guid restoredDoctorId = SelectedDoctor.Id;
+            bool success = false;
             try
             {
                 await _dataService.SetDoctorArchiveStatusAsync(SelectedDoctor.Id, false);
-                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {SelectedDoctor.FullName} został przywrócony.");
-                var restoredDoctorId = SelectedDoctor.Id;
                 await LoadInitialDataAsync();
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
+                success = true;
             }
             catch (Exception ex)
             {
+                IsLoading = false;
                 ShowStatusMessage("Błąd", $"Wystąpił błąd podczas przywracania: {ex.Message}", InfoBarSeverity.Error);
             }
-            finally
+
+            if (success)
             {
-                IsLoading = false;
+                await ShowTemporarySuccessMessage("Sukces", $"Profil lekarza {restoredDoctorName} został przywrócony.");
             }
         }
 
@@ -4145,11 +4178,8 @@ namespace GrafikoMat.ViewModels
                 }
                 catch (Exception ex)
                 {
+                    IsLoading = false;
                     ShowStatusMessage("Błąd resetowania hasła", $"Wystąpił błąd: {ex.Message}", InfoBarSeverity.Error);
-                }
-                finally
-                {
-                    _dispatcher?.TryEnqueue(() => IsLoading = false);
                 }
             }
         }
@@ -4196,7 +4226,7 @@ namespace GrafikoMat.ViewModels
             }
             finally
             {
-                _dispatcher?.TryEnqueue(() => IsLoading = false);
+                IsLoading = false;
             }
         }
 
@@ -4217,6 +4247,7 @@ namespace GrafikoMat.ViewModels
                 {
                     IsStatusMessageOpen = false;
                 }
+                IsLoading = false;
             });
         }
 
@@ -5039,7 +5070,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ManagementView.xaml (12324 bytes)
+===== FILE: GrafikoMat\Views\ManagementView.xaml (12984 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.ManagementView"
@@ -5097,10 +5128,6 @@ namespace GrafikoMat.Views
 
         <Grid Grid.Column="1" Padding="24">
             <Grid>
-                <Grid Background="#88FFFFFF" Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
-                    <ProgressRing IsActive="True" Width="56" Height="56" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Grid>
-
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
                     <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
                     <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0" Style="{ThemeResource BodyStrongTextBlockStyle}"/>
@@ -5194,7 +5221,25 @@ namespace GrafikoMat.Views
                     <Button Grid.Row="2" Content="Zapisz zmiany" Command="{x:Bind ViewModel.SaveDoctorCommand}" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,24,0,0"/>
                 </Grid>
 
-                <controls:InfoBar x:Name="StatusInfoBar" Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}" Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}" Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center" IsClosable="False" Canvas.ZIndex="99"/>
+                <Grid Background="#88FFFFFF" 
+                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
+                      Canvas.ZIndex="98">
+                    <ProgressRing IsActive="{x:Bind ViewModel.ShowProgressRing, Mode=OneWay}" 
+                                  Visibility="{x:Bind ViewModel.ShowProgressRing, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
+                                  Width="56" Height="56" 
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Grid>
+
+                <controls:InfoBar x:Name="StatusInfoBar" 
+                                  Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}" 
+                                  Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" 
+                                  IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}" 
+                                  Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}" 
+                                  CornerRadius="4" 
+                                  HorizontalAlignment="Center" 
+                                  VerticalAlignment="Center" 
+                                  IsClosable="False" 
+                                  Canvas.ZIndex="99"/>
             </Grid>
         </Grid>
     </Grid>
