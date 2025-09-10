@@ -103,7 +103,6 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
-
         public async Task InitializeAsync()
         {
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
@@ -195,6 +194,28 @@ namespace GrafikoMat.ViewModels
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
 
+            // Sprawdzanie, czy są nowe, niezapisane przypisania
+            var newAssignments = EditorViewModel.Assignments.Where(a => a.IsAssigned && !a.IsPersisted).ToList();
+            if (newAssignments.Any())
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "Potwierdź przypisanie do jednostki",
+                    Content = "Przypisanie dyżurnego do jednostki jest operacją nieodwracalną z poziomu interfejsu użytkownika.\nCzy na pewno chcesz kontynuować?",
+                    PrimaryButtonText = "Tak",
+                    CloseButtonText = "Nie",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = App.MainRoot.Content.XamlRoot
+                };
+                var result = await dialog.ShowAsync();
+
+                if (result != ContentDialogResult.Primary)
+                {
+                    ResetNewUnitAssignments();
+                    return;
+                }
+            }
+
             var isNew = EditorViewModel.IsNewDoctor;
             var profile = EditorViewModel.Profile;
             var password = EditorViewModel.Password;
@@ -214,7 +235,7 @@ namespace GrafikoMat.ViewModels
                         profile.Id = Guid.Parse(userId);
                         profile.RequiresPasswordChange = true;
                         await _supabaseService.Client.From<DoctorProfile>().Insert(profile);
-                        savedProfileId = profile.Id; // Aktualizujemy ID do weryfikacji
+                        savedProfileId = profile.Id;
                     }
 
                     var desiredAssignments = EditorViewModel.Assignments
@@ -232,17 +253,30 @@ namespace GrafikoMat.ViewModels
                 errorMessageTitle: "Błąd zapisu"
             );
 
-            // Po całej operacji (włącznie z komunikatem) odśwież widok
             _dispatcher?.TryEnqueue(() =>
             {
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == (isNew ? savedProfileId : profile.Id));
             });
         }
 
+        // NOWA METODA
+        private void ResetNewUnitAssignments()
+        {
+            if (EditorViewModel?.Assignments != null)
+            {
+                foreach (var assignment in EditorViewModel.Assignments)
+                {
+                    if (!assignment.IsPersisted)
+                    {
+                        assignment.IsAssigned = false;
+                    }
+                }
+            }
+        }
+
         private async Task ArchiveDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-
             var dialog = new ContentDialog
             {
                 Title = "Potwierdź archiwizację",
@@ -257,14 +291,14 @@ namespace GrafikoMat.ViewModels
 
             var doctorToArchiveId = SelectedDoctor.Id;
             var doctorToArchiveName = SelectedDoctor.DisplayName;
-
             await _orchestrator.PerformActionAsync(
                 viewId: _viewId,
                 actionAsync: async () => await _doctorRepository.SetArchiveStatusAsync(doctorToArchiveId, true),
                 verificationAsync: async () =>
                 {
                     await LoadInitialDataAsync();
-                    return _allDoctorsMasterList.FirstOrDefault(d => d.Id == doctorToArchiveId)?.IsArchived ?? false;
+                    var reloaded = _allDoctorsMasterList.FirstOrDefault(d => d.Id == doctorToArchiveId);
+                    return reloaded?.IsArchived ?? true;
                 },
                 successMessage: $"Profil lekarza {doctorToArchiveName} został zarchiwizowany.",
                 errorMessageTitle: "Błąd archiwizacji"
@@ -289,15 +323,12 @@ namespace GrafikoMat.ViewModels
                 successMessage: $"Profil lekarza {restoredDoctorName} został przywrócony.",
                 errorMessageTitle: "Błąd przywracania"
             );
-
-            // Po operacji ponownie zaznacz przywróconego lekarza
             SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
         }
 
         private async Task ResetPasswordAsync()
         {
             if (SelectedDoctor == null || EditorViewModel == null) return;
-
             var dialog = new ContentDialog
             {
                 Title = "Potwierdź resetowanie hasła",
@@ -312,7 +343,6 @@ namespace GrafikoMat.ViewModels
 
             var newPassword = PasswordGenerator.GenerateInitialPassword();
             var doctorToResetId = SelectedDoctor.Id;
-
             await _orchestrator.PerformActionAsync(
                 viewId: _viewId,
                 actionAsync: async () =>
@@ -322,7 +352,6 @@ namespace GrafikoMat.ViewModels
                 },
                 verificationAsync: async () =>
                 {
-                    // Weryfikacja flagi w bazie danych
                     await LoadInitialDataAsync();
                     return _allDoctorsMasterList.FirstOrDefault(d => d.Id == doctorToResetId)?.RequiresPasswordChange ?? false;
                 },
@@ -346,14 +375,12 @@ namespace GrafikoMat.ViewModels
             await EnsureUnitsLoadedAsync();
             if (!_allUnits.Any())
             {
-                // Błąd zostałby już obsłużony przez AddNewDoctorAsync, ale na wszelki wypadek
                 return;
             }
 
             var existingAbbreviations = _allDoctorsMasterList
                 .Where(d => d.Id != doctorProfile.Id)
                 .Select(d => d.Abbreviation);
-
             var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
 
             EditorViewModel = new DoctorEditorViewModel(

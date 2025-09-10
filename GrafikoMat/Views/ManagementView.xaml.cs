@@ -6,7 +6,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
-
 namespace GrafikoMat.Views
 {
     public sealed partial class ManagementView : UserControl
@@ -28,7 +27,6 @@ namespace GrafikoMat.Views
         private async void ManagementView_Loaded(object sender, RoutedEventArgs e)
         {
             this.Loaded -= ManagementView_Loaded;
-            // Przekazujemy ID kontenera do ViewModelu
             ViewModel.SetViewId(ActionContainer.GetViewId());
             await ViewModel.InitializeAsync();
         }
