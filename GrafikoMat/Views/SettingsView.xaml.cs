@@ -1,7 +1,9 @@
-﻿using GrafikoMat.Core.Repositories;
+﻿using GrafikoMat.Controls;
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
+using System;
 using System.Linq;
 
 namespace GrafikoMat.Views
@@ -11,7 +13,7 @@ namespace GrafikoMat.Views
         private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
-        public event System.Action? ReloadRequired;
+        public event Action? ReloadRequired;
 
         public SettingsView()
         {
@@ -50,8 +52,11 @@ namespace GrafikoMat.Views
                 return;
             }
 
-            // KLUCZOWA ZMIANA: Zawsze pobieramy najnowszą wersję ustawień z serwisu
             _appSettings = await _settingsService.LoadSettingsAsync();
+
+            // Domyślnie ładujemy widok bezpośrednio.
+            // Dla widoków z zapisem opakujemy je w ActionContainer.
+            object? viewToLoad = null;
 
             switch (selectedItem)
             {
@@ -59,31 +64,40 @@ namespace GrafikoMat.Views
                     var connectionView = new ConnectionSettingsView();
                     connectionView.Initialize(_settingsService, _appSettings);
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
-                    SettingsDetailContent.Content = connectionView;
+                    viewToLoad = connectionView;
                     break;
                 case "Jednostki":
                     if (_unitRepository != null)
                     {
-                        SettingsDetailContent.Content = new UnitsSettingsView(_unitRepository);
+                        viewToLoad = new UnitsSettingsView(_unitRepository);
                     }
                     else
                     {
-                        SettingsDetailContent.Content = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
+                        viewToLoad = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
                     }
                     break;
                 case "Priorytety":
-                    SettingsDetailContent.Content = new PrioritiesSettingsView();
+                    viewToLoad = new PrioritiesSettingsView();
                     break;
                 case "Wybór silnika":
-                    SettingsDetailContent.Content = new EngineSettingsView(_settingsService, _appSettings);
+                    if (_appSettings != null)
+                    {
+                        var engineView = new EngineSettingsView(_settingsService, _appSettings);
+
+                        // Tworzymy kontener i umieszczamy w nim nasz widok
+                        var container = new ActionContainer { Content = engineView };
+
+                        // Przekazujemy ID kontenera do ViewModelu, aby wiedział, do kogo wysyłać komunikaty
+                        engineView.ViewModel.SetViewId(container.GetViewId());
+                        viewToLoad = container;
+                    }
                     break;
                 case "Wygląd":
-                    SettingsDetailContent.Content = new AppearanceSettingsView();
-                    break;
-                default:
-                    SettingsDetailContent.Content = null;
+                    viewToLoad = new AppearanceSettingsView();
                     break;
             }
+
+            SettingsDetailContent.Content = viewToLoad;
         }
     }
 }

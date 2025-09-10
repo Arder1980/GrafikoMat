@@ -4,21 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:common="using:GrafikoMat.Common"
-    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:GrafikoMat.Controls"
     mc:Ignorable="d">
 
-    <UserControl.Resources>
-        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-    </UserControl.Resources>
-
-    <Grid>
-        <StackPanel x:Name="MainPanel" Spacing="20">
+    <controls:ActionContainer x:Name="ActionContainer">
+        <StackPanel Spacing="20">
             <TextBlock Text="Połączenie z Bazą Danych" FontSize="20" FontWeight="SemiBold"/>
 
             <TextBlock TextWrapping="Wrap">
-                Wprowadź tutaj dane połączeniowe do Twojego projektu w Supabase. 
-                Te ustawienia są globalne dla całej aplikacji.
+                Wprowadź tutaj dane połączeniowe do Twojego projektu w Supabase. Te ustawienia są globalne dla całej aplikacji.
             </TextBlock>
 
             <TextBox x:Name="UrlTextBox" Header="Supabase URL"/>
@@ -34,24 +28,5 @@
                         Click="SaveButton_Click"/>
             </StackPanel>
         </StackPanel>
-
-        <Grid Background="#88FFFFFF"
-              Visibility="{x:Bind IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <ProgressRing IsActive="True" Width="48" Height="48"/>
-        </Grid>
-
-        <controls:InfoBar
-            Title="{x:Bind StatusMessageTitle, Mode=OneWay}"
-            Message="{x:Bind StatusMessage, Mode=OneWay}"
-            IsOpen="{x:Bind IsStatusMessageOpen, Mode=OneWay}"
-            Severity="{x:Bind StatusMessageSeverity, Mode=OneWay}"
-            CornerRadius="4"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            IsClosable="{x:Bind IsError, Mode=OneWay}"
-            Closed="StatusInfoBar_Closed"
-            Canvas.ZIndex="99"
-            MinWidth="400"
-            MaxWidth="600" />
-    </Grid>
+    </controls:ActionContainer>
 </UserControl>

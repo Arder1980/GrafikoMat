@@ -6,6 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:appcontrols="using:GrafikoMat.Controls"
     xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
 
@@ -17,47 +18,47 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="320"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+    <appcontrols:ActionContainer x:Name="ActionContainer">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <Grid Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
-                <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
-                <AppBarButton Label="Archiwizuj" Command="{x:Bind ViewModel.ArchiveDoctorCommand}" IsEnabled="{x:Bind ViewModel.CanArchive, Mode=OneWay}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xE7B8;"/>
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            </CommandBar>
-            <TextBox Grid.Row="1" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtruj listę..." Margin="8,0,8,8"/>
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <CommandBar Grid.Row="0" DefaultLabelPosition="Right" Background="Transparent">
+                    <AppBarButton Icon="Add" Label="Nowy dyżurny" Command="{x:Bind ViewModel.AddNewDoctorCommand}"/>
+                    <AppBarButton Label="Archiwizuj" Command="{x:Bind ViewModel.ArchiveDoctorCommand}" IsEnabled="{x:Bind ViewModel.CanArchive, Mode=OneWay}">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE7B8;"/>
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton Icon="Undo" Label="Przywróć" Command="{x:Bind ViewModel.RestoreDoctorCommand}" Visibility="{x:Bind ViewModel.CanRestore, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </CommandBar>
+                <TextBox Grid.Row="1" Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="Filtruj listę..." Margin="8,0,8,8"/>
 
-            <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:DoctorListItemViewModel">
-                        <TextBlock Margin="12,10" 
-                                   Style="{ThemeResource BaseTextBlockStyle}" 
-                                   FontWeight="SemiBold" 
-                                   Text="{x:Bind DisplayName}" 
-                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DoctorListItemViewModel">
+                            <TextBlock Margin="12,10" 
+                                       Style="{ThemeResource BaseTextBlockStyle}" 
+                                       FontWeight="SemiBold" 
+                                       Text="{x:Bind DisplayName}" 
+                                       Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
 
-            <CheckBox Grid.Row="3" Content="Pokaż zarchiwizowanych" IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}" Margin="8,8,8,8"/>
-        </Grid>
+                <CheckBox Grid.Row="3" Content="Pokaż zarchiwizowanych" IsChecked="{x:Bind ViewModel.ShowArchived, Mode=TwoWay}" Margin="8,8,8,8"/>
+            </Grid>
 
-        <Grid Grid.Column="1" Padding="24">
-            <Grid>
+            <Grid Grid.Column="1" Padding="24">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
                     <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
                     <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0" Style="{ThemeResource BodyStrongTextBlockStyle}"/>
@@ -150,27 +151,7 @@
 
                     <Button Grid.Row="2" Content="Zapisz zmiany" Command="{x:Bind ViewModel.SaveDoctorCommand}" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,24,0,0"/>
                 </Grid>
-
-                <Grid Background="#88FFFFFF" 
-                      Visibility="{x:Bind ViewModel.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
-                      Canvas.ZIndex="98">
-                    <ProgressRing IsActive="{x:Bind ViewModel.ShowProgressRing, Mode=OneWay}" 
-                                  Visibility="{x:Bind ViewModel.ShowProgressRing, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}"
-                                  Width="56" Height="56" 
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Grid>
-
-                <controls:InfoBar x:Name="StatusInfoBar" 
-                                  Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}" 
-                                   Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" 
-                                  IsOpen="{x:Bind ViewModel.IsStatusMessageOpen, Mode=OneWay}" 
-                                  Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}" 
-                                   CornerRadius="4" 
-                                  HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center" 
-                                  IsClosable="False" 
-                                  Canvas.ZIndex="99"/>
             </Grid>
         </Grid>
-    </Grid>
+    </appcontrols:ActionContainer>
 </UserControl>

@@ -2,7 +2,7 @@
 using GrafikoMat.Common;
 using GrafikoMat.Core.Scheduling.Models;
 using GrafikoMat.Services;
-using Microsoft.UI.Xaml.Controls;
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,7 +12,9 @@ namespace GrafikoMat.ViewModels
     public class EngineSettingsViewModel : ObservableObject
     {
         private readonly SettingsService _settingsService;
+        private readonly IUxActionOrchestrator _orchestrator;
         private AppSettings _appSettings;
+        private Guid _viewId;
 
         public ObservableCollection<EngineOption> EngineOptions { get; } = new();
         public ObservableCollection<EngineComparisonInfo> ComparisonData { get; } = new();
@@ -33,28 +35,21 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private bool _isLoading;
-        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
-
-        private bool _showStatusMessage;
-        public bool ShowStatusMessage { get => _showStatusMessage; set => SetProperty(ref _showStatusMessage, value); }
-
-        public string StatusMessageTitle { get; } = "Sukces";
-        public string StatusMessage { get; } = "Ustawienia zostały zapisane.";
-        public InfoBarSeverity StatusMessageSeverity { get; } = InfoBarSeverity.Success;
-
         public IAsyncRelayCommand SaveCommand { get; }
 
         public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings)
         {
             _settingsService = settingsService;
             _appSettings = appSettings;
+            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
 
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
 
             LoadEngineData();
             LoadInitialSelection();
         }
+
+        public void SetViewId(Guid viewId) => _viewId = viewId;
 
         private void LoadInitialSelection()
         {
@@ -66,23 +61,23 @@ namespace GrafikoMat.ViewModels
         {
             if (_selectedEngine == null) return;
 
-            IsLoading = true;
-            try
-            {
-                // Tworzymy nową, zaktualizowaną wersję obiektu ustawień
-                _appSettings = _appSettings with { SelectedSolver = _selectedEngine.Type };
-                // Zapisujemy ją za pomocą serwisu
-                await _settingsService.SaveSettingsAsync(_appSettings);
-            }
-            finally
-            {
-                IsLoading = false;
-            }
+            var newSettings = _appSettings with { SelectedSolver = _selectedEngine.Type };
 
-            // Pokaż komunikat o sukcesie
-            ShowStatusMessage = true;
-            await Task.Delay(2500); // Komunikat widoczny przez 2.5 sekundy
-            ShowStatusMessage = false;
+            await _orchestrator.PerformActionAsync(
+                viewId: _viewId,
+                actionAsync: async () =>
+                {
+                    await _settingsService.SaveSettingsAsync(newSettings);
+                },
+                verificationAsync: async () =>
+                {
+                    // Wymuszamy ponowne wczytanie z pliku, aby zweryfikować zapis
+                    var saved = await _settingsService.LoadSettingsAsync(forceReload: true);
+                    return saved.SelectedSolver == newSettings.SelectedSolver;
+                },
+                successMessage: "Nowy silnik obliczeniowy został pomyślnie zapisany.",
+                errorMessageTitle: "Błąd zapisu ustawień"
+            );
         }
 
         private void LoadEngineData()

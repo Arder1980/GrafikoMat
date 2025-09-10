@@ -5,12 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
-    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
-
-    <UserControl.Resources>
-        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-    </UserControl.Resources>
 
     <Grid Padding="20">
         <Grid>
@@ -110,24 +105,6 @@
                         Command="{x:Bind ViewModel.SaveCommand}"
                         HorizontalAlignment="Right"/>
             </Grid>
-        </Grid>
-
-        <Grid Background="#88FFFFFF"
-              Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <ProgressRing IsActive="True" Width="48" Height="48"/>
-        </Grid>
-
-        <Grid Background="#88FFFFFF"
-              Visibility="{x:Bind ViewModel.ShowStatusMessage, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <InfoBar Title="{x:Bind ViewModel.StatusMessageTitle, Mode=OneWay}"
-                     Message="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                     IsOpen="True"
-                     Severity="{x:Bind ViewModel.StatusMessageSeverity, Mode=OneWay}"
-                     IsClosable="False"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
-                     MinWidth="340"
-                     MaxWidth="500" />
         </Grid>
     </Grid>
 </UserControl>

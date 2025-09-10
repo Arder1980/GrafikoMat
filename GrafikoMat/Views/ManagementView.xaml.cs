@@ -1,4 +1,5 @@
-﻿using GrafikoMat.Core.Repositories; // NOWY USING
+﻿using GrafikoMat.Controls;
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Dispatching;
@@ -12,7 +13,6 @@ namespace GrafikoMat.Views
     {
         public ManagementViewModel ViewModel { get; }
 
-        // ZMIANA: Nowy, rozbudowany konstruktor
         public ManagementView(
             IDoctorRepository doctorRepo,
             IUnitRepository unitRepo,
@@ -28,15 +28,9 @@ namespace GrafikoMat.Views
         private async void ManagementView_Loaded(object sender, RoutedEventArgs e)
         {
             this.Loaded -= ManagementView_Loaded;
-            ViewModel.IsLoading = true;
-            try
-            {
-                await ViewModel.InitializeAsync();
-            }
-            finally
-            {
-                ViewModel.IsLoading = false;
-            }
+            // Przekazujemy ID kontenera do ViewModelu
+            ViewModel.SetViewId(ActionContainer.GetViewId());
+            await ViewModel.InitializeAsync();
         }
 
         private void CopyPassword_Click(object sender, RoutedEventArgs e)

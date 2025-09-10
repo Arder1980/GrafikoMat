@@ -1,11 +1,11 @@
-﻿using Microsoft.UI.Xaml;
+﻿using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Services;
+using Microsoft.UI.Xaml;
 
 namespace GrafikoMat
 {
     public partial class App : Application
     {
-        // ZMIANA: Zamiast generycznego 'Window', tworzymy właściwość
-        // o konkretnym typie 'MainWindow', aby uniknąć rzutowania.
         public static MainWindow MainRoot { get; private set; }
 
         public App()
@@ -15,7 +15,13 @@ namespace GrafikoMat
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            // Używamy naszej nowej, silnie typowanej właściwości.
+            // ----- POCZĄTEK NOWEGO KODU -----
+            // Tworzymy i rejestrujemy orkiestratora, aby był dostępny w całej aplikacji.
+            // Będzie on używał domyślnej instancji Messengera z CommunityToolkit.
+            var orchestrator = new UxActionOrchestrator(WeakReferenceMessenger.Default);
+            ServiceProvider.Register<IUxActionOrchestrator>(orchestrator);
+            // ------ KONIEC NOWEGO KODU ------
+
             MainRoot = new GrafikoMat.MainWindow();
             MainRoot.Activate();
         }

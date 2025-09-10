@@ -7,39 +7,31 @@ using Windows.Storage;
 
 namespace GrafikoMat.Services
 {
-    /// <summary>
-    /// Przechowuje globalne ustawienia aplikacji.
-    /// </summary>
     public record AppSettings
     {
-        // Dane połączeniowe do jedynej, centralnej bazy danych
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseAnonKey { get; init; } = string.Empty;
-
-        // NOWA WŁAŚCIWOŚĆ: Przechowuje wybrany przez użytkownika silnik
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
-
-        // Pozostałe, globalne ustawienia aplikacji
-        public string Theme { get; init; } = "Light"; // "Light", "Dark", "System"
+        public string Theme { get; init; } = "Light";
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
         public Guid? LastActiveUnitId { get; init; }
     }
 
     public record WindowSize(int Width, int Height);
 
-    /// <summary>
-    /// Serwis odpowiedzialny za wczytywanie i zapisywanie pliku settings.json.
-    /// </summary>
     public sealed class SettingsService
     {
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
 
-        public async Task<AppSettings> LoadSettingsAsync()
+        public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
-            if (_currentSettings != null)
+            if (_currentSettings != null && !forceReload)
+            {
                 return _currentSettings;
+            }
+
             try
             {
                 if (File.Exists(_settingsPath))

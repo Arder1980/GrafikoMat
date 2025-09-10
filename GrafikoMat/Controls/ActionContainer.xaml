@@ -1,0 +1,21 @@
+﻿<UserControl
+    x:Class="GrafikoMat.Controls.ActionContainer"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
+
+        <Grid x:Name="OverlayHost" Background="#88FFFFFF" Visibility="Collapsed">
+            <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
+
+            <InfoBar x:Name="ActionInfoBar"
+                     IsOpen="False"
+                     IsClosable="False"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     MinWidth="340"
+                     MaxWidth="500"/>
+        </Grid>
+    </Grid>
+</UserControl>

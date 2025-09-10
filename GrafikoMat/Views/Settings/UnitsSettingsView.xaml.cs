@@ -1,5 +1,6 @@
 ﻿using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
+using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -14,115 +15,46 @@ using Windows.System;
 
 namespace GrafikoMat.Views.Settings
 {
-    public sealed partial class UnitsSettingsView : UserControl, INotifyPropertyChanged
+    public sealed partial class UnitsSettingsView : UserControl
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-
         private readonly List<Unit> _masterUnitList = new();
         private readonly ObservableCollection<Unit> DisplayedUnits = new();
 
         private readonly IUnitRepository? _unitRepository;
-
-        private bool _isLoading;
-        public bool IsLoading
-        {
-            get => _isLoading;
-            set
-            {
-                if (_isLoading != value)
-                {
-                    _isLoading = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        #region Właściwości dla InfoBar
-        private bool _isStatusMessageOpen;
-        public bool IsStatusMessageOpen
-        {
-            get => _isStatusMessageOpen;
-            set
-            {
-                if (_isStatusMessageOpen != value)
-                {
-                    _isStatusMessageOpen = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        private string _statusMessageTitle = string.Empty;
-        public string StatusMessageTitle { get => _statusMessageTitle; set { _statusMessageTitle = value; OnPropertyChanged(); } }
-
-        private string _statusMessage = string.Empty;
-        public string StatusMessage { get => _statusMessage; set { _statusMessage = value; OnPropertyChanged(); } }
-
-        private InfoBarSeverity _statusMessageSeverity = InfoBarSeverity.Informational;
-        public InfoBarSeverity StatusMessageSeverity { get => _statusMessageSeverity; set { _statusMessageSeverity = value; OnPropertyChanged(); } }
-        #endregion
+        private readonly IUxActionOrchestrator _orchestrator;
 
         private bool _isAutocompleteActive = true;
         private Unit? _currentSuggestion;
 
-        // ZMIANA: Konstruktor przyjmuje zależność
         public UnitsSettingsView(IUnitRepository unitRepository)
         {
             this.InitializeComponent();
             _unitRepository = unitRepository;
+            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             this.Loaded += UnitsSettingsView_Loaded;
         }
 
-        // ZMIANA: Logika ładowania przeniesiona do zdarzenia Loaded
         private async void UnitsSettingsView_Loaded(object sender, RoutedEventArgs e)
         {
-            IsLoading = true;
-            try
-            {
-                await LoadUnitsAsync();
-            }
-            finally
-            {
-                IsLoading = false;
-            }
+            // Używamy nowej, poprawnej metody do obsługi ładowania
+            await _orchestrator.PerformLoadAsync(
+                viewId: ActionContainer.GetViewId(),
+                loadActionAsync: LoadUnitsAsync
+            );
         }
-
-        #region Metody pomocnicze dla InfoBar
-        private void ShowStatusMessage(string title, string message, InfoBarSeverity severity)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                StatusMessageTitle = title;
-                StatusMessage = message;
-                StatusMessageSeverity = severity;
-                IsStatusMessageOpen = true;
-            });
-        }
-
-        private async Task ShowTemporarySuccessMessage(string title, string message)
-        {
-            ShowStatusMessage(title, message, InfoBarSeverity.Success);
-            await Task.Delay(3000);
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (StatusMessageSeverity == InfoBarSeverity.Success)
-                {
-                    IsStatusMessageOpen = false;
-                }
-            });
-        }
-        #endregion
 
         private async Task LoadUnitsAsync()
         {
             if (_unitRepository == null) return;
+
             _masterUnitList.Clear();
             var unitsFromDb = await _unitRepository.GetAllAsync();
             _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
 
-            FilterUnits();
-            UpdateButtonStates();
+            DispatcherQueue.TryEnqueue(() => {
+                FilterUnits();
+                UpdateButtonStates();
+            });
         }
 
         private void FilterUnits()
@@ -162,158 +94,13 @@ namespace GrafikoMat.Views.Settings
             }
         }
 
-        private async void AddButton_Click(object sender, RoutedEventArgs e)
-        {
-            await ShowUnitDialogAsync(null);
-        }
-
-        private async void EditButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (UnitsListView.SelectedItem is Unit selectedUnit && !selectedUnit.IsArchived)
-            {
-                await ShowUnitDialogAsync(selectedUnit);
-            }
-        }
-
-        private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (UnitsListView.SelectedItem is Unit selectedUnit && _unitRepository != null)
-            {
-                var dialog = new ContentDialog
-                {
-                    Title = "Potwierdź archiwizację",
-                    Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'? Zostanie ona ukryta na listach, ale będzie można ją przywrócić.",
-                    PrimaryButtonText = "Archiwizuj",
-                    CloseButtonText = "Anuluj",
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = this.XamlRoot
-                };
-                var result = await dialog.ShowAsync();
-                if (result == ContentDialogResult.Primary)
-                {
-                    IsLoading = true;
-                    try
-                    {
-                        await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, true);
-                        await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została zarchiwizowana.");
-                        await LoadUnitsAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        ShowStatusMessage("Błąd", $"Wystąpił błąd podczas archiwizacji: {ex.Message}", InfoBarSeverity.Error);
-                    }
-                    finally
-                    {
-                        IsLoading = false;
-                    }
-                }
-            }
-        }
-
-        private async void RestoreButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (UnitsListView.SelectedItem is Unit selectedUnit && _unitRepository != null)
-            {
-                IsLoading = true;
-                try
-                {
-                    await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, false);
-                    await ShowTemporarySuccessMessage("Sukces", $"Jednostka '{selectedUnit.Name}' została przywrócona.");
-                    await LoadUnitsAsync();
-                }
-                catch (Exception ex)
-                {
-                    ShowStatusMessage("Błąd", $"Wystąpił błąd podczas przywracania: {ex.Message}", InfoBarSeverity.Error);
-                }
-                finally
-                {
-                    IsLoading = false;
-                }
-            }
-        }
-
-        private async Task ShowUnitDialogAsync(Unit? existingUnit)
-        {
-            if (_unitRepository == null) return;
-            bool isEditMode = existingUnit != null;
-            _currentSuggestion = null;
-            _isAutocompleteActive = true;
-            var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
-            var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
-            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
-            hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
-            hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
-            hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
-
-            var panel = new StackPanel
-            {
-                Spacing = 12,
-                Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox },
-                Width = 650
-            };
-            var dialog = new ContentDialog
-            {
-                Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę",
-                Content = panel,
-                PrimaryButtonText = "Zapisz",
-                CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.None,
-                XamlRoot = this.XamlRoot
-            };
-
-            hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
-
-            var result = await dialog.ShowAsync();
-            if (result == ContentDialogResult.Primary)
-            {
-                var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
-                unitToSave.Name = nameTextBox.Text;
-                unitToSave.HospitalFullName = hospitalNameTextBox.Text;
-                unitToSave.DepartmentName = departmentNameTextBox.Text;
-
-                IsLoading = true;
-                try
-                {
-                    await _unitRepository.SaveAsync(unitToSave);
-                    var successMessage = isEditMode
-                        ? "Poprawnie zapisano dane w bazie Supabase."
-                        : "Nowa jednostka została pomyślnie dodana.";
-                    await ShowTemporarySuccessMessage("Sukces!", successMessage);
-                    await LoadUnitsAsync();
-                }
-                catch (Exception ex)
-                {
-                    ShowStatusMessage("Błąd zapisu", $"Wystąpił nieoczekiwany błąd: {ex.Message}", InfoBarSeverity.Error);
-                }
-                finally
-                {
-                    IsLoading = false;
-                }
-            }
-        }
-
         private async void HospitalNameTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _unitRepository == null)
-            {
-                return;
-            }
-
-            if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text))
-            {
-                return;
-            }
-
+            if (sender is not TextBox hospitalTextBox || string.IsNullOrWhiteSpace(hospitalTextBox.Text) || _unitRepository == null) return;
+            if (hospitalTextBox.Tag is not Tuple<TextBox, TextBox> otherBoxes) return;
+            if (!string.IsNullOrWhiteSpace(otherBoxes.Item1.Text)) return;
             var match = await _unitRepository.GetFirstByExactHospitalNameAsync(hospitalTextBox.Text);
-            if (match != null)
-            {
-                otherBoxes.Item1.Text = match.Name;
-            }
+            if (match != null) otherBoxes.Item1.Text = match.Name;
         }
 
         private void HospitalNameTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -323,19 +110,13 @@ namespace GrafikoMat.Views.Settings
             {
                 e.Handled = true;
                 _isAutocompleteActive = false;
-
                 hospitalTextBox.Text = _currentSuggestion.HospitalFullName;
                 hospitalTextBox.Select(hospitalTextBox.Text.Length, 0);
-
                 if (hospitalTextBox.Tag is Tuple<TextBox, TextBox> otherBoxes)
                 {
                     otherBoxes.Item1.Text = _currentSuggestion.Name;
-                    if (e.Key == VirtualKey.Tab)
-                    {
-                        otherBoxes.Item2.Focus(FocusState.Programmatic);
-                    }
+                    if (e.Key == VirtualKey.Tab) otherBoxes.Item2.Focus(FocusState.Programmatic);
                 }
-
                 _currentSuggestion = null;
                 _isAutocompleteActive = true;
             }
@@ -346,28 +127,15 @@ namespace GrafikoMat.Views.Settings
             if (!_isAutocompleteActive || _unitRepository == null || sender is not TextBox hospitalTextBox) return;
             var userText = hospitalTextBox.Text;
             var selectionStart = hospitalTextBox.SelectionStart;
-
-            if (selectionStart < userText.Length)
-            {
-                _currentSuggestion = null;
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(userText) || userText.Length < 3)
-            {
-                _currentSuggestion = null;
-                return;
-            }
-
+            if (selectionStart < userText.Length) { _currentSuggestion = null; return; }
+            if (string.IsNullOrWhiteSpace(userText) || userText.Length < 3) { _currentSuggestion = null; return; }
             var match = await _unitRepository.GetUniqueByHospitalNameStartAsync(userText);
             _currentSuggestion = match;
-
             if (match != null && match.HospitalFullName.Length > userText.Length)
             {
                 _isAutocompleteActive = false;
                 hospitalTextBox.Text = match.HospitalFullName;
                 hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
-
                 _isAutocompleteActive = true;
             }
         }
@@ -378,9 +146,109 @@ namespace GrafikoMat.Views.Settings
             UpdateButtonStates();
         }
 
-        private void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtonStates();
+
+        private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
-            UpdateButtonStates();
+            if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
+
+            var dialog = new ContentDialog
+            {
+                Title = "Potwierdź archiwizację",
+                Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'?",
+                PrimaryButtonText = "Archiwizuj",
+                CloseButtonText = "Anuluj",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.XamlRoot
+            };
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            await _orchestrator.PerformActionAsync(
+                viewId: ActionContainer.GetViewId(),
+                actionAsync: async () => await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, true),
+                verificationAsync: async () =>
+                {
+                    await LoadUnitsAsync();
+                    var reloaded = _masterUnitList.FirstOrDefault(u => u.Id == selectedUnit.Id);
+                    return reloaded?.IsArchived ?? true;
+                },
+                successMessage: $"Jednostka '{selectedUnit.Name}' została zarchiwizowana.",
+                errorMessageTitle: "Błąd archiwizacji"
+            );
+        }
+
+        private async void RestoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
+
+            await _orchestrator.PerformActionAsync(
+                viewId: ActionContainer.GetViewId(),
+                actionAsync: async () => await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, false),
+                verificationAsync: async () =>
+                {
+                    await LoadUnitsAsync();
+                    var reloaded = _masterUnitList.FirstOrDefault(u => u.Id == selectedUnit.Id);
+                    return reloaded != null && !reloaded.IsArchived;
+                },
+                successMessage: $"Jednostka '{selectedUnit.Name}' została przywrócona.",
+                errorMessageTitle: "Błąd przywracania"
+            );
+        }
+
+        private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowUnitDialogAsync(null);
+        private async void EditButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (UnitsListView.SelectedItem is Unit selectedUnit) await ShowUnitDialogAsync(selectedUnit);
+        }
+
+        private async Task ShowUnitDialogAsync(Unit? existingUnit)
+        {
+            if (_unitRepository == null) return;
+            bool isEditMode = existingUnit != null;
+            _currentSuggestion = null;
+            _isAutocompleteActive = true;
+
+            var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
+            var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
+            var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
+
+            hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
+            hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
+            hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
+            hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
+
+            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox }, Width = 650 };
+
+            var dialog = new ContentDialog
+            {
+                Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę",
+                Content = panel,
+                PrimaryButtonText = "Zapisz",
+                CloseButtonText = "Anuluj",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return;
+
+            var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
+            unitToSave.Name = nameTextBox.Text;
+            unitToSave.HospitalFullName = hospitalNameTextBox.Text;
+            unitToSave.DepartmentName = departmentNameTextBox.Text;
+
+            await _orchestrator.PerformActionAsync(
+                viewId: ActionContainer.GetViewId(),
+                actionAsync: async () => await _unitRepository.SaveAsync(unitToSave),
+                verificationAsync: async () =>
+                {
+                    await LoadUnitsAsync();
+                    return _masterUnitList.Any(u => u.Id == unitToSave.Id && u.Name == unitToSave.Name);
+                },
+                successMessage: isEditMode ? "Poprawnie zapisano zmiany w jednostce." : "Nowa jednostka została pomyślnie dodana.",
+                errorMessageTitle: "Błąd zapisu jednostki"
+            );
         }
     }
 }

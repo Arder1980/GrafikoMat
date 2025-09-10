@@ -6,7 +6,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:common="using:GrafikoMat.Common"
-    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:GrafikoMat.Controls"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -14,37 +14,38 @@
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <controls:ActionContainer x:Name="ActionContainer">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Zarządzanie Jednostkami" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
+            <TextBlock Grid.Row="0" Text="Zarządzanie Jednostkami" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
 
-        <Grid Grid.Row="1" ColumnSpacing="20" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+            <Grid Grid.Row="1" ColumnSpacing="20" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <CheckBox x:Name="ShowArchivedCheckBox" 
-                      Grid.Column="0"
-                      Content="Pokaż zarchiwizowane" 
-                      Checked="ShowArchivedCheckBox_Changed" 
-                      Unchecked="ShowArchivedCheckBox_Changed"/>
+                <CheckBox x:Name="ShowArchivedCheckBox" 
+                          Grid.Column="0"
+                          Content="Pokaż zarchiwizowane" 
+                          Checked="ShowArchivedCheckBox_Changed" 
+                          Unchecked="ShowArchivedCheckBox_Changed"/>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                <Button x:Name="AddButton" Content="Dodaj nową..." HorizontalAlignment="Stretch" Click="AddButton_Click"/>
-                <Button x:Name="EditButton" Content="Edytuj..." HorizontalAlignment="Stretch" Click="EditButton_Click" IsEnabled="False"/>
-                <Button x:Name="ArchiveButton" Content="Archiwizuj" HorizontalAlignment="Stretch" Click="ArchiveButton_Click" IsEnabled="False"/>
-                <Button x:Name="RestoreButton" Content="Przywróć" HorizontalAlignment="Stretch" Click="RestoreButton_Click" Visibility="Collapsed"/>
-            </StackPanel>
-        </Grid>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                    <Button x:Name="AddButton" Content="Dodaj nową..." HorizontalAlignment="Stretch" Click="AddButton_Click"/>
+                    <Button x:Name="EditButton" Content="Edytuj..." HorizontalAlignment="Stretch" Click="EditButton_Click" IsEnabled="False"/>
+                    <Button x:Name="ArchiveButton" Content="Archiwizuj" HorizontalAlignment="Stretch" Click="ArchiveButton_Click" IsEnabled="False"/>
+                    <Button x:Name="RestoreButton" Content="Przywróć" HorizontalAlignment="Stretch" Click="RestoreButton_Click" Visibility="Collapsed"/>
+                </StackPanel>
+            </Grid>
 
-        <Grid Grid.Row="2">
-            <ListView x:Name="UnitsListView"
+            <ListView Grid.Row="2"
+                      x:Name="UnitsListView"
                       ItemsSource="{x:Bind DisplayedUnits}"
                       SelectionMode="Single"
                       SelectionChanged="UnitsListView_SelectionChanged"
@@ -63,22 +64,6 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-
-            <Grid Background="#88FFFFFF"
-                  Visibility="{x:Bind IsLoading, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <ProgressRing IsActive="True" Width="48" Height="48"/>
-            </Grid>
-
-            <controls:InfoBar
-                Title="{x:Bind StatusMessageTitle, Mode=OneWay}"
-                Message="{x:Bind StatusMessage, Mode=OneWay}"
-                IsOpen="{x:Bind IsStatusMessageOpen, Mode=OneWay}"
-                Severity="{x:Bind StatusMessageSeverity, Mode=OneWay}"
-                CornerRadius="4"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                IsClosable="False"
-                Canvas.ZIndex="99" />
         </Grid>
-    </Grid>
+    </controls:ActionContainer>
 </UserControl>
