@@ -92,15 +92,25 @@
             </Grid.RenderTransform>
             <Grid.Resources>
                 <MenuFlyout x:Key="TitleBarMenu" Placement="BottomEdgeAlignedRight">
-                    <MenuFlyoutItem Text="Ustawienia" Click="TitleBarSettings_Click">
+                    <MenuFlyoutItem Text="Pomoc" Click="HelpMenuItem_Click">
                         <MenuFlyoutItem.Icon>
-                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE713;"/>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE897;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Text="O programie" Click="AboutMenuItem_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE946;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="Wyloguj i zamknij" Click="TitleBarSignOutAndClose_Click">
+                    <MenuFlyoutItem Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" IsEnabled="False">
                         <MenuFlyoutItem.Icon>
-                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE8AC;"/>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE779;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem Text="Wyloguj się" Click="SignOutMenuItem_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                 </MenuFlyout>
@@ -116,7 +126,7 @@
                 <Button.Resources>
                     <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
                 </Button.Resources>
-                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;"/>
+                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;" FontSize="14"/>
             </Button>
         </Grid>
 

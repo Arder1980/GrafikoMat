@@ -529,8 +529,11 @@ namespace GrafikoMat
         {
             if (_appWindow?.TitleBar is not AppWindowTitleBar titleBar) return;
 
-            var pad = TopBarRow.Padding;
+            // ZMIANA: Przywracamy i upraszczamy logikę do poprawnego ustawiania Paddingu
+            // na całej belce, aby zrobić miejsce na przyciski systemowe.
+            var pad = TopBarRow.Padding; // Pobieramy istniejący padding (np. lewy)
             TopBarRow.Padding = new Thickness(pad.Left, pad.Top, titleBar.RightInset, pad.Bottom);
+
             TitleBarMenuButton.Height = TopBarRow.Height;
             TitleBarMenuButton.MinWidth = 46;
             TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
@@ -541,7 +544,6 @@ namespace GrafikoMat
             var bgPressed = isLightTheme ? Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(40, 255, 255, 255);
             var fgInactive = isLightTheme ? Color.FromArgb(0x99, 0, 0, 0) : Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF);
 
-            // ZMIANA: Ustawianie kolorów dla standardowych przycisków systemowych (Min, Max, Close)
             titleBar.ButtonForegroundColor = baseFgColor;
             titleBar.ButtonHoverForegroundColor = baseFgColor;
             titleBar.ButtonHoverBackgroundColor = bgHover;
@@ -549,14 +551,12 @@ namespace GrafikoMat
             titleBar.ButtonPressedBackgroundColor = bgPressed;
             titleBar.ButtonInactiveForegroundColor = fgInactive;
 
-            // Styl dla naszego niestandardowego przycisku menu
             TitleBarMenuButton.Foreground = new SolidColorBrush(baseFgColor);
             TitleBarMenuButton.Resources["ButtonForegroundPointerOver"] = new SolidColorBrush(baseFgColor);
             TitleBarMenuButton.Resources["ButtonForegroundPressed"] = new SolidColorBrush(baseFgColor);
             TitleBarMenuButton.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(bgHover);
             TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(bgPressed);
         }
-
         #region Window Setup and Win32 Interop
 
         private void TitleBarSettings_Click(object sender, RoutedEventArgs e)
@@ -682,6 +682,33 @@ namespace GrafikoMat
                 return IntPtr.Zero;
             }
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+        }
+        private async void HelpMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowInfo("Pomoc", "Funkcjonalność w trakcie budowy. W tym miejscu zostanie wyświetlony system pomocy lub dokumentacja programu.");
+        }
+
+        private async void AboutMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Prosta personalizacja okna "O programie" na podstawie Twoich danych :)
+            await ShowInfo("O programie", $"GrafikoMat Dyżurowy v1.0 (Alpha)\n\nUżytkownik: Adam Lemanowicz\nElbląg, 24.12.1980");
+        }
+
+        private async void SignOutMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Krok 1: Wyloguj użytkownika i wyczyść sesję
+            await _supabaseService.SignOutAsync();
+
+            // Krok 2: Zresetuj stan aplikacji
+            ViewModel.SetRepositories(null, null, null);
+            _doctorRepository = null;
+            _unitRepository = null;
+            _assignmentRepository = null;
+
+            // Krok 3: Pokaż nakładkę ładowania i uruchom ponownie proces inicjalizacji
+            // Proces ten wykryje brak zalogowanego użytkownika i pokaże ekran logowania.
+            InitialLoadingOverlay.Visibility = Visibility.Visible;
+            await InitializeApplicationAsync();
         }
 
         [StructLayout(LayoutKind.Sequential)] public struct MINMAXINFO { public POINT ptReserved; public POINT ptMaxSize; public POINT ptMaxPosition; public POINT ptMinTrackSize; public POINT ptMaxTrackSize; }

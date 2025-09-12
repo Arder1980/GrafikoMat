@@ -64,6 +64,21 @@ namespace GrafikoMat.ViewModels
         private string _priorityOrder = "Priorytety: (nieustawione)";
         public string PriorityOrder { get => _priorityOrder; set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } } }
 
+        // NOWA WŁAŚCIWOŚĆ: Przechowuje nazwę zalogowanego użytkownika do wyświetlenia w menu
+        private string _currentUserName = "Brak danych";
+        public string CurrentUserName
+        {
+            get => _currentUserName;
+            set
+            {
+                if (_currentUserName != value)
+                {
+                    _currentUserName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
 
@@ -113,6 +128,9 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
+
+            // ZMIANA: Ustawienie nazwy zalogowanego użytkownika
+            CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
 
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
