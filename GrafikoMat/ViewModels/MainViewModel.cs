@@ -46,7 +46,6 @@ namespace GrafikoMat.ViewModels
 
         public string ActiveUnitHospitalName => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
         public string ActiveUnitDepartmentName => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
-
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
         private int _selectedYear = DateTime.Today.Year;
         public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
@@ -64,7 +63,6 @@ namespace GrafikoMat.ViewModels
         private string _priorityOrder = "Priorytety: (nieustawione)";
         public string PriorityOrder { get => _priorityOrder; set { if (_priorityOrder != value) { _priorityOrder = value; OnPropertyChanged(); } } }
 
-        // NOWA WŁAŚCIWOŚĆ: Przechowuje nazwę zalogowanego użytkownika do wyświetlenia w menu
         private string _currentUserName = "Brak danych";
         public string CurrentUserName
         {
@@ -80,6 +78,7 @@ namespace GrafikoMat.ViewModels
         }
 
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
+        public Dictionary<string, DoctorMonthDeclaration> Declarations => _declByKey;
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
 
         public ICommand SwitchToPreviousUnitCommand { get; set; }
@@ -91,7 +90,6 @@ namespace GrafikoMat.ViewModels
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
             this.PropertyChanged += OnMainViewModelPropertyChanged;
-
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
@@ -118,7 +116,6 @@ namespace GrafikoMat.ViewModels
         public async Task LoadUserAndUnitDataAsync()
         {
             if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null || _settingsService == null) return;
-
             await UpdateFooterFromSettingsAsync();
 
             _allDoctors.Clear();
@@ -129,9 +126,7 @@ namespace GrafikoMat.ViewModels
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
 
-            // ZMIANA: Ustawienie nazwy zalogowanego użytkownika
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
-
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
             _userUnits.Clear();
@@ -200,7 +195,6 @@ namespace GrafikoMat.ViewModels
 
             var doctorIdsForUnit = _allAssignments.Where(a => a.UnitId == ActiveUnit.Id && a.IsActive).Select(a => a.DoctorId).ToHashSet();
             if (!doctorIdsForUnit.Any()) return;
-
             var doctorsForUnit = _allDoctors.Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived).OrderBy(d => d.LastName).ThenBy(d => d.FirstName).ToList();
             var duplicateFullNames = doctorsForUnit.GroupBy(d => d.FullName).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
             foreach (var doctor in doctorsForUnit)
@@ -222,9 +216,22 @@ namespace GrafikoMat.ViewModels
             {
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
                 string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
-                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+
+                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
+                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
+            }
+        }
+
+        public void RefreshDeclarationsForDashboard()
+        {
+            if (ActiveUnit == null) return;
+            foreach (var docRow in DoctorRows)
+            {
+                var key = Key(docRow.Profile.FullName, SelectedYear, SelectedMonthIndex);
+                docRow.HasDeclarations = _declByKey.ContainsKey(key);
             }
         }
 
@@ -249,44 +256,22 @@ namespace GrafikoMat.ViewModels
         {
             if (_settingsService == null) return;
             var settings = await _settingsService.LoadSettingsAsync();
-
             EngineName = $"Silnik: {GetSolverDisplayName(settings.SelectedSolver)}";
-
             var activePriorities = settings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => GetPriorityDisplayName(p.Priority));
-
             PriorityOrder = $"Priorytety: {string.Join(" > ", activePriorities)}";
         }
 
-        private string GetSolverDisplayName(SolverType solver) => solver switch
-        {
-            SolverType.Backtracking => "BacktrackingSolver",
-            SolverType.AStar => "AStarSolver",
-            SolverType.Genetic => "GeneticSolver",
-            SolverType.SimulatedAnnealing => "SimulatedAnnealingSolver",
-            SolverType.TabuSearch => "TabuSearchSolver",
-            SolverType.AntColony => "AntColonySolver",
-            _ => solver.ToString()
-        };
-
-        private string GetPriorityDisplayName(SolverPriority priority) => priority switch
-        {
-            SolverPriority.InitialContinuity => "Maksymalizacja ciągłości początkowej",
-            SolverPriority.TotalAssignments => "Maksymalizacja obsady",
-            SolverPriority.Fairness => "Sprawiedliwość obciążenia",
-            SolverPriority.Spacing => "Równomierność w czasie",
-            SolverPriority.DeclarationCompliance => "Zgodność z preferencjami",
-            _ => "N/A"
-        };
-
-        private static string PolishDayOfWeek(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Poniedziałek", DayOfWeek.Tuesday => "Wtorek", DayOfWeek.Wednesday => "Środa", DayOfWeek.Thursday => "Czwartek", DayOfWeek.Friday => "Piątek", DayOfWeek.Saturday => "Sobota", DayOfWeek.Sunday => "Niedziela", _ => "" };
+        private string GetSolverDisplayName(SolverType solver) => solver.ToString();
+        private string GetPriorityDisplayName(SolverPriority priority) => priority.ToString();
+        private static string PolishDayOfWeek(DayOfWeek dow) => new[] { "Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota" }[(int)dow];
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;
         public void PrevMonth() { if (SelectedMonthIndex == 0) { SelectedMonthIndex = 11; PrevYear(); } else SelectedMonthIndex -= 1; }
         public void NextMonth() { if (SelectedMonthIndex == 11) { SelectedMonthIndex = 0; NextYear(); } else SelectedMonthIndex += 1; }
         private void EnsureYearInList(int year) { if (!Years.Contains(year)) { int i = 0; while (i < Years.Count && Years[i] < year) i++; Years.Insert(i, year); } }
-        public void ApplyDoctorMonth(DoctorMonthDeclaration dm) { _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm; var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor); if (row != null) row.HasDeclarations = true; OnPropertyChanged(nameof(_declByKey)); }
+        public void ApplyDoctorMonth(DoctorMonthDeclaration dm) { _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm; var row = DoctorRows.FirstOrDefault(r => r.Profile.FullName == dm.Doctor); if (row != null) row.HasDeclarations = true; OnPropertyChanged(nameof(Declarations)); }
         public (bool has, DayMode mode, string? full, string? day, string? night) TryGetEntry(string doctor, int year, int monthIndex, int dayIndex) { if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) && dayIndex >= 0 && dayIndex < dm.Days.Length) { var d = dm.Days[dayIndex]; return (true, d.Mode, d.Full, d.Day, d.Night); } return (false, DayMode.Full24, null, null, null); }
 
         public async Task GenerateScheduleAsync()
@@ -309,13 +294,14 @@ namespace GrafikoMat.ViewModels
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
-        public string Name { get; }
+        public DoctorProfile Profile { get; }
         public string DisplayName { get; }
         private bool _has;
         public bool HasDeclarations { get => _has; set { if (_has != value) { _has = value; Raise(nameof(HasDeclarations)); } } }
+
         public DoctorRow(DoctorProfile profile, string displayName, bool hasDeclarations)
         {
-            Name = profile.FullName;
+            Profile = profile;
             DisplayName = displayName;
             _has = hasDeclarations;
         }
@@ -329,10 +315,7 @@ namespace GrafikoMat.ViewModels
         public bool IsLast { get; }
         public RosterRow(string dateLabel, string dutyLabel, bool isDayOff, bool isLast)
         {
-            DateLabel = dateLabel;
-            DutyLabel = dutyLabel;
-            IsDayOff = isDayOff;
-            IsLast = isLast;
+            DateLabel = dateLabel; DutyLabel = dutyLabel; IsDayOff = isDayOff; IsLast = isLast;
         }
     }
 }

@@ -7,7 +7,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
-
 namespace GrafikoMat.Views
 {
     public sealed partial class DashboardView : UserControl
@@ -97,7 +96,8 @@ namespace GrafikoMat.Views
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
+                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                 bool isLastColumn = (d == daysInMonth);
                 var cell = new Border
                 {
@@ -119,14 +119,14 @@ namespace GrafikoMat.Views
                 var nameCell = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
                 Grid.SetRow(nameCell, row); Grid.SetColumn(nameCell, 0);
 
-                // ZMIANA: Używamy DisplayName zamiast Name
                 nameCell.Child = new TextBlock { Text = doctor.DisplayName, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Opacity = doctor.HasDeclarations ? 1.0 : 0.6 };
                 DeclarationsGrid.Children.Add(nameCell);
 
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsHoliday(date);
+                    // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
+                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                     bool isLastColumn = (d == daysInMonth);
                     var cell = new Border
                     {
@@ -136,7 +136,7 @@ namespace GrafikoMat.Views
                     };
                     Grid.SetRow(cell, row); Grid.SetColumn(cell, d);
 
-                    var entry = _vm.TryGetEntry(doctor.Name, year, _vm.SelectedMonthIndex, d - 1);
+                    var entry = _vm.TryGetEntry(doctor.Profile.FullName, year, _vm.SelectedMonthIndex, d - 1);
                     FrameworkElement content;
                     if (!entry.has || (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
                     {

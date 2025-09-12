@@ -3,13 +3,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Windows.UI;
 
 namespace GrafikoMat.Common
 {
-    // ... (pozostałe konwertery bez zmian) ...
     public class BooleanToOpacityConverter : IValueConverter
     {
         public double TrueValue { get; set; } = 1.0;
@@ -65,7 +63,6 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    // ZMIANA: Zastosowanie nowej, 5-pikselowej skali rozmiarów
     public class RankToSizeConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
@@ -78,7 +75,7 @@ namespace GrafikoMat.Common
                     2 => 31.0,
                     3 => 26.0,
                     4 => 21.0,
-                    _ => 16.0, // Ranga 5 i każda ewentualna kolejna
+                    _ => 16.0,
                 };
             }
             return 16.0;
@@ -90,8 +87,7 @@ namespace GrafikoMat.Common
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            Color baseColor = Color.FromArgb(255, 255, 193, 7); // Bursztynowy/Amber
-
+            Color baseColor = Color.FromArgb(255, 255, 193, 7);
             double opacity = 0.4;
             if (value is int rank)
             {
@@ -104,10 +100,8 @@ namespace GrafikoMat.Common
                     _ => 0.40,
                 };
             }
-
             return new SolidColorBrush(Color.FromArgb((byte)(opacity * 255), baseColor.R, baseColor.G, baseColor.B));
         }
-
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 }

@@ -1,145 +1,88 @@
-﻿using GrafikoMat.Models;
-using Microsoft.UI;
+﻿using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using System;
-using System.Collections.ObjectModel;
-using Windows.UI;
 
 namespace GrafikoMat.Views
 {
     public sealed partial class DeclarationsView : UserControl
     {
-        public event Action<DoctorMonthDeclaration>? SaveRequested;
-        public event Action<DoctorMonthDeclaration>? SaveAndCloseRequested;
+        public event Action? SaveRequested;
+        public event Action? SaveAndCloseRequested;
         public event Action? CloseRequested;
 
-        public ObservableCollection<DayCell> CalendarItems { get; } = new();
-        public UIElement LeftColumn => LeftColumnGrid;
-        public UIElement CalendarView => CalendarItemsControl;
+        public DeclarationsViewModel ViewModel { get; private set; }
 
-        private int _year;
-        private int _monthIndex;
-        private string[] _doctorNames = Array.Empty<string>();
-        private int _selectedDoctorIndex = -1;
+        private bool _isDragging = false;
+        private int _dragStartIndex = -1;
 
+        // ZMIANA: Konstruktor jest teraz czysty, nie ładuje żadnych danych.
         public DeclarationsView()
         {
-            InitializeComponent();
-            var today = DateTime.Today;
-            var testDoctors = new[] { "dr Anna Testowa", "dr Bartosz Przykładowy", "dr Celina Demo" };
-            LoadContext(today.Year, today.Month - 1, testDoctors, 0);
+            this.InitializeComponent();
         }
 
-        public void LoadContext(int year, int monthIndex, string[] doctorNames, int selectedDoctorIndex)
+        // ZMIANA: Nowa metoda do podłączania gotowego ViewModelu z zewnątrz.
+        public void AttachViewModel(DeclarationsViewModel vm)
         {
-            _year = year;
-            _monthIndex = Math.Clamp(monthIndex, 0, 11);
-            _doctorNames = (doctorNames != null && doctorNames.Length > 0) ? doctorNames : new[] { "..." };
-            _selectedDoctorIndex = Math.Clamp(selectedDoctorIndex, 0, _doctorNames.Length - 1);
-
-            MonthRun.Text = $"{PolishMonth(_monthIndex)} {_year}";
-            DoctorsCombo.ItemsSource = _doctorNames;
-            DoctorsCombo.SelectedIndex = selectedDoctorIndex;
-
-            BuildCalendarData();
+            ViewModel = vm;
+            this.DataContext = ViewModel;
         }
 
-        private void BuildCalendarData()
+        private void OnSaveClick(object sender, RoutedEventArgs e)
         {
-            CalendarItems.Clear();
-            var firstDayOfMonth = new DateTime(_year, _monthIndex + 1, 1);
-            int offset = ((int)firstDayOfMonth.DayOfWeek + 6) % 7;
-            int daysInMonth = DateTime.DaysInMonth(_year, _monthIndex + 1);
-            int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
-            var startDate = firstDayOfMonth.AddDays(-offset);
+            ViewModel.SaveCommand.Execute(null);
+            SaveRequested?.Invoke();
+        }
 
-            for (int i = 0; i < weeks * 7; i++)
+        private void OnSaveAndCloseClick(object sender, RoutedEventArgs e)
+        {
+            ViewModel.SaveCommand.Execute(null);
+            SaveAndCloseRequested?.Invoke();
+        }
+
+        private void Cell_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && sender is FrameworkElement element && element.DataContext is DayCell cell)
             {
-                var date = startDate.AddDays(i);
-                CalendarItems.Add(new DayCell(date, date.Month == _monthIndex + 1));
+                if (!cell.IsInteractive) return;
+                _isDragging = true;
+                _dragStartIndex = cell.Index;
+                element.CapturePointer(e.Pointer);
+                ViewModel.SelectSingle(cell.Index);
+                e.Handled = true;
             }
         }
 
-        public void TriggerClearSelection() { /* ... */ }
-        public void TriggerSave() { SaveRequested?.Invoke(ToResult()); }
-        public void TriggerSaveAndClose() { SaveAndCloseRequested?.Invoke(ToResult()); CloseRequested?.Invoke(); }
-
-        private void OnSaveClick(object sender, RoutedEventArgs e) => TriggerSave();
-        private void OnSaveAndCloseClick(object sender, RoutedEventArgs e) => TriggerSaveAndClose();
-
-        private void OnDoctorSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void Cell_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            _selectedDoctorIndex = DoctorsCombo.SelectedIndex;
+            if (_isDragging && sender is FrameworkElement element && element.DataContext is DayCell cell)
+            {
+                if (!cell.IsInteractive) return;
+                ViewModel.SelectRange(_dragStartIndex, cell.Index);
+                e.Handled = true;
+            }
+        }
+
+        private void Cell_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (_isDragging && sender is FrameworkElement element)
+            {
+                _isDragging = false;
+                element.ReleasePointerCapture(e.Pointer);
+                e.Handled = true;
+            }
         }
 
         private void OnCellRightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            e.Handled = true;
-            if ((sender as FrameworkElement)?.DataContext is DayCell cell) { }
-        }
-
-        private DoctorMonthDeclaration ToResult()
-        {
-            int y = _year;
-            int m = _monthIndex;
-            if (y <= 0) { var t = DateTime.Today; y = t.Year; m = t.Month - 1; }
-            int daysInMonth = DateTime.DaysInMonth(y, m + 1);
-
-            var res = new DoctorMonthDeclaration
+            if (sender is FrameworkElement element && element.DataContext is DayCell cell)
             {
-                Year = y,
-                MonthIndex = m,
-                Doctor = (_doctorNames.Length > 0 && _selectedDoctorIndex >= 0) ? _doctorNames[_selectedDoctorIndex] : string.Empty,
-                Days = new DayDeclaration[daysInMonth]
-            };
-
-            for (int i = 0; i < daysInMonth; i++) res.Days[i] = new DayDeclaration();
-            return res;
-        }
-
-        private static string PolishMonth(int idx) => new[] { "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[Math.Clamp(idx, 0, 11)];
-    }
-
-    public sealed class DayCell
-    {
-        public DateTime Date { get; }
-        public bool InMonth { get; }
-
-        public DayCell(DateTime date, bool inMonth)
-        {
-            Date = date;
-            InMonth = inMonth;
-
-            // ZMIANA: Inicjalizujemy pola, aby usunąć ostrzeżenia kompilatora.
-            this.Background = new SolidColorBrush(Colors.Transparent);
-            this.BorderBrush = new SolidColorBrush(Colors.Transparent);
-
-            UpdateBrushes();
-        }
-
-        public string DayNumber => Date.Day.ToString("00");
-        public double HeaderOpacity => InMonth ? 1.0 : 0.45;
-        public Brush Background { get; private set; }
-        public Brush BorderBrush { get; private set; }
-        public Thickness BorderThickness { get; private set; } = new Thickness(1);
-
-        private void UpdateBrushes()
-        {
-            bool isToday = (Date.Date == DateTime.Today);
-            Color bgColor = InMonth ? Colors.Transparent : Color.FromArgb(0x10, 0x80, 0x80, 0x80);
-            Color borderColor = InMonth ? Color.FromArgb(0x30, 0, 0, 0) : Color.FromArgb(0x25, 0x60, 0x60, 0x60);
-
-            if (isToday)
-            {
-                bgColor = Color.FromArgb(0x22, 0x1E, 0x90, 0xFF);
-                borderColor = Color.FromArgb(0xAA, 0x1E, 0x90, 0xFF);
+                if (!cell.IsInteractive) return;
+                // TODO: Logika menu kontekstowego
+                e.Handled = true;
             }
-
-            Background = new SolidColorBrush(bgColor);
-            BorderBrush = new SolidColorBrush(borderColor);
         }
     }
 }
