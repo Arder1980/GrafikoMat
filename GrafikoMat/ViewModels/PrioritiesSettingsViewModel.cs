@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Models;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
 using System;
@@ -9,6 +11,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -166,6 +169,8 @@ namespace GrafikoMat.ViewModels
                 errorMessageTitle: "Błąd zapisu ustawień"
             );
             _appSettings = newSettings;
+
+            WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
 
         private Dictionary<SolverPriority, (string Name, string Description)> GetPriorityDescriptions()
