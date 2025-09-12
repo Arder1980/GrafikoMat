@@ -7,104 +7,130 @@
     xmlns:vm="using:GrafikoMat.ViewModels"
     mc:Ignorable="d">
 
-    <Grid Padding="20">
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="20"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <Grid Padding="20,20,20,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="Wybór Silnika Obliczeniowego" FontSize="20" FontWeight="SemiBold"/>
+        <TextBlock Grid.Row="0" Text="Wybór Silnika Obliczeniowego" FontSize="20" FontWeight="SemiBold"/>
 
-            <Grid Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="300"/>
-                    <ColumnDefinition Width="20"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+        <StackPanel Grid.Row="1" Margin="0,20,0,12" Spacing="8">
+            <TextBlock Text="Charakterystyka wybranego silnika" FontWeight="SemiBold"/>
+            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue='Wybierz silnik z tabeli poniżej, aby zobaczyć jego szczegółowy opis.'}"
+                       TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify" Opacity="0.9"/>
+        </StackPanel>
 
-                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4" Padding="10">
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.EngineOptions}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:EngineOption">
-                                <RadioButton GroupName="EngineSelection"
-                                             IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                             Checked="EngineRadioButton_Checked"
-                                             Margin="0,0,0,10">
-                                    <StackPanel Margin="4,0,0,0" Spacing="2">
-                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{x:Bind Category}" FontSize="12" Opacity="0.7"/>
-                                    </StackPanel>
-                                </RadioButton>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+        <ListView Grid.Row="2"
+          ItemsSource="{x:Bind ViewModel.EngineOptions}"
+          SelectionMode="None"
+          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+          BorderThickness="1" CornerRadius="4">
+            <ListView.HeaderTemplate>
+                <DataTemplate>
+                    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.8*"/>
+                            <ColumnDefinition Width="1.8*"/>
+                            <ColumnDefinition Width="1.1*"/>
+                            <ColumnDefinition Width="1.5*"/>
+                            <ColumnDefinition Width="2.6*"/>
+                            <ColumnDefinition Width="1.2*"/>
+                        </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="2">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <StackPanel Spacing="16">
-                            <StackPanel>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=OneWay, FallbackValue='Wybierz silnik'}" FontSize="18" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Category, Mode=OneWay, FallbackValue='...'}" Opacity="0.8" Margin="0,2,0,0"/>
-                            </StackPanel>
-                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue='Wybierz silnik z listy po lewej stronie, aby zobaczyć jego szczegółowy opis.'}"
-                                       TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify"/>
+                        <TextBlock Grid.Column="0" Text="Nazwa silnika" FontWeight="SemiBold" HorizontalAlignment="Left"/>
 
-                            <TextBlock Text="Charakterystyka Porównawcza" FontWeight="SemiBold" Margin="0,16,0,8"/>
-                            <ListView ItemsSource="{x:Bind ViewModel.ComparisonData}"
-                                      SelectionMode="None" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                      BorderThickness="1" CornerRadius="4">
-                                <ListView.HeaderTemplate>
-                                    <DataTemplate>
-                                        <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="1.8*"/>
-                                                <ColumnDefinition Width="1.5*"/>
-                                                <ColumnDefinition Width="1.6*"/>
-                                                <ColumnDefinition Width="2.2*"/>
-                                                <ColumnDefinition Width="1.1*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Typ algorytmu" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="1" Text="Powtarzalność" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="2" Text="Wielowątkowość" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="3" Text="Jakość i Gwarancja" FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Column="4" Text="Czas" FontWeight="SemiBold"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.HeaderTemplate>
-                                <ListView.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:EngineComparisonInfo">
-                                        <Grid Padding="12,10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="1.8*"/>
-                                                <ColumnDefinition Width="1.5*"/>
-                                                <ColumnDefinition Width="1.6*"/>
-                                                <ColumnDefinition Width="2.2*"/>
-                                                <ColumnDefinition Width="1.1*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="{x:Bind Determinism}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="2" Text="{x:Bind Multithreading}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="3" Text="{x:Bind QualityGuarantee}" TextWrapping="Wrap" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="4" Text="{x:Bind TimeToResult}" VerticalAlignment="Center"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="Typ algorytmu" FontWeight="SemiBold"/>
+                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <ToolTipService.ToolTip>
+                            <ToolTip MaxWidth="600">
+                                <TextBlock TextWrapping="Wrap">
+                                    <Run FontWeight="Bold">Algorytm przeszukiwania zupełnego:</Run><LineBreak/>
+                                    <Run>przeszukuje całą przestrzeń rozwiązań, gwarantując znalezienie optimum.</Run><LineBreak/><LineBreak/>
+                                    <Run FontWeight="Bold">Algorytm przeszukiwania heurystycznego:</Run><LineBreak/>
+                                    <Run>inteligentnie wybiera ścieżki, dążąc do optimum.</Run><LineBreak/><LineBreak/>
+                                    <Run FontWeight="Bold">Metaheurystyka:</Run><LineBreak/>
+                                    <Run>technika optymalizacji, która znajduje bardzo dobre rozwiązania w rozsądnym czasie, bez gwarancji optimum.</Run>
+                                </TextBlock>
+                            </ToolTip>
+                        </ToolTipService.ToolTip>
+                    </TextBlock>
                         </StackPanel>
-                    </ScrollViewer>
-                </Grid>
-            </Grid>
 
-            <Grid Grid.Row="3" Margin="0,20,0,0">
-                <Button Content="Zapisz ustawienia"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Command="{x:Bind ViewModel.SaveCommand}"
-                        HorizontalAlignment="Right"/>
-            </Grid>
-        </Grid>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="Rodzaj" FontWeight="SemiBold"/>
+                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <ToolTipService.ToolTip>
+                            <ToolTip MaxWidth="400">
+                                <TextBlock TextWrapping="Wrap">
+                                    <Run FontWeight="Bold">Deterministyczny:</Run><LineBreak/>
+                                    <Run>ten sam wynik dla tych samych danych wejściowych.</Run><LineBreak/><LineBreak/>
+                                    <Run FontWeight="Bold">Stochastyczny:</Run><LineBreak/>
+                                    <Run>zawiera element losowości.</Run>
+                                </TextBlock>
+                            </ToolTip>
+                        </ToolTipService.ToolTip>
+                    </TextBlock>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Text="Wielowątkowość" FontWeight="SemiBold"/>
+                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <ToolTipService.ToolTip>
+                            <ToolTip MaxWidth="400">
+                                <TextBlock TextWrapping="Wrap">
+                                    <Run FontWeight="Bold">Tak:</Run><LineBreak/>
+                                    <Run>algorytm wykorzystuje wiele rdzeni procesora, co przyspiesza obliczenia.</Run><LineBreak/><LineBreak/>
+                                    <Run FontWeight="Bold">Nie:</Run><LineBreak/>
+                                    <Run>obliczenia są wykonywane sekwencyjnie na jednym rdzeniu.</Run>
+                                </TextBlock>
+                            </ToolTip>
+                        </ToolTipService.ToolTip>
+                    </TextBlock>
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="4" Text="Jakość wyniku" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        <TextBlock Grid.Column="5" Text="Czas obliczeń" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.HeaderTemplate>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:EngineOption">
+                    <Grid Padding="0,10,12,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.8*"/>
+                            <ColumnDefinition Width="1.8*"/>
+                            <ColumnDefinition Width="1.1*"/>
+                            <ColumnDefinition Width="1.5*"/>
+                            <ColumnDefinition Width="2.6*"/>
+                            <ColumnDefinition Width="1.2*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <RadioButton Grid.Column="0"
+                             Content="{x:Bind Name}"
+                             GroupName="EngineSelection"
+                             IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                             Checked="EngineRadioButton_Checked"
+                             VerticalAlignment="Center"
+                             Margin="6,0,0,0"/>
+
+                        <TextBlock Grid.Column="1" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="{x:Bind Determinism}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Text="{x:Bind Multithreading}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="4" Text="{x:Bind QualityGuarantee}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="5" Text="{x:Bind TimeToResult}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <Button Grid.Row="3"
+                Content="Zapisz ustawienia"
+                Style="{StaticResource AccentButtonStyle}"
+                Command="{x:Bind ViewModel.SaveCommand}"
+                HorizontalAlignment="Right"
+                Margin="0,20,0,0"/>
     </Grid>
 </UserControl>

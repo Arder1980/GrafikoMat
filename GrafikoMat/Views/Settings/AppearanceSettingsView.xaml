@@ -2,11 +2,19 @@
     x:Class="GrafikoMat.Views.Settings.AppearanceSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    mc:Ignorable="d"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+    mc:Ignorable="d">
 
-    <Grid>
-        <TextBlock Text="Widok Ustawień Wyglądu - w budowie" VerticalAlignment="Center" HorizontalAlignment="Center" />
-    </Grid>
+    <StackPanel Spacing="16" Padding="20">
+        <TextBlock Text="Motyw Aplikacji" FontSize="20" FontWeight="SemiBold"/>
+        <TextBlock Text="Wybierz wygląd interfejsu. Zmiana zostanie zastosowana natychmiastowo i zapamiętana."
+                   TextWrapping="Wrap" Opacity="0.8"/>
+
+        <StackPanel Spacing="8" Margin="0,12,0,0">
+            <RadioButton x:Name="LightRadioButton" Content="Jasny" GroupName="Theme" Checked="ThemeRadioButton_Checked"/>
+            <RadioButton x:Name="DarkRadioButton" Content="Ciemny" GroupName="Theme" Checked="ThemeRadioButton_Checked"/>
+            <RadioButton x:Name="SystemRadioButton" Content="Użyj ustawień systemowych" GroupName="Theme" Checked="ThemeRadioButton_Checked"/>
+        </StackPanel>
+    </StackPanel>
 </UserControl>

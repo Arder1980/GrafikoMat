@@ -21,10 +21,12 @@ namespace GrafikoMat.Repositories
         public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
             if (_supabase.Auth.CurrentUser?.Id is null) return null;
+
             var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
             var response = await _supabase.From<DoctorProfile>()
                 .Where(d => d.Id == userId)
                 .Single();
+
             return response;
         }
 
@@ -53,6 +55,7 @@ namespace GrafikoMat.Repositories
                     IsArchived = profile.IsArchived,
                     RequiresPasswordChange = profile.RequiresPasswordChange
                 };
+
                 await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
             }
 
@@ -75,8 +78,8 @@ namespace GrafikoMat.Repositories
 
         public async Task SetArchiveStatusAsync(Guid doctorId, bool isArchived)
         {
-            var partialUpdate = new DoctorProfile { Id = doctorId, IsArchived = isArchived };
-            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+            var partialUpdate = new DoctorForUpdate { Id = doctorId, IsArchived = isArchived };
+            await _supabase.From<DoctorForUpdate>().Update(partialUpdate);
         }
 
         public async Task ResetPasswordAsync(Guid doctorId, string newPassword)
@@ -90,14 +93,14 @@ namespace GrafikoMat.Repositories
 
         public async Task SetPasswordChangeFlagAsync(Guid doctorId, bool requiresChange)
         {
-            var partialUpdate = new DoctorProfile { Id = doctorId, RequiresPasswordChange = requiresChange };
-            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+            var partialUpdate = new DoctorForUpdate { Id = doctorId, RequiresPasswordChange = requiresChange };
+            await _supabase.From<DoctorForUpdate>().Update(partialUpdate);
         }
 
         public async Task ClearPasswordChangeFlagAsync(Guid doctorId)
         {
-            var partialUpdate = new DoctorProfile { Id = doctorId, RequiresPasswordChange = false };
-            await _supabase.From<DoctorProfile>().Update(partialUpdate);
+            var partialUpdate = new DoctorForUpdate { Id = doctorId, RequiresPasswordChange = false };
+            await _supabase.From<DoctorForUpdate>().Update(partialUpdate);
         }
     }
 }

@@ -38,15 +38,8 @@ namespace GrafikoMat.Views.Settings
         {
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
-                actionAsync: async () =>
-                {
-                    // W tym przypadku sama weryfikacja jest akcją
-                    await Task.CompletedTask;
-                },
-                verificationAsync: async () =>
-                {
-                    return await RunConnectionTestAsync();
-                },
+                actionAsync: async () => { await Task.CompletedTask; }, // Sama weryfikacja jest akcją
+                verificationAsync: RunConnectionTestAsync,
                 successMessage: "Połączenie z bazą danych Supabase jest aktywne.",
                 errorMessageTitle: "Błąd połączenia"
             );
@@ -62,23 +55,30 @@ namespace GrafikoMat.Views.Settings
                 SupabaseAnonKey = ApiKeyTextBox.Text
             };
 
-            await _orchestrator.PerformActionAsync(
-                viewId: ActionContainer.GetViewId(),
-                actionAsync: async () =>
-                {
-                    await _settingsService.SaveSettingsAsync(newSettings);
-                },
-                verificationAsync: async () =>
-                {
-                    // Weryfikacja polega na udanym teście połączenia z nowymi danymi
-                    return await RunConnectionTestAsync();
-                },
-                successMessage: "Ustawienia zostały zapisane, a połączenie z bazą danych jest aktywne.",
-                errorMessageTitle: "Błąd zapisu"
-            );
+            try
+            {
+                await _orchestrator.PerformActionAsync(
+                    viewId: ActionContainer.GetViewId(),
+                    actionAsync: async () =>
+                    {
+                        if (!await RunConnectionTestAsync())
+                        {
+                            throw new Exception("Test połączenia z nowymi danymi nie powiódł się.");
+                        }
+                        await _settingsService.SaveSettingsAsync(newSettings);
+                    },
+                    verificationAsync: async () => true,
+                    successMessage: "Ustawienia zostały zapisane. Aplikacja zostanie przeładowana.",
+                    errorMessageTitle: "Błąd zapisu"
+                );
 
-            // Jeśli weryfikacja się powiodła (orka nie rzuciła wyjątku), przeładuj
-            ReloadRequired?.Invoke();
+                await Task.Delay(1500);
+                ReloadRequired?.Invoke();
+            }
+            catch (Exception)
+            {
+                // Orkiestrator już wyświetlił błąd, więc nie robimy nic więcej
+            }
         }
 
         private async Task<bool> RunConnectionTestAsync()
@@ -94,7 +94,6 @@ namespace GrafikoMat.Views.Settings
             var options = new SupabaseOptions { AutoConnectRealtime = false, AutoRefreshToken = false };
             var tempClient = new Client(url, key, options);
 
-            // Próba wykonania prostego zapytania do bazy
             await tempClient.From<Unit>().Select("id").Limit(1).Get();
             return true;
         }

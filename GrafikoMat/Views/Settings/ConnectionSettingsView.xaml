@@ -8,11 +8,11 @@
     mc:Ignorable="d">
 
     <controls:ActionContainer x:Name="ActionContainer">
-        <StackPanel Spacing="20">
+        <StackPanel Spacing="20" MaxWidth="500" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock Text="Połączenie z Bazą Danych" FontSize="20" FontWeight="SemiBold"/>
 
             <TextBlock TextWrapping="Wrap">
-                Wprowadź tutaj dane połączeniowe do Twojego projektu w Supabase. Te ustawienia są globalne dla całej aplikacji.
+                 Wprowadź tutaj dane połączeniowe do Twojego projektu w Supabase. Te ustawienia są globalne dla całej aplikacji.
             </TextBlock>
 
             <TextBox x:Name="UrlTextBox" Header="Supabase URL"/>
@@ -23,7 +23,7 @@
                         Content="Testuj połączenie"
                         Click="TestButton_Click"/>
                 <Button x:Name="SaveButton" 
-                        Content="Zapisz i przeładuj"
+                        Content="Zapisz i kontynuuj"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="SaveButton_Click"/>
             </StackPanel>

@@ -15,7 +15,78 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Grid x:Name="TopBarRow" Grid.Row="0" Height="32" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="10,0,0,0" Opacity="0">
+        <Grid x:Name="UnitSelectionPanel" Grid.Row="1" Padding="12,8" MinHeight="100" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="PrevUnitButton" Grid.Column="0" Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}" ToolTipService.ToolTip="Poprzednia jednostka"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
+                <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Opacity="0.8" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0"/>
+            </StackPanel>
+            <Button x:Name="NextUnitButton" Grid.Column="2" Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToNextUnitCommand}" ToolTipService.ToolTip="Następna jednostka"/>
+        </Grid>
+
+        <Grid x:Name="MainContentPanel" Grid.Row="2" Padding="12,8,12,4" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="-20"/>
+            </Grid.RenderTransform>
+            <Grid x:Name="ViewportGrid">
+                <ContentControl x:Name="ViewportCurrent" Opacity="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                <ContentControl x:Name="ViewportNext" Opacity="0"/>
+            </Grid>
+        </Grid>
+
+        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
+            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}" VerticalAlignment="Center">
+                <ItemsControl.RenderTransform>
+                    <TranslateTransform/>
+                </ItemsControl.RenderTransform>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Content="{Binding Label}" Command="{Binding Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Grid>
+
+        <Grid x:Name="BottomStatusBar" Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16" Background="Transparent" Opacity="0">
+            <Grid.RenderTransform>
+                <TranslateTransform Y="20"/>
+            </Grid.RenderTransform>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12" VerticalAlignment="Center"/>
+            <Border Grid.Column="1" Width="1" Background="#22000000"/>
+            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" VerticalAlignment="Center"/>
+        </Grid>
+
+        <Grid x:Name="InitialLoadingOverlay" Grid.RowSpan="5" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressRing IsActive="True" Width="48" Height="48"/>
+                <TextBlock Text="Przygotowywanie zawartości..." FontSize="16" FontWeight="SemiBold" Opacity="0.9"/>
+            </StackPanel>
+        </Grid>
+
+        <ContentControl x:Name="LoginOverlay" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Grid.RowSpan="5"/>
+
+        <ContentControl x:Name="StartupOverlayContent" Grid.RowSpan="5"
+                        HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+
+        <Grid x:Name="TopBarRow" Grid.Row="0" Height="32" Background="Transparent" Padding="10,0,0,0" Opacity="0">
             <Grid.RenderTransform>
                 <TranslateTransform Y="-20"/>
             </Grid.RenderTransform>
@@ -41,79 +112,13 @@
             <Grid x:Name="DragBar" Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="GrafikoMat Dyżurowy" FontSize="14" FontWeight="SemiBold" Opacity="0.92"/>
             </Grid>
-            <Button Grid.Column="1" x:Name="TitleBarMenuButton" Width="46" Height="32" HorizontalAlignment="Right" ToolTipService.ToolTip="Menu" FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}" Click="TitleBarMenuButton_Click">
+            <Button Grid.Column="1" x:Name="TitleBarMenuButton" Width="46" Height="32" HorizontalAlignment="Right" ToolTipService.ToolTip="Menu" FlyoutBase.AttachedFlyout="{StaticResource TitleBarMenu}" Click="TitleBarMenuButton_Click" Style="{StaticResource SubtleButtonStyle}">
                 <Button.Resources>
                     <CornerRadius x:Key="ControlCornerRadius">0</CornerRadius>
                 </Button.Resources>
                 <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;"/>
             </Button>
         </Grid>
-        <Grid x:Name="UnitSelectionPanel" Grid.Row="1" Padding="12,8" MinHeight="100" Opacity="0">
-            <Grid.RenderTransform>
-                <TranslateTransform Y="-20"/>
-            </Grid.RenderTransform>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Button x:Name="PrevUnitButton" Grid.Column="0" Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}" ToolTipService.ToolTip="Poprzednia jednostka"/>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
-                <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Opacity="0.8" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0"/>
-            </StackPanel>
-            <Button x:Name="NextUnitButton" Grid.Column="2" Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToNextUnitCommand}" ToolTipService.ToolTip="Następna jednostka"/>
-        </Grid>
-        <Grid x:Name="MainContentPanel" Grid.Row="2" Padding="12,8,12,4" Opacity="0">
-            <Grid.RenderTransform>
-                <TranslateTransform Y="-20"/>
-            </Grid.RenderTransform>
-            <Border BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-                <Grid x:Name="ViewportGrid">
-                    <ContentControl x:Name="ViewportCurrent" Opacity="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
-                    <ContentControl x:Name="ViewportNext" Opacity="0"/>
-                </Grid>
-            </Border>
-        </Grid>
-        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
-            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}" VerticalAlignment="Center">
-                <ItemsControl.RenderTransform>
-                    <TranslateTransform/>
-                </ItemsControl.RenderTransform>
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Content="{Binding Label}" Command="{Binding Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </Grid>
-        <Grid x:Name="BottomStatusBar" Grid.Row="4" Padding="10,4,10,12" ColumnSpacing="16" Background="{ThemeResource LayerFillColorDefaultBrush}" Opacity="0">
-            <Grid.RenderTransform>
-                <TranslateTransform Y="20"/>
-            </Grid.RenderTransform>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.8" FontSize="12" VerticalAlignment="Center"/>
-            <Border Grid.Column="1" Width="1" Background="#22000000"/>
-            <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" VerticalAlignment="Center"/>
-        </Grid>
-
-        <Grid x:Name="InitialLoadingOverlay" Grid.RowSpan="5" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-            <StackPanel Spacing="12" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <ProgressRing IsActive="True" Width="48" Height="48"/>
-                <TextBlock Text="Przygotowywanie zawartości..." FontSize="16" FontWeight="SemiBold" Opacity="0.9"/>
-            </StackPanel>
-        </Grid>
-
-        <ContentControl x:Name="LoginOverlay" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Grid.RowSpan="5"/>
 
     </Grid>
 </Window>

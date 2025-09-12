@@ -1,6 +1,7 @@
 ﻿using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
+using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -53,9 +54,6 @@ namespace GrafikoMat.Views
             }
 
             _appSettings = await _settingsService.LoadSettingsAsync();
-
-            // Domyślnie ładujemy widok bezpośrednio.
-            // Dla widoków z zapisem opakujemy je w ActionContainer.
             object? viewToLoad = null;
 
             switch (selectedItem)
@@ -77,23 +75,32 @@ namespace GrafikoMat.Views
                     }
                     break;
                 case "Priorytety":
-                    viewToLoad = new PrioritiesSettingsView();
+                    if (_appSettings != null)
+                    {
+                        // ZMIANA: Dodano brakujący argument 'this.DispatcherQueue' do konstruktora
+                        var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
+                        var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
+                        var container = new ActionContainer { Content = prioritiesView };
+                        prioritiesViewModel.SetViewId(container.GetViewId());
+                        viewToLoad = container;
+                    }
                     break;
                 case "Wybór silnika":
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
-
-                        // Tworzymy kontener i umieszczamy w nim nasz widok
                         var container = new ActionContainer { Content = engineView };
-
-                        // Przekazujemy ID kontenera do ViewModelu, aby wiedział, do kogo wysyłać komunikaty
                         engineView.ViewModel.SetViewId(container.GetViewId());
                         viewToLoad = container;
                     }
                     break;
                 case "Wygląd":
-                    viewToLoad = new AppearanceSettingsView();
+                    var appearanceView = new AppearanceSettingsView();
+                    if (_appSettings != null)
+                    {
+                        appearanceView.Initialize(_settingsService, _appSettings);
+                    }
+                    viewToLoad = appearanceView;
                     break;
             }
 

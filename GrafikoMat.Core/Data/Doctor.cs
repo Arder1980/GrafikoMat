@@ -1,6 +1,7 @@
 ﻿using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
+using System.Text.Json.Serialization;
 
 namespace GrafikoMat.Core.Data
 {
@@ -34,6 +35,7 @@ namespace GrafikoMat.Core.Data
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        [JsonIgnore]
         public string FullName => $"{LastName} {FirstName}";
 
         public object Clone()

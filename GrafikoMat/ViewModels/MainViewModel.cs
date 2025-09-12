@@ -2,17 +2,20 @@
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
+using GrafikoMat.Core.Scheduling.Engines;
+using GrafikoMat.Core.Scheduling.Models;
 using GrafikoMat.Models;
 using GrafikoMat.Services;
+using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Input;
-
 
 namespace GrafikoMat.ViewModels
 {
@@ -33,22 +36,17 @@ namespace GrafikoMat.ViewModels
 
         public bool IsCurrentUserAdmin { get; private set; }
 
+        [JsonIgnore]
+        public XamlRoot? XamlRoot { get; set; }
+
         public Unit? ActiveUnit => _activeUnitIndex >= 0 && _activeUnitIndex < _userUnits.Count
             ? _userUnits[_activeUnitIndex]
             : null;
 
-        public string ActiveUnitHospitalName
-        {
-            get => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
-        }
-
-        public string ActiveUnitDepartmentName
-        {
-            get => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
-        }
+        public string ActiveUnitHospitalName => ActiveUnit?.HospitalFullName ?? "GrafikoMat Dyżurowy";
+        public string ActiveUnitDepartmentName => ActiveUnit?.DepartmentName ?? (IsCurrentUserAdmin ? "Panel Administratora" : "Brak przypisanych jednostek");
 
         public ObservableCollection<int> Years { get; } = new(new[] { 2024, 2025, 2026, 2027, 2028 });
-
         private int _selectedYear = DateTime.Today.Year;
         public int SelectedYear { get => _selectedYear; set { if (_selectedYear != value) { EnsureYearInList(value); _selectedYear = value; OnPropertyChanged(); UpdateRosterForSelectedMonth(); } } }
 
@@ -76,7 +74,6 @@ namespace GrafikoMat.ViewModels
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
-
             this.PropertyChanged += OnMainViewModelPropertyChanged;
         }
 
@@ -95,21 +92,16 @@ namespace GrafikoMat.ViewModels
         public async Task LoadUserAndUnitDataAsync()
         {
             if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null || _settingsService == null) return;
-
             _allDoctors.Clear();
             _allAssignments.Clear();
             _allDoctors.AddRange(await _doctorRepository.GetAllAsync());
             _allAssignments.AddRange(await _assignmentRepository.GetAllAsync());
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
-            if (userProfile == null)
-            {
-                return;
-            }
+            if (userProfile == null) return;
 
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
-
             _userUnits.Clear();
             if (IsCurrentUserAdmin)
             {
@@ -134,7 +126,6 @@ namespace GrafikoMat.ViewModels
             var lastUnitId = settings.LastActiveUnitId;
 
             int targetIndex = 0;
-
             if (lastUnitId.HasValue)
             {
                 int foundIndex = _userUnits.FindIndex(u => u.Id == lastUnitId.Value);
@@ -143,7 +134,6 @@ namespace GrafikoMat.ViewModels
                     targetIndex = foundIndex;
                 }
             }
-
             _activeUnitIndex = _userUnits.Any() ? targetIndex : -1;
 
             OnPropertyChanged(nameof(ActiveUnit));
@@ -155,11 +145,9 @@ namespace GrafikoMat.ViewModels
         {
             if (_userUnits.Count == 0) return;
             _activeUnitIndex = (_activeUnitIndex + 1) % _userUnits.Count;
-
             OnPropertyChanged(nameof(ActiveUnit));
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
-
             LoadDataForActiveUnit();
         }
 
@@ -167,15 +155,12 @@ namespace GrafikoMat.ViewModels
         {
             if (_userUnits.Count == 0) return;
             _activeUnitIndex = (_activeUnitIndex - 1 + _userUnits.Count) % _userUnits.Count;
-
             OnPropertyChanged(nameof(ActiveUnit));
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
-
             LoadDataForActiveUnit();
         }
 
-        // ZMIANA: Całkowicie nowa wersja metody
         public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();
@@ -185,20 +170,17 @@ namespace GrafikoMat.ViewModels
                 .Where(a => a.UnitId == ActiveUnit.Id && a.IsActive)
                 .Select(a => a.DoctorId)
                 .ToHashSet();
-
             if (!doctorIdsForUnit.Any()) return;
 
             var doctorsForUnit = _allDoctors
                 .Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived)
                 .OrderBy(d => d.LastName).ThenBy(d => d.FirstName)
                 .ToList();
-
             var duplicateFullNames = doctorsForUnit
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToHashSet();
-
             foreach (var doctor in doctorsForUnit)
             {
                 var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
@@ -208,7 +190,6 @@ namespace GrafikoMat.ViewModels
                 string displayName = needsDifferentiator
                     ? $"{doctor.LastName} {doctor.FirstName} ({doctor.Abbreviation})"
                     : $"{doctor.LastName} {doctor.FirstName}";
-
                 DoctorRows.Add(new DoctorRow(doctor, displayName, hasDecls));
             }
 
@@ -241,7 +222,6 @@ namespace GrafikoMat.ViewModels
         {
             if (_settingsService == null) return;
             var settings = await _settingsService.LoadSettingsAsync();
-
             var newSettings = settings with { LastActiveUnitId = ActiveUnit?.Id };
             await _settingsService.SaveSettingsAsync(newSettings);
         }
@@ -257,22 +237,62 @@ namespace GrafikoMat.ViewModels
         public void ApplyDoctorMonth(DoctorMonthDeclaration dm) { _declByKey[Key(dm.Doctor, dm.Year, dm.MonthIndex)] = dm; var row = DoctorRows.FirstOrDefault(r => r.Name == dm.Doctor); if (row != null) row.HasDeclarations = true; OnPropertyChanged(nameof(_declByKey)); }
 
         public (bool has, DayMode mode, string? full, string? day, string? night) TryGetEntry(string doctor, int year, int monthIndex, int dayIndex) { if (_declByKey.TryGetValue(Key(doctor, year, monthIndex), out var dm) && dayIndex >= 0 && dayIndex < dm.Days.Length) { var d = dm.Days[dayIndex]; return (true, d.Mode, d.Full, d.Day, d.Night); } return (false, DayMode.Full24, null, null, null); }
+
+        public async Task GenerateScheduleAsync()
+        {
+            if (_settingsService == null)
+            {
+                // TODO: Pokaż błąd, że serwis ustawień nie jest dostępny
+                return;
+            }
+
+            // 1. Wczytaj aktualne ustawienia
+            var settings = await _settingsService.LoadSettingsAsync();
+
+            // 2. Wybierz tylko AKTYWNE priorytety w ustalonej przez użytkownika kolejności
+            var activePriorities = settings.Priorities
+                .Where(p => p.IsActive)
+                .Select(p => p.Priority)
+                .ToList();
+
+            if (!activePriorities.Any())
+            {
+                // TODO: Pokaż błąd - "Musisz wybrać co najmniej jeden priorytet w ustawieniach."
+                return;
+            }
+
+            // 3. Przygotuj dane wejściowe dla silnika (ScheduleInput)
+            //    To jest miejsce, gdzie trzeba będzie przekonwertować dane z _declByKey i DoctorRows
+            //    na format zrozumiały dla silnika. Na razie tworzymy obiekt-zaślepkę.
+            var scheduleInput = new ScheduleInput
+            {
+                // TODO: Wypełnij Doctors, Availability i DutyLimits na podstawie danych z UI
+            };
+
+            // 4. Utwórz i uruchom silnik z wybranymi priorytetami
+            try
+            {
+                // TODO: Dodać obsługę IProgress<double> do pokazywania postępu
+                var solver = ScheduleSolverFactory.Create(settings.SelectedSolver, scheduleInput, activePriorities);
+                var solution = await Task.Run(() => solver.FindOptimalSolution());
+
+                // 5. Przetwórz wynik (solution) i zaktualizuj kolekcję RosterRows
+                //    aby wyświetlić wygenerowany grafik w prawym panelu pulpitu.
+                //    np. UpdateRosterWithSolution(solution);
+            }
+            catch (Exception ex)
+            {
+                // TODO: Pokaż błąd generowania grafiku
+            }
+        }
     }
 
-    // ZMIANA: Aktualizacja klasy DoctorRow
     public class DoctorRow : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
 
-        /// <summary>
-        /// Oryginalny FullName, używany jako klucz wewnętrzny.
-        /// </summary>
         public string Name { get; }
-
-        /// <summary>
-        /// Nazwa sformatowana do wyświetlania w UI (może zawierać skrót).
-        /// </summary>
         public string DisplayName { get; }
 
         private bool _has;

@@ -1,14 +1,15 @@
-﻿using GrafikoMat.Common;
+﻿using CommunityToolkit.Mvvm.Input;
+using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Repositories; // NOWY USING
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
-using GrafikoMat.Repositories; // NOWY USING
+using GrafikoMat.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views;
 using Microsoft.UI;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -21,11 +22,10 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows.Input;
 using Windows.Graphics;
 using Windows.UI;
+using WinRT;
 using WinRT.Interop;
-using CommunityToolkit.Mvvm.Input;
 
 namespace GrafikoMat
 {
@@ -55,27 +55,26 @@ namespace GrafikoMat
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
         private AppSettings? _appSettings;
-
-        // ZMIANA: Usunięcie DataService na rzecz repozytoriów
         private IDoctorRepository? _doctorRepository;
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
 
+        DesktopAcrylicController? _acrylicController;
+        SystemBackdropConfiguration? _backdropConfiguration;
+
         public MainWindow()
         {
+            this.InitializeComponent();
             _settingsService = new SettingsService();
             _supabaseService = new SupabaseService();
 
             ViewModel = new MainViewModel();
             ViewModel.SetSettingsService(_settingsService);
 
-            InitializeComponent();
-
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(DragBar);
 
             InitAppWindow();
-            SetupBackdrop();
             ApplyTitleBarMenuStyling();
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
@@ -88,18 +87,29 @@ namespace GrafikoMat
             _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
             _declarationsView.CloseRequested += _evtDeclClose;
 
-            this.SizeChanged += OnWindowSizeChanged;
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
+            (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
         }
 
         private async Task InitializeApplicationAsync()
         {
             await ReloadSettingsAndServicesAsync();
+
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
-                await ShowFirstTimeSetupAsync();
-                await ReloadSettingsAndServicesAsync();
+                var setupView = new Views.Settings.ConnectionSettingsView();
+                setupView.Initialize(_settingsService, _appSettings ?? new AppSettings());
+
+                setupView.ReloadRequired += async () =>
+                {
+                    StartupOverlayContent.Content = null;
+                    await InitializeApplicationAsync();
+                };
+
+                StartupOverlayContent.Content = setupView;
+                InitialLoadingOverlay.Visibility = Visibility.Collapsed;
+                return;
             }
 
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
@@ -113,7 +123,6 @@ namespace GrafikoMat
                 }
             }
 
-            // ZMIANA: Sprawdzamy repozytorium zamiast DataService
             if (_doctorRepository != null && _supabaseService.IsAuthenticated)
             {
                 try
@@ -142,10 +151,9 @@ namespace GrafikoMat
 
             await LoadDataAndShowDashboardAsync();
             InitialLoadingOverlay.Visibility = Visibility.Collapsed;
+            StartupOverlayContent.Content = null;
             await RunEntranceAnimationAsync();
         }
-
-        // Wewnątrz klasy MainWindow
 
         private async Task RunEntranceAnimationAsync()
         {
@@ -184,13 +192,9 @@ namespace GrafikoMat
             sb.Begin();
             await tcs.Task;
 
-            // ----- POCZĄTEK POPRAWKI -----
-            // Po zakończeniu animacji, element DragBar jest już na swoim miejscu.
-            // Ponowne wywołanie SetTitleBar zmusza system do przeliczenia
-            // obszarów przeciągania na podstawie aktualnych, poprawnych wymiarów.
             SetTitleBar(DragBar);
-            // ------ KONIEC POPRAWKI ------
         }
+
         private async Task ReloadSettingsAndServicesAsync()
         {
             _appSettings = await _settingsService.LoadSettingsAsync();
@@ -199,7 +203,6 @@ namespace GrafikoMat
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 await _supabaseService.RestoreSessionIfAnyAsync();
 
-                // ZMIANA: Inicjalizujemy repozytoria zamiast DataService
                 if (_supabaseService.Client != null)
                 {
                     _doctorRepository = new SupabaseDoctorRepository(_supabaseService.Client);
@@ -215,7 +218,6 @@ namespace GrafikoMat
                 _assignmentRepository = null;
             }
 
-            // ZMIANA: Przekazujemy repozytoria do MainViewModel
             ViewModel.SetRepositories(_doctorRepository, _unitRepository, _assignmentRepository);
         }
 
@@ -225,39 +227,6 @@ namespace GrafikoMat
             if (ViewportCurrent.Content == _settingsView)
             {
                 SwitchToSettings(forceRefresh: true);
-            }
-        }
-
-        private async Task ShowFirstTimeSetupAsync()
-        {
-            var setupView = new Views.Settings.ConnectionSettingsView();
-            if (_appSettings != null)
-            {
-                setupView.Initialize(_settingsService, _appSettings);
-            }
-
-            var dialog = new ContentDialog
-            {
-                Title = "Konfiguracja Połączenia z Bazą Danych",
-                Content = setupView,
-                CloseButtonText = "Zamknij Aplikację",
-                IsPrimaryButtonEnabled = false,
-                XamlRoot = this.Content.XamlRoot
-            };
-            var tcs = new TaskCompletionSource();
-            setupView.ReloadRequired += () =>
-            {
-                dialog.Hide();
-                tcs.TrySetResult();
-            };
-
-            await dialog.ShowAsync();
-            await tcs.Task;
-
-            var newSettings = await _settingsService.LoadSettingsAsync();
-            if (string.IsNullOrWhiteSpace(newSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(newSettings.SupabaseAnonKey))
-            {
-                this.Close();
             }
         }
 
@@ -307,7 +276,7 @@ namespace GrafikoMat
 
         private async Task LoadDataAndShowDashboardAsync()
         {
-            if (_doctorRepository != null) // ZMIANA: Sprawdzamy repozytorium
+            if (_doctorRepository != null)
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
                 ViewModel.LoadDataForActiveUnit();
@@ -324,9 +293,7 @@ namespace GrafikoMat
             _settingsView = new SettingsView();
             _settingsView.ReloadRequired += RefreshDataServicesAsync;
 
-            // ZMIANA: Przekazujemy repozytorium
             _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
-
             if (!forceRefresh)
             {
                 await AnimateToAsync(_settingsView, forward: true);
@@ -342,15 +309,12 @@ namespace GrafikoMat
         private async void SwitchToManagement()
         {
             if (_isClosing) return;
-
-            // ZMIANA: Sprawdzamy repozytoria
             if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null)
             {
                 await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację połączenia w ustawieniach.");
                 return;
             }
 
-            // ZMIANA: Przekazujemy repozytoria
             _managementView = new ManagementView(_doctorRepository, _unitRepository, _assignmentRepository, _supabaseService, this.DispatcherQueue);
             await AnimateToAsync(_managementView, forward: true);
             BuildActionsForManage();
@@ -364,7 +328,8 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
             Actions.Add(new UiAction("Dodaj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
             Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
-            Actions.Add(new UiAction("Generuj grafik", new RelayCommand(GenerateRosterPlaceholder)));
+            // ZMIANA: Komenda placeholder została zastąpiona wywołaniem metody z ViewModelu
+            Actions.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync)));
             Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
@@ -721,35 +686,35 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
-            this.SizeChanged -= OnWindowSizeChanged;
             this.Activated -= OnWindowActivated;
             this.Closed -= OnWindowClosed;
-
+            (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
+
             if (_evtDeclSave != null) _declarationsView.SaveRequested -= _evtDeclSave;
             if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
             if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
-
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
 
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
-            try { SystemBackdrop = null; } catch { }
-            try { RootGrid.Background = GetLightFallbackBrush(); } catch { }
+
+            if (_acrylicController != null)
+            {
+                _acrylicController.Dispose();
+                _acrylicController = null;
+            }
+            this.SystemBackdrop = null;
         }
 
         private void OnDeclSave(DoctorMonthDeclaration dm) { if (!string.IsNullOrWhiteSpace(dm.Doctor)) ViewModel.ApplyDoctorMonth(dm); }
-
         private void OnDeclSaveAndClose(DoctorMonthDeclaration dm) { OnDeclSave(dm); SwitchToDashboard(); }
-
         private void OnDeclCloseOnly() => SwitchToDashboard();
-        private async void GenerateRosterPlaceholder() => await ShowInfo("Generuj grafik", "Tu będzie wywołanie algorytmu generowania grafiku oraz podgląd wyniku w prawej kolumnie.");
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
         private async void TitleBarSignOutAndClose_Click(object sender, RoutedEventArgs e)
         {
             try { await _supabaseService.SignOutAsync(); } catch { }
 
-            // ZMIANA: Zerujemy repozytoria
             try
             {
                 _doctorRepository = null;
@@ -764,11 +729,12 @@ namespace GrafikoMat
 
         private async Task ShowInfo(string title, string message)
         {
-            var dlg = new ContentDialog { Title = title, Content = message, PrimaryButtonText = "OK", XamlRoot = RootGrid.XamlRoot };
+            var dlg = App.CreateThemedDialog();
+            dlg.Title = title;
+            dlg.Content = message;
+            dlg.PrimaryButtonText = "OK";
             await dlg.ShowAsync();
         }
-
-
 
         private void ApplyTitleBarMenuStyling()
         {
@@ -782,19 +748,22 @@ namespace GrafikoMat
             TitleBarMenuButton.MinWidth = 46;
             TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
 
-            Color fallbackHover = Color.FromArgb(0xFF, 0x96, 0xF5, 0xE1);
-            var bgBase = tb.ButtonBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonBackgroundColor.Value) : new SolidColorBrush(Colors.Transparent);
-            var fgBase = tb.ButtonForegroundColor.HasValue ? new SolidColorBrush(tb.ButtonForegroundColor.Value) : new SolidColorBrush(Colors.White);
-            var bgHover = tb.ButtonHoverBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonHoverBackgroundColor.Value) : new SolidColorBrush(fallbackHover);
-            var bgPress = tb.ButtonPressedBackgroundColor.HasValue ? new SolidColorBrush(tb.ButtonPressedBackgroundColor.Value) : bgHover;
-            TitleBarMenuButton.Background = bgBase;
-            TitleBarMenuButton.Foreground = fgBase;
-            TitleBarMenuButton.Resources["ButtonBackground"] = bgBase;
-            TitleBarMenuButton.Resources["ButtonForeground"] = fgBase;
-            TitleBarMenuButton.Resources["ButtonBackgroundPointerOver"] = bgHover;
-            TitleBarMenuButton.Resources["ButtonForegroundPointerOver"] = fgBase;
-            TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = bgPress;
-            TitleBarMenuButton.Resources["ButtonForegroundPressed"] = fgBase;
+            var isLightTheme = Application.Current.RequestedTheme == ApplicationTheme.Light;
+            var baseFgColor = isLightTheme ? Colors.Black : Colors.White;
+
+            var buttonBgColor = Colors.Transparent;
+            var buttonFgColor = baseFgColor;
+            var buttonBgHover = isLightTheme ? Color.FromArgb(20, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255);
+            var buttonBgPressed = isLightTheme ? Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(40, 255, 255, 255);
+
+            TitleBarMenuButton.Background = new SolidColorBrush(buttonBgColor);
+            TitleBarMenuButton.Foreground = new SolidColorBrush(buttonFgColor);
+            TitleBarMenuButton.Resources["ButtonBackground"] = new SolidColorBrush(buttonBgColor);
+            TitleBarMenuButton.Resources["ButtonForeground"] = new SolidColorBrush(buttonFgColor);
+            TitleBarMenuButton.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(buttonBgHover);
+            TitleBarMenuButton.Resources["ButtonForegroundPointerOver"] = new SolidColorBrush(buttonFgColor);
+            TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(buttonBgPressed);
+            TitleBarMenuButton.Resources["ButtonForegroundPressed"] = new SolidColorBrush(buttonFgColor);
         }
 
         #region Window Setup and Win32 Interop
@@ -809,6 +778,7 @@ namespace GrafikoMat
             var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = AppWindow.GetFromWindowId(windowId);
+
             if (_appWindow is not null)
             {
                 _appWindow.Title = string.Empty;
@@ -818,11 +788,64 @@ namespace GrafikoMat
             }
         }
 
+        private void OnActualThemeChanged(FrameworkElement sender, object args)
+        {
+            if (_backdropConfiguration != null)
+            {
+                TrySetSystemBackdrop();
+            }
+        }
+
+        private void TrySetSystemBackdrop()
+        {
+            if (_isClosing || !DesktopAcrylicController.IsSupported())
+            {
+                return;
+            }
+
+            if (_backdropConfiguration == null)
+            {
+                _backdropConfiguration = new SystemBackdropConfiguration();
+            }
+
+            if (this.Content is FrameworkElement rootElement)
+            {
+                _backdropConfiguration.Theme = rootElement.ActualTheme switch
+                {
+                    ElementTheme.Dark => SystemBackdropTheme.Dark,
+                    ElementTheme.Light => SystemBackdropTheme.Light,
+                    _ => SystemBackdropTheme.Default
+                };
+            }
+
+            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
+
+            if (!isMaximized)
+            {
+                if (_acrylicController == null)
+                {
+                    _acrylicController = new DesktopAcrylicController();
+                    _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
+                    _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
+                }
+                RootGrid.Background = new SolidColorBrush(Colors.Transparent);
+            }
+            else
+            {
+                if (_acrylicController != null)
+                {
+                    _acrylicController.Dispose();
+                    _acrylicController = null;
+                }
+                RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
+            }
+        }
+
         private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
             if (args.DidPresenterChange && !_isClosing)
             {
-                SetupBackdrop();
+                TrySetSystemBackdrop();
             }
             ApplyTitleBarMenuStyling();
         }
@@ -833,46 +856,18 @@ namespace GrafikoMat
             {
                 _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
                 _isInitialSizeSet = true;
+
+                TrySetSystemBackdrop();
             }
+
             if (_isClosing) return;
-            SetupBackdrop();
+
+            if (_backdropConfiguration != null)
+            {
+                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            }
+
             ApplyTitleBarMenuStyling();
-        }
-
-        private void OnWindowSizeChanged(object? sender, WindowSizeChangedEventArgs e)
-        {
-            if (_isClosing) return;
-        }
-
-        private void SetupBackdrop()
-        {
-            if (_isClosing) return;
-            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-            if (!isMaximized)
-            {
-                try
-                {
-                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
-                    SystemBackdrop = new DesktopAcrylicBackdrop();
-                }
-                catch
-                {
-                    SystemBackdrop = null;
-                    RootGrid.Background = GetLightFallbackBrush();
-                }
-            }
-            else
-            {
-                SystemBackdrop = null;
-                RootGrid.Background = GetLightFallbackBrush();
-            }
-        }
-
-        private Brush GetLightFallbackBrush()
-        {
-            if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var val) && val is Brush b)
-                return b;
-            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF7, 0xF7, 0xF7));
         }
 
         private void SubclassWindow(IntPtr hwnd)
@@ -883,7 +878,7 @@ namespace GrafikoMat
 
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if (msg == 0x0024)
+            if (msg == 0x0024) // WM_GETMINMAXINFO
             {
                 var minMaxInfo = Marshal.PtrToStructure<MINMAXINFO>(lParam);
                 var dpi = GetDpiForWindow(hWnd);
@@ -893,6 +888,7 @@ namespace GrafikoMat
                 Marshal.StructureToPtr(minMaxInfo, lParam, true);
                 return IntPtr.Zero;
             }
+
             return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
         }
 

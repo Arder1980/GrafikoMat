@@ -103,6 +103,7 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
         public async Task InitializeAsync()
         {
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
@@ -145,16 +146,19 @@ namespace GrafikoMat.ViewModels
         {
             FilteredDoctors.Clear();
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
+
             var filteredResult = (string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
                     d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase)))
                 .ToList();
+
             var duplicateFullNames = filteredResult
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToHashSet();
+
             foreach (var doctor in filteredResult.OrderBy(d => d.LastName).ThenBy(d => d.FirstName))
             {
                 bool needsDifferentiator = duplicateFullNames.Contains(doctor.FullName);
@@ -164,7 +168,6 @@ namespace GrafikoMat.ViewModels
 
         private async Task AddNewDoctorAsync()
         {
-            // Używamy orkiestratora tylko do pokazania błędu, jeśli nie ma jednostek
             try
             {
                 await _orchestrator.PerformLoadAsync(_viewId, async () =>
@@ -178,7 +181,7 @@ namespace GrafikoMat.ViewModels
             }
             catch
             {
-                return; // Orkiestrator pokazał błąd, przerywamy
+                return;
             }
 
             SelectedDoctor = null;
@@ -194,21 +197,17 @@ namespace GrafikoMat.ViewModels
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
 
-            // Sprawdzanie, czy są nowe, niezapisane przypisania
             var newAssignments = EditorViewModel.Assignments.Where(a => a.IsAssigned && !a.IsPersisted).ToList();
             if (newAssignments.Any())
             {
-                var dialog = new ContentDialog
-                {
-                    Title = "Potwierdź przypisanie do jednostki",
-                    Content = "Przypisanie dyżurnego do jednostki jest operacją nieodwracalną z poziomu interfejsu użytkownika.\nCzy na pewno chcesz kontynuować?",
-                    PrimaryButtonText = "Tak",
-                    CloseButtonText = "Nie",
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = App.MainRoot.Content.XamlRoot
-                };
-                var result = await dialog.ShowAsync();
+                var dialog = App.CreateThemedDialog();
+                dialog.Title = "Potwierdź przypisanie do jednostki";
+                dialog.Content = "Przypisanie dyżurnego do jednostki jest operacją nieodwracalną z poziomu interfejsu użytkownika.\nCzy na pewno chcesz kontynuować?";
+                dialog.PrimaryButtonText = "Tak";
+                dialog.CloseButtonText = "Nie";
+                dialog.DefaultButton = ContentDialogButton.Close;
 
+                var result = await dialog.ShowAsync();
                 if (result != ContentDialogResult.Primary)
                 {
                     ResetNewUnitAssignments();
@@ -259,7 +258,6 @@ namespace GrafikoMat.ViewModels
             });
         }
 
-        // NOWA METODA
         private void ResetNewUnitAssignments()
         {
             if (EditorViewModel?.Assignments != null)
@@ -277,15 +275,14 @@ namespace GrafikoMat.ViewModels
         private async Task ArchiveDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-            var dialog = new ContentDialog
-            {
-                Title = "Potwierdź archiwizację",
-                Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.DisplayName}?",
-                PrimaryButtonText = "Archiwizuj",
-                CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = App.MainRoot.Content.XamlRoot
-            };
+
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Potwierdź archiwizację";
+            dialog.Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.DisplayName}?";
+            dialog.PrimaryButtonText = "Archiwizuj";
+            dialog.CloseButtonText = "Anuluj";
+            dialog.DefaultButton = ContentDialogButton.Close;
+
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 
@@ -329,15 +326,14 @@ namespace GrafikoMat.ViewModels
         private async Task ResetPasswordAsync()
         {
             if (SelectedDoctor == null || EditorViewModel == null) return;
-            var dialog = new ContentDialog
-            {
-                Title = "Potwierdź resetowanie hasła",
-                Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.DisplayName}?",
-                PrimaryButtonText = "Resetuj",
-                CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = App.MainRoot.Content.XamlRoot
-            };
+
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Potwierdź resetowanie hasła";
+            dialog.Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.DisplayName}?";
+            dialog.PrimaryButtonText = "Resetuj";
+            dialog.CloseButtonText = "Anuluj";
+            dialog.DefaultButton = ContentDialogButton.Primary;
+
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
 

@@ -21,13 +21,30 @@ namespace GrafikoMat.Controls
         public ActionContainer()
         {
             this.InitializeComponent();
-            this.Loaded += (s, e) => WeakReferenceMessenger.Default.RegisterAll(this);
-            this.Unloaded += (s, e) => WeakReferenceMessenger.Default.UnregisterAll(this);
+            // ZMIANA: Zdarzenie Unloaded jest teraz prawidłowo podpięte do wyrejestrowania
+            this.Loaded += OnLoaded;
+            this.Unloaded += OnUnloaded;
+        }
+
+        // ZMIANA: Nowa, bezpieczna metoda obsługi zdarzenia Loaded
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            // Najpierw wyrejestruj, aby uniknąć podwójnej subskrypcji.
+            // To sprawia, że operacja jest bezpieczna do wielokrotnego wywołania.
+            WeakReferenceMessenger.Default.UnregisterAll(this);
+            WeakReferenceMessenger.Default.RegisterAll(this);
+        }
+
+        // ZMIANA: Nowa metoda do obsługi Unloaded dla czystości kodu
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            WeakReferenceMessenger.Default.UnregisterAll(this);
         }
 
         public void Receive(ShowBusyOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
                 ActionProgressRing.IsActive = true;
@@ -39,6 +56,7 @@ namespace GrafikoMat.Controls
         public void Receive(ShowStatusOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
                 ActionProgressRing.IsActive = false;
@@ -53,6 +71,7 @@ namespace GrafikoMat.Controls
         public void Receive(HideOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
                 OverlayHost.Visibility = Visibility.Collapsed;

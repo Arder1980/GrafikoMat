@@ -15,7 +15,7 @@
     </UserControl.Resources>
 
     <controls:ActionContainer x:Name="ActionContainer">
-        <Grid>
+        <Grid Padding="20">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>

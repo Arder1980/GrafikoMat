@@ -40,8 +40,8 @@
 
         <Grid Grid.Row="1" Padding="12,0,12,12" ColumnSpacing="24">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="3*"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="320"/>
             </Grid.ColumnDefinitions>
 
             <Grid Grid.Column="0">
@@ -71,12 +71,12 @@
                                 <controls:AutoEqualRowsGrid/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        
+
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RosterRow">
                                 <Grid ColumnSpacing="12" Padding="8,0"
                                       Background="{x:Bind IsDayOff, Converter={StaticResource BooleanToBrushConverter_DayOff}}"
-                                      BorderBrush="{ThemeResource CardStrokeColorDefault}"
+                                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                       BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="130"/>

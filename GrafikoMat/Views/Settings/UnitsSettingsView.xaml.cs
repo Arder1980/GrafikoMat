@@ -36,17 +36,15 @@ namespace GrafikoMat.Views.Settings
 
         private async void UnitsSettingsView_Loaded(object sender, RoutedEventArgs e)
         {
-            // Używamy nowej, poprawnej metody do obsługi ładowania
             await _orchestrator.PerformLoadAsync(
                 viewId: ActionContainer.GetViewId(),
                 loadActionAsync: LoadUnitsAsync
-            );
+             );
         }
 
         private async Task LoadUnitsAsync()
         {
             if (_unitRepository == null) return;
-
             _masterUnitList.Clear();
             var unitsFromDb = await _unitRepository.GetAllAsync();
             _masterUnitList.AddRange(unitsFromDb.OrderBy(u => u.Name));
@@ -152,18 +150,15 @@ namespace GrafikoMat.Views.Settings
         {
             if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
 
-            var dialog = new ContentDialog
-            {
-                Title = "Potwierdź archiwizację",
-                Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'?",
-                PrimaryButtonText = "Archiwizuj",
-                CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Close,
-                XamlRoot = this.XamlRoot
-            };
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Potwierdź archiwizację";
+            dialog.Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'?";
+            dialog.PrimaryButtonText = "Archiwizuj";
+            dialog.CloseButtonText = "Anuluj";
+            dialog.DefaultButton = ContentDialogButton.Close;
+
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
-
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
                 actionAsync: async () => await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, true),
@@ -181,7 +176,6 @@ namespace GrafikoMat.Views.Settings
         private async void RestoreButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
-
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
                 actionAsync: async () => await _unitRepository.SetArchiveStatusAsync(selectedUnit.Id, false),
@@ -197,6 +191,7 @@ namespace GrafikoMat.Views.Settings
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowUnitDialogAsync(null);
+
         private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit) await ShowUnitDialogAsync(selectedUnit);
@@ -220,19 +215,15 @@ namespace GrafikoMat.Views.Settings
 
             var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox }, Width = 650 };
 
-            var dialog = new ContentDialog
-            {
-                Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę",
-                Content = panel,
-                PrimaryButtonText = "Zapisz",
-                CloseButtonText = "Anuluj",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = this.XamlRoot
-            };
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę";
+            dialog.Content = panel;
+            dialog.PrimaryButtonText = "Zapisz";
+            dialog.CloseButtonText = "Anuluj";
+            dialog.DefaultButton = ContentDialogButton.Primary;
 
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
-
             var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
             unitToSave.Name = nameTextBox.Text;
             unitToSave.HospitalFullName = hospitalNameTextBox.Text;
@@ -248,7 +239,7 @@ namespace GrafikoMat.Views.Settings
                 },
                 successMessage: isEditMode ? "Poprawnie zapisano zmiany w jednostce." : "Nowa jednostka została pomyślnie dodana.",
                 errorMessageTitle: "Błąd zapisu jednostki"
-            );
+             );
         }
     }
 }
