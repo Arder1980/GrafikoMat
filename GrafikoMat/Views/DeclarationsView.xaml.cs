@@ -42,35 +42,27 @@ namespace GrafikoMat.Views
 
             if (currentTheme == ElementTheme.Light)
             {
-                // === PALETA KOLORÓW WYŁĄCZNIE DLA MOTYWU JASNEGO (BEZ ZMIAN) ===
+                // === PALETA KOLORÓW DLA MOTYWU JASNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeDayOff = Color.FromArgb(0x1A, 0, 0, 0);
-                var shadeOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
-                var headerBgStandard = Color.FromArgb(0x59, 0, 0, 0);
-                var headerBgDayOff = Color.FromArgb(0x47, 0, 0, 0);
-                var headerBgOtherMonth = Color.FromArgb(0x1A, 0, 0, 0);
-                var borderLight = Color.FromArgb(0x33, 0, 0, 0);
-                var borderOther = Color.FromArgb(0x4D, 0, 0, 0);
-                var textNormal = Color.FromArgb(0xE6, 0, 0, 0);
-                var textMutedDayOff = Color.FromArgb(0x4D, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
+                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);      // Tło Dnia Roboczego (Aktywny): 5% czerni
+                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);         // Tło Dnia Wolnego (Aktywny): 15% czerni
+                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);      // Tło Nagłówka (Aktywny): 35% czerni
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);  // Tło Nagłówka (Nieaktywny): 5% czerni
+                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);         // Ramka (Aktywny): 30% czerni
+                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);         // Ramka (Nieaktywny): 5% czerni
+                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);          // Czcionka (Aktywny): 75% czerni
+                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);           // ZMIANA: Czcionka (Nieaktywny): 10% czerni
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
-                if (cell.InMonth == false) bgColor = shadeOtherMonth;
-                else if (cell.IsDayOff) bgColor = shadeDayOff;
-                else bgColor = transparent;
-
-                if (cell.InMonth == false) headerBgColor = headerBgOtherMonth;
-                else if (cell.IsDayOff) headerBgColor = headerBgDayOff;
-                else headerBgColor = headerBgStandard;
-
-                borderColor = cell.InMonth == false ? borderOther : borderLight;
-
-                if (cell.InMonth == false)
-                    numFgColor = cell.IsDayOff ? textMutedDayOff : textMuted;
+                if (cell.InMonth)
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
                 else
-                    numFgColor = textNormal;
+                    bgColor = transparent;
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                borderColor = cell.InMonth ? borderLight : borderOther;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
 
                 (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
                 (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
@@ -79,43 +71,27 @@ namespace GrafikoMat.Views
             }
             else // Dark Theme
             {
-                // === PALETA KOLORÓW DLA MOTYWU CIEMNEGO (Z OSTATECZNYMI POPRAWKAMI) ===
+                // === PALETA KOLORÓW DLA MOTYWU CIEMNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeDayOff = Color.FromArgb(0x28, 255, 255, 255);
-                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
-                var headerBgStandard = Color.FromArgb(0x4D, 255, 255, 255);
-                var headerBgDayOff = Color.FromArgb(0x59, 255, 255, 255);
-                var textNormal = Color.FromArgb(0xF2, 255, 255, 255);
-
-                // ZMIANA: Zunifikowane, przyciemnione kolory dla WSZYSTKICH nieaktywnych dni
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255); // Bardzo subtelne tło nagłówka (5% bieli)
-                var borderOtherMonth = headerBgOtherMonth;                   // Taka sama ramka
-                var textOtherMonth = Color.FromArgb(0x33, 255, 255, 255);     // Mocno przyciemniona czcionka (20% bieli)
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);   // Tło Dnia Roboczego (Aktywny): 5% bieli
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);      // Tło Dnia Wolnego (Aktywny): 15% bieli
+                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);   // Tło Nagłówka (Aktywny): 35% bieli
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255); // Tło Nagłówka (Nieaktywny): 5% bieli
+                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);      // Ramka (Aktywny): 30% bieli
+                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);      // Ramka (Nieaktywny): 5% bieli
+                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);       // Czcionka (Aktywny): 90% bieli
+                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);        // ZMIANA: Czcionka (Nieaktywny): 10% bieli
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
                 if (cell.InMonth)
-                {
                     bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
-                }
                 else
-                {
                     bgColor = transparent;
-                }
 
-                if (cell.InMonth)
-                {
-                    headerBgColor = cell.IsDayOff ? headerBgDayOff : headerBgStandard;
-                    borderColor = headerBgStandard;
-                    numFgColor = textNormal;
-                }
-                else // Dni z innego miesiąca
-                {
-                    // ZMIANA: Uproszczona logika - wszystkie nieaktywne dni wyglądają tak samo
-                    headerBgColor = headerBgOtherMonth;
-                    borderColor = borderOtherMonth;
-                    numFgColor = textOtherMonth;
-                }
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                borderColor = cell.InMonth ? borderLight : borderOther;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
 
                 (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
                 (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
