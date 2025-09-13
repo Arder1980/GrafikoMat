@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+using Microsoft.UI;
 
 namespace GrafikoMat.ViewModels
 {
@@ -21,7 +22,6 @@ namespace GrafikoMat.ViewModels
         public int Year { get; }
         public int MonthIndex { get; }
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
-
         public ObservableCollection<DoctorProfile> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
         public HashSet<int> SelectedIndices { get; } = new();
@@ -43,7 +43,8 @@ namespace GrafikoMat.ViewModels
         }
 
         public DoctorProfile? SelectedDoctor =>
-            (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ? Doctors[_selectedDoctorIndex] : null;
+            (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
+            Doctors[_selectedDoctorIndex] : null;
 
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
@@ -73,7 +74,6 @@ namespace GrafikoMat.ViewModels
                 CommitChangesToSharedState();
                 _onSaveCallback?.Invoke();
             });
-
             ClearSelectionCommand = new RelayCommand(ClearSelection);
 
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
@@ -86,7 +86,6 @@ namespace GrafikoMat.ViewModels
         private void BuildCalendarShell()
         {
             DayCells.Clear();
-
             var firstDay = new DateTime(Year, MonthIndex + 1, 1);
             int offset = ((int)firstDay.DayOfWeek + 6) % 7; // pon=0
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
@@ -135,9 +134,9 @@ namespace GrafikoMat.ViewModels
         public void CommitChangesToSharedState()
         {
             if (SelectedDoctor == null) return;
-
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+
             var result = new DoctorMonthDeclaration
             {
                 Doctor = SelectedDoctor.FullName,
@@ -207,9 +206,7 @@ namespace GrafikoMat.ViewModels
                 c.SetSelected(SelectedIndices.Contains(c.Index));
         }
 
-        private static string PolishMonth(int month) => new[]
-            { "","Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień" }[month];
-
+        private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
     }
 
@@ -218,21 +215,17 @@ namespace GrafikoMat.ViewModels
         public int Index { get; }
         public DateTime Date { get; }
         public bool InMonth { get; }
-
-        // NOWE: przywrócona właściwość używana w XAML i code-behind
         public bool IsInteractive => InMonth;
-
         public string DayNumber => Date.Day.ToString("00");
-
         public bool IsWeekend { get; }
         public bool IsHoliday { get; }
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        // Wizualne właściwości używane w XAML (stabilne, nie zależą od fokusu okna)
         public Brush EffectiveBackground { get; private set; }
         public Brush EffectiveBorderBrush { get; private set; }
         public Brush DayNumberForeground { get; private set; }
+        public Brush EffectiveHeaderBackground { get; private set; }
 
         private bool _isSplit;
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
@@ -256,15 +249,8 @@ namespace GrafikoMat.ViewModels
             if (IsSelected == selected) return;
             IsSelected = selected;
 
-            // Zmiana wizualna tylko ramki (kolor + grubość).
-            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
-            var borderNormal = _isFromOtherMonth ? Color.FromArgb(0x4D, 0x00, 0x00, 0x00) // 30%
-                                                   : Color.FromArgb(0x33, 0x00, 0x00, 0x00); // 20%
-
-            EffectiveBorderBrush = new SolidColorBrush(IsSelected ? borderSelected : borderNormal);
-
-            OnPropertyChanged(nameof(EffectiveBorderBrush));
-            OnPropertyChanged(nameof(BorderThickness));
+            var contentElement = App.MainRoot?.Content as FrameworkElement;
+            UpdateBrushesForTheme(contentElement?.ActualTheme ?? ElementTheme.Light);
         }
 
         public void ClearData()
@@ -276,7 +262,6 @@ namespace GrafikoMat.ViewModels
         }
 
         private readonly bool _isFromOtherMonth;
-
         public DayCell(int index, DateTime date, bool inMonth, bool isWeekend, bool isHoliday, string? holidayName)
         {
             Index = index;
@@ -287,33 +272,78 @@ namespace GrafikoMat.ViewModels
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            // Kolory bazowe (Light/Dark będą wyglądały dobrze dzięki alfa)
-            var transparent = Color.FromArgb(0x00, 0x00, 0x00, 0x00);
-            var shadeWeekend = Color.FromArgb(0x10, 0x00, 0x00, 0x00); // ~6%
-            var shadeHoliday = Color.FromArgb(0x18, 0x00, 0x00, 0x00); // ~9.5%
-            var shadeOther = Color.FromArgb(0x26, 0x00, 0x00, 0x00); // 15%
+            EffectiveBackground = new SolidColorBrush(Colors.Transparent);
+            EffectiveBorderBrush = new SolidColorBrush(Colors.Transparent);
+            DayNumberForeground = new SolidColorBrush(Colors.Transparent);
+            EffectiveHeaderBackground = new SolidColorBrush(Colors.Transparent);
+            UpdateBrushesForTheme(ElementTheme.Light);
+        }
 
-            var borderLight = Color.FromArgb(0x33, 0x00, 0x00, 0x00); // 20%
-            var borderOther = Color.FromArgb(0x4D, 0x00, 0x00, 0x00); // 30%
+        public void UpdateBrushesForTheme(ElementTheme currentTheme)
+        {
+            Color bgColor, borderColor, numFgColor, headerBgColor;
+            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
+            var isDayOff = IsHoliday || IsWeekend;
 
-            var textNormal = Color.FromArgb(0xE6, 0x00, 0x00, 0x00); // 90% czerni
-            var textMuted = Color.FromArgb(0x99, 0x00, 0x00, 0x00); // 60% czerni
+            if (currentTheme == ElementTheme.Light)
+            {
+                var transparent = Color.FromArgb(0x00, 0, 0, 0);
+                var shadeDayOff = Color.FromArgb(0x1A, 0, 0, 0);         // 10% czerni
+                var shadeOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);     // 5% czerni (przyciemnione)
+                var headerBgStandard = Color.FromArgb(0x33, 0, 0, 0);    // 20% czerni
+                var headerBgDayOff = Color.FromArgb(0x22, 0, 0, 0);      // ~13% czerni
+                var headerBgOtherMonth = Color.FromArgb(0x1A, 0, 0, 0);  // 10% czerni (rozjaśnione względem standardowego)
+                var borderLight = Color.FromArgb(0x33, 0, 0, 0);
+                var borderOther = Color.FromArgb(0x4D, 0, 0, 0);
+                var textNormal = Color.FromArgb(0xE6, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
 
-            // Tło: wybierz najsilniejszy efekt z dostępnych
-            Color bg = transparent;
-            if (_isFromOtherMonth) bg = shadeOther;
-            else if (IsHoliday) bg = shadeHoliday;
-            else if (IsWeekend) bg = shadeWeekend;
+                bgColor = transparent;
+                if (isDayOff) bgColor = shadeDayOff;
+                else if (_isFromOtherMonth) bgColor = shadeOtherMonth;
 
-            // Ramka
-            Color border = _isFromOtherMonth ? borderOther : borderLight;
+                if (_isFromOtherMonth) headerBgColor = headerBgOtherMonth;
+                else if (isDayOff) headerBgColor = headerBgDayOff;
+                else headerBgColor = headerBgStandard;
 
-            // Numer dnia
-            Color numFg = _isFromOtherMonth ? textMuted : textNormal;
+                borderColor = _isFromOtherMonth ? borderOther : borderLight;
+                numFgColor = _isFromOtherMonth ? textMuted : textNormal;
+            }
+            else // Dark Theme
+            {
+                var transparent = Color.FromArgb(0x00, 0, 0, 0);
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);       // 15% bieli (jasne tło)
+                var shadeOtherMonth = Color.FromArgb(0x1A, 255, 255, 255);   // 10% bieli (tło dni nieaktywnych)
+                var headerBgStandard = Color.FromArgb(0x40, 255, 255, 255);  // 25% bieli
+                var headerBgDayOff = Color.FromArgb(0x4D, 255, 255, 255);    // 30% bieli
+                var headerBgOtherMonth = Color.FromArgb(0x33, 255, 255, 255); // 20% bieli
+                var borderLight = headerBgStandard;
+                var borderOther = headerBgOtherMonth;
+                var textNormal = Color.FromArgb(0xF2, 255, 255, 255);        // 95% bieli (jasna czcionka)
+                var textMuted = Color.FromArgb(0xAA, 255, 255, 255);         // ~66% bieli
 
-            EffectiveBackground = new SolidColorBrush(bg);
-            EffectiveBorderBrush = new SolidColorBrush(border);
-            DayNumberForeground = new SolidColorBrush(numFg);
+                bgColor = transparent;
+                if (_isFromOtherMonth) bgColor = shadeOtherMonth;
+                else if (isDayOff) bgColor = shadeDayOff;
+
+                if (_isFromOtherMonth) headerBgColor = headerBgOtherMonth;
+                else if (isDayOff) headerBgColor = headerBgDayOff;
+                else headerBgColor = headerBgStandard;
+
+                borderColor = _isFromOtherMonth ? borderOther : borderLight;
+                numFgColor = textNormal; // Zawsze jasna czcionka w nagłówku
+            }
+
+            EffectiveBackground = new SolidColorBrush(bgColor);
+            EffectiveBorderBrush = new SolidColorBrush(IsSelected ? borderSelected : borderColor);
+            DayNumberForeground = new SolidColorBrush(numFgColor);
+            EffectiveHeaderBackground = new SolidColorBrush(headerBgColor);
+
+            OnPropertyChanged(nameof(EffectiveBackground));
+            OnPropertyChanged(nameof(EffectiveBorderBrush));
+            OnPropertyChanged(nameof(DayNumberForeground));
+            OnPropertyChanged(nameof(EffectiveHeaderBackground));
+            OnPropertyChanged(nameof(BorderThickness));
         }
     }
 }

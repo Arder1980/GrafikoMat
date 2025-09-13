@@ -9,22 +9,17 @@
     xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d"
-    x:DataType="vm:DeclarationsViewModel"
     d:DataContext="{d:DesignInstance Type=vm:DeclarationsViewModel}"
     x:Name="DeclarationsViewRoot">
 
-    <!-- Ważne: tylko JEDEN ResourceDictionary wewnątrz Resources, aby uniknąć WMC0060 -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <!-- Stałe pędzle, nie znikają po utracie fokusu -->
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33000000"/>
-                    <SolidColorBrush x:Key="CalendarCellHeaderBg"    Color="#0F000000"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33FFFFFF"/>
-                    <SolidColorBrush x:Key="CalendarCellHeaderBg"    Color="#10FFFFFF"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -39,15 +34,25 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid ColumnDefinitions="0.25*,0.75*" Padding="12" ColumnSpacing="12">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="0.25*"/>
+            <ColumnDefinition Width="0.75*"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- Lewa kolumna -->
-        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
-            <TextBlock FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2"
+        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2"
                        Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}"/>
 
             <Grid Grid.Row="1">
-                <!-- Admin -->
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Button Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets"
@@ -67,7 +72,6 @@
                             ToolTipService.ToolTip="Następny lekarz"/>
                 </StackPanel>
 
-                <!-- Nie-admin -->
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                     <TextBlock Text="Lekarz:" VerticalAlignment="Center" Opacity="0.9"/>
@@ -82,9 +86,23 @@
             </StackPanel>
         </Grid>
 
-        <!-- Prawa kolumna: siatka kalendarza -->
-        <Grid Grid.Column="1" RowDefinitions="Auto, *">
-            <Grid Padding="0,0,0,4" ColumnDefinitions="*,*,*,*,*,*,*">
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Padding="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
                 <TextBlock Grid.Column="0" Text="Poniedziałek" HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="1" Text="Wtorek"       HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="2" Text="Środa"        HorizontalAlignment="Center" Opacity="0.8"/>
@@ -121,9 +139,8 @@
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
-                                <!-- Pasek nagłówka -->
                                 <Border Grid.Row="0"
-                                        Background="{StaticResource CalendarCellHeaderBg}"
+                                        Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}"
                                         CornerRadius="4,4,0,0"/>
 
                                 <Grid Grid.Row="0" Padding="6,0">
@@ -132,14 +149,12 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Numer dnia -->
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind DayNumber}"
                                                FontWeight="SemiBold"
                                                Foreground="{x:Bind DayNumberForeground}"
                                                VerticalAlignment="Center"/>
 
-                                    <!-- Nazwa święta -->
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind HolidayName}"
                                                Visibility="{x:Bind HolidayVisibility, Mode=OneWay}"
@@ -148,17 +163,18 @@
                                                Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
                                 </Grid>
 
-                                <!-- Treść komórki -->
                                 <Grid Grid.Row="1">
-                                    <!-- Wariant bez podziału -->
                                     <TextBlock Style="{StaticResource SymbolTextBlock}"
                                                Text="{x:Bind SymbolFull, Mode=OneWay}"
                                                Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
 
-                                    <!-- Wariant z podziałem -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                          RowDefinitions="*,*">
-                                        <Border BorderBrush="{StaticResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
+                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border BorderBrush="{ThemeResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
                                         <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
                                     </Grid>

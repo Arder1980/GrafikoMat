@@ -13,18 +13,22 @@ namespace GrafikoMat.Views
         public event Action? CloseRequested;
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
-
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
 
         public DeclarationsView()
         {
             this.InitializeComponent();
+            // Subskrypcja zdarzenia zmiany motywu
+            this.ActualThemeChanged += OnThemeChanged;
+            this.Unloaded += OnDeclarationsViewUnloaded;
         }
 
         public void AttachViewModel(DeclarationsViewModel vm)
         {
             this.DataContext = vm;
+            // Wymuś aktualizację kolorów przy pierwszym dołączeniu
+            UpdateAllCellBrushes();
         }
 
         private void OnSaveClick(object sender, RoutedEventArgs e)
@@ -80,6 +84,29 @@ namespace GrafikoMat.Views
                 // TODO: Logika menu kontekstowego
                 e.Handled = true;
             }
+        }
+
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            // Gdy motyw się zmienia, zaktualizuj pędzle we wszystkich komórkach
+            UpdateAllCellBrushes();
+        }
+
+        private void UpdateAllCellBrushes()
+        {
+            if (ViewModel?.DayCells == null) return;
+
+            foreach (var cell in ViewModel.DayCells)
+            {
+                cell.UpdateBrushesForTheme(this.ActualTheme);
+            }
+        }
+
+        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        {
+            // Anuluj subskrypcję, aby uniknąć wycieków pamięci
+            this.ActualThemeChanged -= OnThemeChanged;
+            this.Unloaded -= OnDeclarationsViewUnloaded;
         }
     }
 }
