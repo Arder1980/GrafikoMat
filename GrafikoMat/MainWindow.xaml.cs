@@ -282,9 +282,9 @@ namespace GrafikoMat
         {
             if (_isClosing || _isAnimating) return;
 
-            // 1) ZAMROŻENIE WYBORU – bierzemy dokładnie to, co widać w dashboardzie w chwili kliknięcia
-            int frozenYear = ViewModel.SelectedYear;
-            int frozenMonthIndex = ViewModel.SelectedMonthIndex;
+            // ZAMROŻENIE wyboru użytkownika zanim pojawi się pierwsze await
+            var frozenYear = ViewModel.SelectedYear;
+            var frozenMonthIndex = ViewModel.SelectedMonthIndex;
 
             var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
             if (!doctorsForUnit.Any())
@@ -300,8 +300,6 @@ namespace GrafikoMat
                 {
                     if (_doctorRepository != null)
                     {
-                        // 2) Ten await nie zmieni już miesiąca/roku użytych do konstrukcji VM,
-                        //    bo korzystamy z frozenYear/frozenMonthIndex
                         var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
                         if (currentProfile != null)
                         {
@@ -313,16 +311,14 @@ namespace GrafikoMat
                 catch { initialIndex = 0; }
             }
 
-            // 3) Używamy zamrożonych wartości
             var declarationsVm = new DeclarationsViewModel(
-                frozenYear,
+                frozenYear,                 // używamy zamrożonych wartości
                 frozenMonthIndex,
                 doctorsForUnit,
                 initialIndex,
                 ViewModel.Declarations,
                 ViewModel.IsCurrentUserAdmin,
-                () =>
-                {
+                () => {
                     ViewModel.RefreshDeclarationsForDashboard();
                 }
             );
