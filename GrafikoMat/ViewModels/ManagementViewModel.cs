@@ -103,7 +103,6 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
-
         public async Task InitializeAsync()
         {
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
@@ -288,6 +287,7 @@ namespace GrafikoMat.ViewModels
 
             var doctorToArchiveId = SelectedDoctor.Id;
             var doctorToArchiveName = SelectedDoctor.DisplayName;
+
             await _orchestrator.PerformActionAsync(
                 viewId: _viewId,
                 actionAsync: async () => await _doctorRepository.SetArchiveStatusAsync(doctorToArchiveId, true),
@@ -300,12 +300,14 @@ namespace GrafikoMat.ViewModels
                 successMessage: $"Profil lekarza {doctorToArchiveName} został zarchiwizowany.",
                 errorMessageTitle: "Błąd archiwizacji"
             );
+
             SelectedDoctor = null;
         }
 
         private async Task RestoreDoctorAsync()
         {
             if (SelectedDoctor == null) return;
+
             var restoredDoctorId = SelectedDoctor.Id;
             var restoredDoctorName = SelectedDoctor.DisplayName;
 
@@ -320,6 +322,7 @@ namespace GrafikoMat.ViewModels
                 successMessage: $"Profil lekarza {restoredDoctorName} został przywrócony.",
                 errorMessageTitle: "Błąd przywracania"
             );
+
             SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
         }
 
@@ -339,6 +342,7 @@ namespace GrafikoMat.ViewModels
 
             var newPassword = PasswordGenerator.GenerateInitialPassword();
             var doctorToResetId = SelectedDoctor.Id;
+
             await _orchestrator.PerformActionAsync(
                 viewId: _viewId,
                 actionAsync: async () =>
@@ -354,6 +358,7 @@ namespace GrafikoMat.ViewModels
                 successMessage: $"Nowe hasło startowe: {newPassword}",
                 errorMessageTitle: "Błąd resetowania hasła"
             );
+
             EditorViewModel.SetNewGeneratedPassword(newPassword);
         }
 
@@ -377,6 +382,7 @@ namespace GrafikoMat.ViewModels
             var existingAbbreviations = _allDoctorsMasterList
                 .Where(d => d.Id != doctorProfile.Id)
                 .Select(d => d.Abbreviation);
+
             var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
 
             EditorViewModel = new DoctorEditorViewModel(

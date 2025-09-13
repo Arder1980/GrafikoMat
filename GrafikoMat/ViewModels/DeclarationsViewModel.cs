@@ -21,26 +21,26 @@ namespace GrafikoMat.ViewModels
 
         public int Year { get; }
         public int MonthIndex { get; }
-
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
         public ObservableCollection<DoctorProfile> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
         public HashSet<int> SelectedIndices { get; } = new();
-
         public bool CanSwitchDoctors { get; }
 
-        private DoctorProfile? _selectedDoctor;
-        public DoctorProfile? SelectedDoctor
+        private int _selectedDoctorIndex;
+        public int SelectedDoctorIndex
         {
-            get => _selectedDoctor;
+            get => _selectedDoctorIndex;
             set
             {
-                if (_selectedDoctor?.Id == value?.Id) return;
+                if (_selectedDoctorIndex == value) return;
                 CommitChangesToSharedState();
-                SetProperty(ref _selectedDoctor, value);
+                SetProperty(ref _selectedDoctorIndex, value);
+                OnPropertyChanged(nameof(SelectedDoctor));
                 LoadDeclarationsForSelectedDoctor();
             }
         }
+        public DoctorProfile? SelectedDoctor => (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ? Doctors[_selectedDoctorIndex] : null;
 
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
@@ -51,7 +51,7 @@ namespace GrafikoMat.ViewModels
             int year,
             int monthIndex,
             List<DoctorProfile> doctors,
-            DoctorProfile? initialDoctor,
+            int initialDoctorIndex,
             Dictionary<string, DoctorMonthDeclaration> sharedDeclarations,
             bool isAdmin,
             Action onSaveCallback)
@@ -63,7 +63,7 @@ namespace GrafikoMat.ViewModels
             _onSaveCallback = onSaveCallback;
 
             doctors.ForEach(d => Doctors.Add(d));
-            _selectedDoctor = initialDoctor;
+            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
             SaveCommand = new RelayCommand(() => {
                 CommitChangesToSharedState();
@@ -99,22 +99,15 @@ namespace GrafikoMat.ViewModels
         private void LoadDeclarationsForSelectedDoctor()
         {
             ClearSelection();
-            if (SelectedDoctor == null)
-            {
-                foreach (var cell in DayCells) cell.ClearData();
-                return;
-            }
+            foreach (var cell in DayCells) { cell.ClearData(); }
+            if (SelectedDoctor == null) { return; }
 
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             if (_sharedDeclarations.TryGetValue(key, out var decl))
             {
                 foreach (var cell in DayCells)
                 {
-                    if (!cell.InMonth)
-                    {
-                        cell.ClearData();
-                        continue;
-                    }
+                    if (!cell.InMonth) continue;
                     int dayIdx = cell.Date.Day - 1;
                     if (dayIdx >= 0 && dayIdx < decl.Days.Length)
                     {
@@ -124,15 +117,7 @@ namespace GrafikoMat.ViewModels
                         cell.SymbolDay = dayDecl.Day ?? "";
                         cell.SymbolNight = dayDecl.Night ?? "";
                     }
-                    else
-                    {
-                        cell.ClearData();
-                    }
                 }
-            }
-            else
-            {
-                foreach (var cell in DayCells) cell.ClearData();
             }
         }
 
@@ -147,7 +132,6 @@ namespace GrafikoMat.ViewModels
             {
                 int dayIdx = cell.Date.Day - 1;
                 if (dayIdx < 0 || dayIdx >= result.Days.Length) continue;
-
                 if (!cell.IsSplit)
                 {
                     result.Days[dayIdx].Mode = DayMode.Full24;
@@ -165,16 +149,12 @@ namespace GrafikoMat.ViewModels
 
         private void SelectNextDoctor()
         {
-            if (SelectedDoctor == null || Doctors.Count <= 1) return;
-            var currentIndex = Doctors.IndexOf(SelectedDoctor);
-            SelectedDoctor = Doctors[(currentIndex + 1) % Doctors.Count];
+            if (Doctors.Count > 1) SelectedDoctorIndex = (SelectedDoctorIndex + 1) % Doctors.Count;
         }
 
         private void SelectPrevDoctor()
         {
-            if (SelectedDoctor == null || Doctors.Count <= 1) return;
-            var currentIndex = Doctors.IndexOf(SelectedDoctor);
-            SelectedDoctor = Doctors[(currentIndex - 1 + Doctors.Count) % Doctors.Count];
+            if (Doctors.Count > 1) SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
         }
 
         public void SelectSingle(int index)
@@ -244,13 +224,23 @@ namespace GrafikoMat.ViewModels
         {
             get
             {
-                if (!InMonth) return Application.Current.Resources["ControlFillColorDisabledBrush"] as Brush;
+                if (!InMonth) return Application.Current.Resources["SubtleFillColorSecondaryBrush"] as Brush;
                 if (_isSelected) return new SolidColorBrush(Color.FromArgb(0x2A, 0x33, 0x99, 0xFF));
                 if (IsDayOff) return Application.Current.Resources["ControlFillColorSecondaryBrush"] as Brush;
                 return Application.Current.Resources["ControlFillColorDefaultBrush"] as Brush;
             }
         }
-        public Brush BorderBrush => _isSelected ? new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+
+        public Brush BorderBrush
+        {
+            get
+            {
+                if (!InMonth) return Application.Current.Resources["ControlStrokeColorSecondaryBrush"] as Brush;
+                if (_isSelected) return new SolidColorBrush(Color.FromArgb(0xFF, 0x33, 0x99, 0xFF));
+                return new SolidColorBrush(Color.FromArgb(0x30, 0, 0, 0));
+            }
+        }
+
         public Thickness BorderThickness => _isSelected ? new Thickness(2.0) : new Thickness(1.0);
 
         public void SetSelected(bool selected)

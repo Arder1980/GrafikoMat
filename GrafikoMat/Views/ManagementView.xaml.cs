@@ -1,11 +1,12 @@
 ﻿using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
-using GrafikoMat.ViewModels;
+using GrafikoMat.ViewModels; // <-- DODANA BRAKUJĄCA LINIA
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
+
 namespace GrafikoMat.Views
 {
     public sealed partial class ManagementView : UserControl

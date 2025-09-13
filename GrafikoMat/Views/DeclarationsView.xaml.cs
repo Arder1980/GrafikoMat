@@ -12,39 +12,36 @@ namespace GrafikoMat.Views
         public event Action? SaveAndCloseRequested;
         public event Action? CloseRequested;
 
-        public DeclarationsViewModel ViewModel { get; private set; }
+        public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
 
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
 
-        // ZMIANA: Konstruktor jest teraz czysty, nie ładuje żadnych danych.
         public DeclarationsView()
         {
             this.InitializeComponent();
         }
 
-        // ZMIANA: Nowa metoda do podłączania gotowego ViewModelu z zewnątrz.
         public void AttachViewModel(DeclarationsViewModel vm)
         {
-            ViewModel = vm;
-            this.DataContext = ViewModel;
+            this.DataContext = vm;
         }
 
         private void OnSaveClick(object sender, RoutedEventArgs e)
         {
-            ViewModel.SaveCommand.Execute(null);
+            ViewModel?.SaveCommand.Execute(null);
             SaveRequested?.Invoke();
         }
 
         private void OnSaveAndCloseClick(object sender, RoutedEventArgs e)
         {
-            ViewModel.SaveCommand.Execute(null);
+            ViewModel?.SaveCommand.Execute(null);
             SaveAndCloseRequested?.Invoke();
         }
 
         private void Cell_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && sender is FrameworkElement element && element.DataContext is DayCell cell)
+            if (ViewModel != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && sender is FrameworkElement element && element.DataContext is DayCell cell)
             {
                 if (!cell.IsInteractive) return;
                 _isDragging = true;
@@ -57,7 +54,7 @@ namespace GrafikoMat.Views
 
         private void Cell_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            if (_isDragging && sender is FrameworkElement element && element.DataContext is DayCell cell)
+            if (ViewModel != null && _isDragging && sender is FrameworkElement element && element.DataContext is DayCell cell)
             {
                 if (!cell.IsInteractive) return;
                 ViewModel.SelectRange(_dragStartIndex, cell.Index);

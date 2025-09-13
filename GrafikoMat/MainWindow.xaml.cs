@@ -278,8 +278,7 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
-        // ZMIANA: Ta metoda jest teraz jedynym poprawnym sposobem inicjalizacji widoku deklaracji
-        private void SwitchToDeclarations()
+        private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
 
@@ -290,11 +289,29 @@ namespace GrafikoMat
                 return;
             }
 
+            int initialIndex = 0;
+            if (!ViewModel.IsCurrentUserAdmin)
+            {
+                try
+                {
+                    if (_doctorRepository != null)
+                    {
+                        var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
+                        if (currentProfile != null)
+                        {
+                            var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
+                            if (idx >= 0) initialIndex = idx;
+                        }
+                    }
+                }
+                catch { initialIndex = 0; }
+            }
+
             var declarationsVm = new DeclarationsViewModel(
-                ViewModel.SelectedYear,       // <-- Przekazuje poprawnie wybrany rok
-                ViewModel.SelectedMonthIndex, // <-- Przekazuje poprawnie wybrany miesiąc
+                ViewModel.SelectedYear,
+                ViewModel.SelectedMonthIndex,
                 doctorsForUnit,
-                ViewModel.DoctorRows.FirstOrDefault()?.Profile,
+                initialIndex,
                 ViewModel.Declarations,
                 ViewModel.IsCurrentUserAdmin,
                 () => {
