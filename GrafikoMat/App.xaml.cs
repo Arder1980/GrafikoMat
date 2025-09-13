@@ -26,12 +26,19 @@ namespace GrafikoMat
 
             MainRoot = new MainWindow();
 
-            // ZMIANA: Ustaw motyw PRZED aktywacją okna, aby uniknąć mignięcia
+            // Ustaw motyw PRZED aktywacją okna, aby uniknąć mignięcia
             ApplyThemeEarly(MainRoot);
+
+            // ZMIANA: Inicjalizacja i rejestracja serwisu motywu ("Wyroczni")
+            if (MainRoot.Content is FrameworkElement rootElement)
+            {
+                var initialTheme = rootElement.ActualTheme;
+                ThemeManagerService.Instance.Initialize(initialTheme);
+                ServiceProvider.Register(ThemeManagerService.Instance);
+            }
 
             MainRoot.Activate();
         }
-
         /// <summary>
         /// Wczytuje ustawienia i natychmiastowo aplikuje motyw, aby uniknąć mignięcia przy starcie.
         /// </summary>

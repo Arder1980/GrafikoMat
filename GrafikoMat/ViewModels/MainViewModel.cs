@@ -38,8 +38,6 @@ namespace GrafikoMat.ViewModels
 
         public bool IsCurrentUserAdmin { get; private set; }
 
-        public ElementTheme CurrentTheme { get; private set; } = ElementTheme.Light;
-
         [JsonIgnore]
         public XamlRoot? XamlRoot { get; set; }
 
@@ -95,15 +93,12 @@ namespace GrafikoMat.ViewModels
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
-        public async void Receive(SettingsHaveChangedMessage message)
+        public void Receive(SettingsHaveChangedMessage message)
         {
-            // ZMIANA: Użycie poprawnej, asynchronicznej metody EnqueueAsync
+            // Użycie EnqueueAsync jest nadal poprawne dla operacji UI
             if (App.MainRoot?.DispatcherQueue != null)
             {
-                await App.MainRoot.DispatcherQueue.EnqueueAsync(async () =>
-                {
-                    await UpdateFooterFromSettingsAsync();
-                });
+                _ = App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
             }
         }
 
@@ -266,13 +261,6 @@ namespace GrafikoMat.ViewModels
                 .Where(p => p.IsActive)
                 .Select(p => GetPriorityDisplayName(p.Priority));
             PriorityOrder = $"Priorytety: {string.Join(" > ", activePriorities)}";
-
-            CurrentTheme = settings.Theme switch
-            {
-                AppTheme.Light => ElementTheme.Light,
-                AppTheme.Dark => ElementTheme.Dark,
-                _ => ElementTheme.Default
-            };
         }
 
         private string GetSolverDisplayName(SolverType solver) => solver.ToString();

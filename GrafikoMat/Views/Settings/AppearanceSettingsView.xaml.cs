@@ -1,4 +1,6 @@
-﻿using GrafikoMat.Services;
+﻿using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Models;
+using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -38,26 +40,24 @@ namespace GrafikoMat.Views.Settings
 
         private async void ThemeRadioButton_Checked(object sender, RoutedEventArgs e)
         {
-            // Ignorujemy zdarzenie wywołane podczas inicjalizacji widoku
             if (_isInitializing || _settingsService == null || _appSettings == null) return;
             if (sender is not RadioButton selectedRadioButton) return;
 
-            AppTheme newTheme;
+            AppTheme newThemeSetting;
             ElementTheme newElementTheme;
-
             if (selectedRadioButton == LightRadioButton)
             {
-                newTheme = AppTheme.Light;
+                newThemeSetting = AppTheme.Light;
                 newElementTheme = ElementTheme.Light;
             }
             else if (selectedRadioButton == DarkRadioButton)
             {
-                newTheme = AppTheme.Dark;
+                newThemeSetting = AppTheme.Dark;
                 newElementTheme = ElementTheme.Dark;
             }
             else
             {
-                newTheme = AppTheme.SystemDefault;
+                newThemeSetting = AppTheme.SystemDefault;
                 newElementTheme = ElementTheme.Default;
             }
 
@@ -68,9 +68,15 @@ namespace GrafikoMat.Views.Settings
             }
 
             // 2. Zapisz nowe ustawienie
-            var newSettings = _appSettings with { Theme = newTheme };
+            var newSettings = _appSettings with { Theme = newThemeSetting };
             await _settingsService.SaveSettingsAsync(newSettings);
-            _appSettings = newSettings; // Zaktualizuj lokalną kopię ustawień
+            _appSettings = newSettings;
+
+            // ZMIANA: Poinformuj "Wyrocznię" o nowym, obowiązującym stanie motywu
+            ThemeManagerService.Instance.SetTheme(newElementTheme);
+
+            // Rozgłoszenie wiadomości pozostaje, może być przydatne dla innych części programu
+            WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
     }
 }

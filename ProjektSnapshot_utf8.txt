@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-13 15:25:18
+# Data:       2025-09-13 20:22:10
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -26,7 +26,7 @@ DIR  GrafikoMat\ViewModels
 DIR  GrafikoMat\Views
 DIR  GrafikoMat\Views\Settings
 
-## FILES (liczba): 95
+## FILES (liczba): 96
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
@@ -87,6 +87,7 @@ FILE GrafikoMat\Services\IUxActionOrchestrator.cs
 FILE GrafikoMat\Services\ServiceProvider.cs
 FILE GrafikoMat\Services\SettingsService.cs
 FILE GrafikoMat\Services\SupabaseService.cs
+FILE GrafikoMat\Services\ThemeManagerService.cs
 FILE GrafikoMat\Services\UxActionOrchestrator.cs
 FILE GrafikoMat\ViewModels\ChangePasswordViewModel.cs
 FILE GrafikoMat\ViewModels\DeclarationsViewModel.cs
@@ -3185,7 +3186,7 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (2801 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (3176 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
@@ -3215,12 +3216,19 @@ namespace GrafikoMat
 
             MainRoot = new MainWindow();
 
-            // ZMIANA: Ustaw motyw PRZED aktywacją okna, aby uniknąć mignięcia
+            // Ustaw motyw PRZED aktywacją okna, aby uniknąć mignięcia
             ApplyThemeEarly(MainRoot);
+
+            // ZMIANA: Inicjalizacja i rejestracja serwisu motywu ("Wyroczni")
+            if (MainRoot.Content is FrameworkElement rootElement)
+            {
+                var initialTheme = rootElement.ActualTheme;
+                ThemeManagerService.Instance.Initialize(initialTheme);
+                ServiceProvider.Register(ThemeManagerService.Instance);
+            }
 
             MainRoot.Activate();
         }
-
         /// <summary>
         /// Wczytuje ustawienia i natychmiastowo aplikuje motyw, aby uniknąć mignięcia przy starcie.
         /// </summary>
@@ -4129,7 +4137,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (31310 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (31398 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -4411,11 +4419,12 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
+        // To jest tylko fragment pliku MainWindow.xaml.cs
+        // Proszę znaleźć metodę SwitchToDeclarations i ją zaktualizować.
+
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
-
-            // ZAMROŻENIE wyboru użytkownika zanim pojawi się pierwsze await
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
 
@@ -4445,7 +4454,7 @@ namespace GrafikoMat
             }
 
             var declarationsVm = new DeclarationsViewModel(
-                frozenYear,                 // używamy zamrożonych wartości
+                frozenYear,
                 frozenMonthIndex,
                 doctorsForUnit,
                 initialIndex,
@@ -4456,12 +4465,12 @@ namespace GrafikoMat
                 }
             );
 
+            // ZMIANA: Wywołanie jest teraz prostsze, bez przekazywania motywu
             _declarationsView.AttachViewModel(declarationsVm);
 
             _ = AnimateToAsync(_declarationsView, true);
             BuildActionsForDeclarations();
         }
-
         private static void DetachFromParent(FrameworkElement el)
         {
             if (el.Parent is ContentControl cc) cc.Content = null;
@@ -5498,6 +5507,51 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
+===== FILE: GrafikoMat\Services\ThemeManagerService.cs (1336 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+
+namespace GrafikoMat.Services
+{
+    /// <summary>
+    /// Centralny serwis ("Wyrocznia") przechowujący stan aktualnego motywu aplikacji.
+    /// Działa jako Singleton, zapewniając jedno, spójne źródło prawdy.
+    /// </summary>
+    public sealed class ThemeManagerService
+    {
+        // Prosta implementacja wzorca Singleton
+        public static ThemeManagerService Instance { get; } = new ThemeManagerService();
+
+        /// <summary>
+        /// Przechowuje aktualnie obowiązujący motyw w aplikacji.
+        /// </summary>
+        public ElementTheme CurrentTheme { get; private set; }
+
+        private ThemeManagerService()
+        {
+            // Domyślnie startujemy z motywem jasnym
+            CurrentTheme = ElementTheme.Light;
+        }
+
+        /// <summary>
+        /// Inicjalizuje serwis na podstawie motywu wykrytego przy starcie aplikacji.
+        /// </summary>
+        public void Initialize(ElementTheme initialTheme)
+        {
+            CurrentTheme = initialTheme;
+        }
+
+        /// <summary>
+        /// Ustawia nowy motyw. Jest to jedyne miejsce, w którym stan motywu jest zmieniany.
+        /// </summary>
+        public void SetTheme(ElementTheme newTheme)
+        {
+            CurrentTheme = newTheme;
+        }
+    }
+}
+----- END -----
+
 ===== FILE: GrafikoMat\Services\UxActionOrchestrator.cs (2278 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
@@ -5669,7 +5723,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (12656 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (11234 bytes)
 ----- BEGIN -----
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
@@ -5682,7 +5736,6 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace GrafikoMat.ViewModels
 {
@@ -5694,7 +5747,6 @@ namespace GrafikoMat.ViewModels
         public int Year { get; }
         public int MonthIndex { get; }
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
-
         public ObservableCollection<DoctorProfile> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
         public HashSet<int> SelectedIndices { get; } = new();
@@ -5716,7 +5768,8 @@ namespace GrafikoMat.ViewModels
         }
 
         public DoctorProfile? SelectedDoctor =>
-            (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ? Doctors[_selectedDoctorIndex] : null;
+            (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
+            Doctors[_selectedDoctorIndex] : null;
 
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
@@ -5746,7 +5799,6 @@ namespace GrafikoMat.ViewModels
                 CommitChangesToSharedState();
                 _onSaveCallback?.Invoke();
             });
-
             ClearSelectionCommand = new RelayCommand(ClearSelection);
 
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
@@ -5759,7 +5811,6 @@ namespace GrafikoMat.ViewModels
         private void BuildCalendarShell()
         {
             DayCells.Clear();
-
             var firstDay = new DateTime(Year, MonthIndex + 1, 1);
             int offset = ((int)firstDay.DayOfWeek + 6) % 7; // pon=0
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
@@ -5808,9 +5859,9 @@ namespace GrafikoMat.ViewModels
         public void CommitChangesToSharedState()
         {
             if (SelectedDoctor == null) return;
-
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+
             var result = new DoctorMonthDeclaration
             {
                 Doctor = SelectedDoctor.FullName,
@@ -5880,9 +5931,7 @@ namespace GrafikoMat.ViewModels
                 c.SetSelected(SelectedIndices.Contains(c.Index));
         }
 
-        private static string PolishMonth(int month) => new[]
-            { "","Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec","Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień" }[month];
-
+        private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
     }
 
@@ -5891,21 +5940,19 @@ namespace GrafikoMat.ViewModels
         public int Index { get; }
         public DateTime Date { get; }
         public bool InMonth { get; }
-
-        // NOWE: przywrócona właściwość używana w XAML i code-behind
         public bool IsInteractive => InMonth;
-
         public string DayNumber => Date.Day.ToString("00");
-
         public bool IsWeekend { get; }
         public bool IsHoliday { get; }
+        public bool IsDayOff => IsHoliday || IsWeekend;
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        // Wizualne właściwości używane w XAML (stabilne, nie zależą od fokusu okna)
-        public Brush EffectiveBackground { get; private set; }
-        public Brush EffectiveBorderBrush { get; private set; }
-        public Brush DayNumberForeground { get; private set; }
+        // Pędzle publiczne, aby Widok mógł je ustawić
+        public Brush EffectiveBackground { get; set; }
+        public Brush EffectiveBorderBrush { get; set; }
+        public Brush DayNumberForeground { get; set; }
+        public Brush EffectiveHeaderBackground { get; set; }
 
         private bool _isSplit;
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
@@ -5920,25 +5967,16 @@ namespace GrafikoMat.ViewModels
         public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
 
         private bool _isSelected;
-        public bool IsSelected { get => _isSelected; private set => SetProperty(ref _isSelected, value); }
-
-        public Thickness BorderThickness => _isSelected ? new Thickness(2.0) : new Thickness(1.0);
+        public bool IsSelected { get; private set; }
 
         public void SetSelected(bool selected)
         {
             if (IsSelected == selected) return;
             IsSelected = selected;
-
-            // Zmiana wizualna tylko ramki (kolor + grubość).
-            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
-            var borderNormal = _isFromOtherMonth ? Color.FromArgb(0x4D, 0x00, 0x00, 0x00) // 30%
-                                                   : Color.FromArgb(0x33, 0x00, 0x00, 0x00); // 20%
-
-            EffectiveBorderBrush = new SolidColorBrush(IsSelected ? borderSelected : borderNormal);
-
-            OnPropertyChanged(nameof(EffectiveBorderBrush));
             OnPropertyChanged(nameof(BorderThickness));
         }
+
+        public Thickness BorderThickness => IsSelected ? new Thickness(2.0) : new Thickness(1.0);
 
         public void ClearData()
         {
@@ -5948,49 +5986,31 @@ namespace GrafikoMat.ViewModels
             IsSplit = false;
         }
 
-        private readonly bool _isFromOtherMonth;
-
         public DayCell(int index, DateTime date, bool inMonth, bool isWeekend, bool isHoliday, string? holidayName)
         {
             Index = index;
             Date = date;
             InMonth = inMonth;
-            _isFromOtherMonth = !inMonth;
             IsWeekend = isWeekend;
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            // Kolory bazowe (Light/Dark będą wyglądały dobrze dzięki alfa)
-            var transparent = Color.FromArgb(0x00, 0x00, 0x00, 0x00);
-            var shadeWeekend = Color.FromArgb(0x10, 0x00, 0x00, 0x00); // ~6%
-            var shadeHoliday = Color.FromArgb(0x18, 0x00, 0x00, 0x00); // ~9.5%
-            var shadeOther = Color.FromArgb(0x26, 0x00, 0x00, 0x00); // 15%
+            // Inicjalizacja pustymi pędzlami - Widok nada im właściwe kolory
+            EffectiveBackground = new SolidColorBrush();
+            EffectiveBorderBrush = new SolidColorBrush();
+            DayNumberForeground = new SolidColorBrush();
+            EffectiveHeaderBackground = new SolidColorBrush();
+        }
 
-            var borderLight = Color.FromArgb(0x33, 0x00, 0x00, 0x00); // 20%
-            var borderOther = Color.FromArgb(0x4D, 0x00, 0x00, 0x00); // 30%
-
-            var textNormal = Color.FromArgb(0xE6, 0x00, 0x00, 0x00); // 90% czerni
-            var textMuted = Color.FromArgb(0x99, 0x00, 0x00, 0x00); // 60% czerni
-
-            // Tło: wybierz najsilniejszy efekt z dostępnych
-            Color bg = transparent;
-            if (_isFromOtherMonth) bg = shadeOther;
-            else if (IsHoliday) bg = shadeHoliday;
-            else if (IsWeekend) bg = shadeWeekend;
-
-            // Ramka
-            Color border = _isFromOtherMonth ? borderOther : borderLight;
-
-            // Numer dnia
-            Color numFg = _isFromOtherMonth ? textMuted : textNormal;
-
-            EffectiveBackground = new SolidColorBrush(bg);
-            EffectiveBorderBrush = new SolidColorBrush(border);
-            DayNumberForeground = new SolidColorBrush(numFg);
+        public void NotifyBrushUpdate()
+        {
+            OnPropertyChanged(nameof(EffectiveBackground));
+            OnPropertyChanged(nameof(EffectiveBorderBrush));
+            OnPropertyChanged(nameof(DayNumberForeground));
+            OnPropertyChanged(nameof(EffectiveHeaderBackground));
         }
     }
 }
-
 ----- END -----
 
 ===== FILE: GrafikoMat\ViewModels\DoctorEditorViewModel.cs (8367 bytes)
@@ -6409,10 +6429,11 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (15647 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (15726 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using CommunityToolkit.WinUI;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
@@ -6493,7 +6514,6 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         public Dictionary<string, DoctorMonthDeclaration> Declarations => _declByKey;
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
-
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
@@ -6508,10 +6528,11 @@ namespace GrafikoMat.ViewModels
 
         public void Receive(SettingsHaveChangedMessage message)
         {
-            App.MainRoot?.DispatcherQueue.TryEnqueue(async () =>
+            // Użycie EnqueueAsync jest nadal poprawne dla operacji UI
+            if (App.MainRoot?.DispatcherQueue != null)
             {
-                await UpdateFooterFromSettingsAsync();
-            });
+                _ = App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
+            }
         }
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
@@ -6538,7 +6559,6 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
-
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
@@ -6630,8 +6650,8 @@ namespace GrafikoMat.ViewModels
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
                 string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
 
-                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
-                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
+                date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
 
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
@@ -6668,7 +6688,7 @@ namespace GrafikoMat.ViewModels
         public async Task UpdateFooterFromSettingsAsync()
         {
             if (_settingsService == null) return;
-            var settings = await _settingsService.LoadSettingsAsync();
+            var settings = await _settingsService.LoadSettingsAsync(forceReload: true);
             EngineName = $"Silnik: {GetSolverDisplayName(settings.SelectedSolver)}";
             var activePriorities = settings.Priorities
                 .Where(p => p.IsActive)
@@ -7629,17 +7649,19 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (8690 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (9485 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using GrafikoMat.Common;
+using GrafikoMat.Services; // Dodano using do serwisów
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+
 namespace GrafikoMat.Views
 {
     public sealed partial class DashboardView : UserControl
@@ -7652,6 +7674,8 @@ namespace GrafikoMat.Views
         {
             InitializeComponent();
             DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
+            // Subskrypcja na zmianę motywu, aby przerysować tabelę
+            this.ActualThemeChanged += OnThemeChanged;
         }
 
         public void Attach(MainViewModel vm)
@@ -7688,6 +7712,12 @@ namespace GrafikoMat.Views
             }
         }
 
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            // Gdy motyw się zmienia, przerysuj tabelę z nowymi kolorami
+            BuildLeftTable();
+        }
+
         private void OnYearPrev(object sender, RoutedEventArgs e) => _vm?.PrevYear();
         private void OnYearNext(object sender, RoutedEventArgs e) => _vm?.NextYear();
         private void OnMonthPrev(object sender, RoutedEventArgs e) => _vm?.PrevMonth();
@@ -7705,6 +7735,22 @@ namespace GrafikoMat.Views
             int daysInMonth = DateTime.DaysInMonth(year, month);
             int rowsCount = _vm.DoctorRows.Count + 1;
 
+            // ZMIANA: Pobieramy motyw z "Wyroczni"
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+
+            // Definiowanie palety kolorów w zależności od motywu
+            SolidColorBrush borderBrush, dayOffFill;
+            if (currentTheme == ElementTheme.Light)
+            {
+                borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+                dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 0, 0, 0));
+            }
+            else // Dark
+            {
+                borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 255, 255, 255));
+                dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 255, 255, 255));
+            }
+
             DeclarationsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NameColWidth) });
             for (int d = 1; d <= daysInMonth; d++)
             {
@@ -7717,9 +7763,6 @@ namespace GrafikoMat.Views
                 DeclarationsGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
             }
 
-            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
-            var dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 0, 0, 0));
-
             var hdrName = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
             Grid.SetRow(hdrName, 0);
             Grid.SetColumn(hdrName, 0);
@@ -7729,7 +7772,6 @@ namespace GrafikoMat.Views
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
                 bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                 bool isLastColumn = (d == daysInMonth);
                 var cell = new Border
@@ -7758,7 +7800,6 @@ namespace GrafikoMat.Views
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
                     bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                     bool isLastColumn = (d == daysInMonth);
                     var cell = new Border
@@ -7801,7 +7842,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (10486 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (10721 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -7814,22 +7855,17 @@ namespace GrafikoMat.Views
     xmlns:data="using:GrafikoMat.Core.Data"
     xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d"
-    x:DataType="vm:DeclarationsViewModel"
     d:DataContext="{d:DesignInstance Type=vm:DeclarationsViewModel}"
     x:Name="DeclarationsViewRoot">
 
-    <!-- Ważne: tylko JEDEN ResourceDictionary wewnątrz Resources, aby uniknąć WMC0060 -->
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <!-- Stałe pędzle, nie znikają po utracie fokusu -->
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33000000"/>
-                    <SolidColorBrush x:Key="CalendarCellHeaderBg"    Color="#0F000000"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33FFFFFF"/>
-                    <SolidColorBrush x:Key="CalendarCellHeaderBg"    Color="#10FFFFFF"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -7844,15 +7880,25 @@ namespace GrafikoMat.Views
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <Grid ColumnDefinitions="0.25*,0.75*" Padding="12" ColumnSpacing="12">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="0.25*"/>
+            <ColumnDefinition Width="0.75*"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- Lewa kolumna -->
-        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
-            <TextBlock FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2"
+        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2"
                        Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}"/>
 
             <Grid Grid.Row="1">
-                <!-- Admin -->
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Button Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets"
@@ -7872,7 +7918,6 @@ namespace GrafikoMat.Views
                             ToolTipService.ToolTip="Następny lekarz"/>
                 </StackPanel>
 
-                <!-- Nie-admin -->
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                     <TextBlock Text="Lekarz:" VerticalAlignment="Center" Opacity="0.9"/>
@@ -7887,9 +7932,23 @@ namespace GrafikoMat.Views
             </StackPanel>
         </Grid>
 
-        <!-- Prawa kolumna: siatka kalendarza -->
-        <Grid Grid.Column="1" RowDefinitions="Auto, *">
-            <Grid Padding="0,0,0,4" ColumnDefinitions="*,*,*,*,*,*,*">
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Padding="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
                 <TextBlock Grid.Column="0" Text="Poniedziałek" HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="1" Text="Wtorek"       HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="2" Text="Środa"        HorizontalAlignment="Center" Opacity="0.8"/>
@@ -7926,9 +7985,8 @@ namespace GrafikoMat.Views
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
-                                <!-- Pasek nagłówka -->
                                 <Border Grid.Row="0"
-                                        Background="{StaticResource CalendarCellHeaderBg}"
+                                        Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}"
                                         CornerRadius="4,4,0,0"/>
 
                                 <Grid Grid.Row="0" Padding="6,0">
@@ -7937,14 +7995,12 @@ namespace GrafikoMat.Views
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Numer dnia -->
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind DayNumber}"
                                                FontWeight="SemiBold"
                                                Foreground="{x:Bind DayNumberForeground}"
                                                VerticalAlignment="Center"/>
 
-                                    <!-- Nazwa święta -->
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind HolidayName}"
                                                Visibility="{x:Bind HolidayVisibility, Mode=OneWay}"
@@ -7953,17 +8009,18 @@ namespace GrafikoMat.Views
                                                Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
                                 </Grid>
 
-                                <!-- Treść komórki -->
                                 <Grid Grid.Row="1">
-                                    <!-- Wariant bez podziału -->
                                     <TextBlock Style="{StaticResource SymbolTextBlock}"
                                                Text="{x:Bind SymbolFull, Mode=OneWay}"
                                                Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
 
-                                    <!-- Wariant z podziałem -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                          RowDefinitions="*,*">
-                                        <Border BorderBrush="{StaticResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
+                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border BorderBrush="{ThemeResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
                                         <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
                                     </Grid>
@@ -7976,16 +8033,19 @@ namespace GrafikoMat.Views
         </Grid>
     </Grid>
 </UserControl>
-
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (2887 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (7185 bytes)
 ----- BEGIN -----
+using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
+using Windows.UI;
 
 namespace GrafikoMat.Views
 {
@@ -7996,30 +8056,114 @@ namespace GrafikoMat.Views
         public event Action? CloseRequested;
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
-
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
 
         public DeclarationsView()
         {
             this.InitializeComponent();
+            this.ActualThemeChanged += OnThemeChanged;
+            this.Unloaded += OnDeclarationsViewUnloaded;
         }
 
         public void AttachViewModel(DeclarationsViewModel vm)
         {
             this.DataContext = vm;
+            UpdateAllCellBrushes();
         }
 
-        private void OnSaveClick(object sender, RoutedEventArgs e)
+        private void UpdateCellBrushes(DayCell cell)
         {
-            ViewModel?.SaveCommand.Execute(null);
-            SaveRequested?.Invoke();
+            // POBIERAMY MOTYW Z WYROCZNI
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
+
+            if (currentTheme == ElementTheme.Light)
+            {
+                var transparent = Colors.Transparent;
+                var shadeDayOff = Color.FromArgb(0x1A, 0, 0, 0);
+                var shadeOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
+                var headerBgStandard = Color.FromArgb(0x59, 0, 0, 0);
+                var headerBgDayOff = Color.FromArgb(0x47, 0, 0, 0);
+                var headerBgOtherMonth = Color.FromArgb(0x1A, 0, 0, 0);
+                var borderLight = Color.FromArgb(0x33, 0, 0, 0);
+                var borderOther = Color.FromArgb(0x4D, 0, 0, 0);
+                var textNormal = Color.FromArgb(0xE6, 0, 0, 0);
+                var textMutedDayOff = Color.FromArgb(0x4D, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
+
+                Color bgColor, borderColor, numFgColor, headerBgColor;
+
+                if (cell.InMonth == false) bgColor = shadeOtherMonth;
+                else if (cell.IsDayOff) bgColor = shadeDayOff;
+                else bgColor = transparent;
+
+                if (cell.InMonth == false) headerBgColor = headerBgOtherMonth;
+                else if (cell.IsDayOff) headerBgColor = headerBgDayOff;
+                else headerBgColor = headerBgStandard;
+
+                borderColor = cell.InMonth == false ? borderOther : borderLight;
+
+                if (cell.InMonth == false)
+                    numFgColor = cell.IsDayOff ? textMutedDayOff : textMuted;
+                else
+                    numFgColor = textNormal;
+
+                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
+                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
+                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
+            }
+            else // Dark Theme
+            {
+                var transparent = Colors.Transparent;
+                var shadeDayOff = Color.FromArgb(0x28, 255, 255, 255);
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
+                var headerBgStandard = Color.FromArgb(0x4D, 255, 255, 255);
+                var headerBgDayOff = Color.FromArgb(0x59, 255, 255, 255);
+                var headerBgOtherMonth = Color.FromArgb(0x4D, 255, 255, 255);
+                var textNormal = Color.FromArgb(0xF2, 255, 255, 255);
+
+                Color bgColor, borderColor, numFgColor, headerBgColor;
+
+                if (cell.IsDayOff) bgColor = shadeDayOff;
+                else if (cell.InMonth) bgColor = shadeActiveDay;
+                else bgColor = transparent;
+
+                if (cell.InMonth == false) headerBgColor = headerBgOtherMonth;
+                else if (cell.IsDayOff) headerBgColor = headerBgDayOff;
+                else headerBgColor = headerBgStandard;
+
+                borderColor = cell.InMonth == false ? headerBgOtherMonth : headerBgStandard;
+                numFgColor = textNormal;
+
+                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
+                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
+                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
+            }
+
+            cell.NotifyBrushUpdate();
         }
 
-        private void OnSaveAndCloseClick(object sender, RoutedEventArgs e)
+        private void OnThemeChanged(FrameworkElement sender, object args)
         {
-            ViewModel?.SaveCommand.Execute(null);
-            SaveAndCloseRequested?.Invoke();
+            UpdateAllCellBrushes();
+        }
+
+        private void UpdateAllCellBrushes()
+        {
+            if (ViewModel?.DayCells == null) return;
+            foreach (var cell in ViewModel.DayCells)
+            {
+                UpdateCellBrushes(cell);
+            }
+        }
+
+        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        {
+            this.ActualThemeChanged -= OnThemeChanged;
+            this.Unloaded -= OnDeclarationsViewUnloaded;
         }
 
         private void Cell_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -8031,6 +8175,7 @@ namespace GrafikoMat.Views
                 _dragStartIndex = cell.Index;
                 element.CapturePointer(e.Pointer);
                 ViewModel.SelectSingle(cell.Index);
+                UpdateCellBrushes(cell);
                 e.Handled = true;
             }
         }
@@ -8041,6 +8186,7 @@ namespace GrafikoMat.Views
             {
                 if (!cell.IsInteractive) return;
                 ViewModel.SelectRange(_dragStartIndex, cell.Index);
+                UpdateAllCellBrushes();
                 e.Handled = true;
             }
         }
@@ -8060,7 +8206,6 @@ namespace GrafikoMat.Views
             if (sender is FrameworkElement element && element.DataContext is DayCell cell)
             {
                 if (!cell.IsInteractive) return;
-                // TODO: Logika menu kontekstowego
                 e.Handled = true;
             }
         }
@@ -8442,8 +8587,10 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\AppearanceSettingsView.xaml.cs (2683 bytes)
+===== FILE: GrafikoMat\Views\Settings\AppearanceSettingsView.xaml.cs (3012 bytes)
 ----- BEGIN -----
+using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Models;
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -8484,26 +8631,24 @@ namespace GrafikoMat.Views.Settings
 
         private async void ThemeRadioButton_Checked(object sender, RoutedEventArgs e)
         {
-            // Ignorujemy zdarzenie wywołane podczas inicjalizacji widoku
             if (_isInitializing || _settingsService == null || _appSettings == null) return;
             if (sender is not RadioButton selectedRadioButton) return;
 
-            AppTheme newTheme;
+            AppTheme newThemeSetting;
             ElementTheme newElementTheme;
-
             if (selectedRadioButton == LightRadioButton)
             {
-                newTheme = AppTheme.Light;
+                newThemeSetting = AppTheme.Light;
                 newElementTheme = ElementTheme.Light;
             }
             else if (selectedRadioButton == DarkRadioButton)
             {
-                newTheme = AppTheme.Dark;
+                newThemeSetting = AppTheme.Dark;
                 newElementTheme = ElementTheme.Dark;
             }
             else
             {
-                newTheme = AppTheme.SystemDefault;
+                newThemeSetting = AppTheme.SystemDefault;
                 newElementTheme = ElementTheme.Default;
             }
 
@@ -8514,9 +8659,15 @@ namespace GrafikoMat.Views.Settings
             }
 
             // 2. Zapisz nowe ustawienie
-            var newSettings = _appSettings with { Theme = newTheme };
+            var newSettings = _appSettings with { Theme = newThemeSetting };
             await _settingsService.SaveSettingsAsync(newSettings);
-            _appSettings = newSettings; // Zaktualizuj lokalną kopię ustawień
+            _appSettings = newSettings;
+
+            // ZMIANA: Poinformuj "Wyrocznię" o nowym, obowiązującym stanie motywu
+            ThemeManagerService.Instance.SetTheme(newElementTheme);
+
+            // Rozgłoszenie wiadomości pozostaje, może być przydatne dla innych części programu
+            WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
     }
 }

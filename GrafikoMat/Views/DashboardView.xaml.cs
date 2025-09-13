@@ -2,11 +2,13 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using GrafikoMat.Common;
+using GrafikoMat.Services; // Dodano using do serwisów
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
+
 namespace GrafikoMat.Views
 {
     public sealed partial class DashboardView : UserControl
@@ -19,6 +21,8 @@ namespace GrafikoMat.Views
         {
             InitializeComponent();
             DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
+            // Subskrypcja na zmianę motywu, aby przerysować tabelę
+            this.ActualThemeChanged += OnThemeChanged;
         }
 
         public void Attach(MainViewModel vm)
@@ -55,6 +59,12 @@ namespace GrafikoMat.Views
             }
         }
 
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            // Gdy motyw się zmienia, przerysuj tabelę z nowymi kolorami
+            BuildLeftTable();
+        }
+
         private void OnYearPrev(object sender, RoutedEventArgs e) => _vm?.PrevYear();
         private void OnYearNext(object sender, RoutedEventArgs e) => _vm?.NextYear();
         private void OnMonthPrev(object sender, RoutedEventArgs e) => _vm?.PrevMonth();
@@ -72,6 +82,22 @@ namespace GrafikoMat.Views
             int daysInMonth = DateTime.DaysInMonth(year, month);
             int rowsCount = _vm.DoctorRows.Count + 1;
 
+            // ZMIANA: Pobieramy motyw z "Wyroczni"
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+
+            // Definiowanie palety kolorów w zależności od motywu
+            SolidColorBrush borderBrush, dayOffFill;
+            if (currentTheme == ElementTheme.Light)
+            {
+                borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
+                dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 0, 0, 0));
+            }
+            else // Dark
+            {
+                borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 255, 255, 255));
+                dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 255, 255, 255));
+            }
+
             DeclarationsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(NameColWidth) });
             for (int d = 1; d <= daysInMonth; d++)
             {
@@ -84,9 +110,6 @@ namespace GrafikoMat.Views
                 DeclarationsGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowHeight) });
             }
 
-            var borderBrush = new SolidColorBrush(Color.FromArgb(0x18, 0, 0, 0));
-            var dayOffFill = new SolidColorBrush(Color.FromArgb(0x0A, 0, 0, 0));
-
             var hdrName = new Border { BorderBrush = borderBrush, BorderThickness = new Thickness(0, 0, 1, 1) };
             Grid.SetRow(hdrName, 0);
             Grid.SetColumn(hdrName, 0);
@@ -96,7 +119,6 @@ namespace GrafikoMat.Views
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
                 bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                 bool isLastColumn = (d == daysInMonth);
                 var cell = new Border
@@ -125,7 +147,6 @@ namespace GrafikoMat.Views
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
                     bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
                     bool isLastColumn = (d == daysInMonth);
                     var cell = new Border

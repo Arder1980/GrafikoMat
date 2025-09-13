@@ -36,13 +36,11 @@ namespace GrafikoMat
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
+
+        // ZMIANA: Usunięto pole _declarationsView. Będzie tworzone w locie.
         private readonly DashboardView _dashboardView = new();
-        private readonly DeclarationsView _declarationsView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
-
-        private Action? _evtDeclSaveAndClose;
-        private Action? _evtDeclClose;
 
         private bool _isAnimating;
         private bool _isClosing;
@@ -79,10 +77,7 @@ namespace GrafikoMat
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
-            _evtDeclSaveAndClose = () => OnDeclSaveAndCloseOnly();
-            _evtDeclClose = () => OnDeclCloseOnly();
-            _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
-            _declarationsView.CloseRequested += _evtDeclClose;
+            // ZMIANA: Usunięto subskrypcje zdarzeń dla _declarationsView w konstruktorze
 
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
@@ -249,13 +244,13 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
-        private void BuildActionsForDeclarations()
+        private void BuildActionsForDeclarations(DeclarationsView view)
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Anuluj", new RelayCommand(OnDeclCloseOnly)));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => _declarationsView.ViewModel.ClearSelectionCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => _declarationsView.ViewModel.SaveCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(OnDeclSaveAndCloseOnly)));
+            Actions.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly)));
         }
 
         private void BuildActionsForSettings()
@@ -278,11 +273,10 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
+        // ZMIANA: Cała metoda została gruntownie przebudowana
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
-
-            // ZAMROŻENIE wyboru użytkownika zanim pojawi się pierwsze await
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
 
@@ -312,7 +306,7 @@ namespace GrafikoMat
             }
 
             var declarationsVm = new DeclarationsViewModel(
-                frozenYear,                 // używamy zamrożonych wartości
+                frozenYear,
                 frozenMonthIndex,
                 doctorsForUnit,
                 initialIndex,
@@ -323,10 +317,25 @@ namespace GrafikoMat
                 }
             );
 
-            _declarationsView.AttachViewModel(declarationsVm);
+            // ZAWSZE tworzymy nową, świeżą instancję widoku
+            var declarationsView = new DeclarationsView();
 
-            _ = AnimateToAsync(_declarationsView, true);
-            BuildActionsForDeclarations();
+            // Definiujemy, co się stanie po zamknięciu widoku (np. przez przycisk "Anuluj")
+            void DeclCloseHandler() => SwitchToDashboard();
+            void DeclSaveAndCloseHandler()
+            {
+                declarationsView.ViewModel.SaveCommand.Execute(null);
+                SwitchToDashboard();
+            }
+
+            // Subskrybujemy zdarzenia dla tej konkretnej instancji
+            declarationsView.CloseRequested += DeclCloseHandler;
+            declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
+
+            declarationsView.AttachViewModel(declarationsVm);
+
+            await AnimateToAsync(declarationsView, true);
+            BuildActionsForDeclarations(declarationsView);
         }
 
         private static void DetachFromParent(FrameworkElement el)
@@ -458,8 +467,7 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
 
-            if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
-            if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
+            // ZMIANA: Usunięto odpinanie zdarzeń od nieistniejącego już pola _declarationsView
 
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
             try { ViewportNext.Content = null; } catch { }
@@ -468,15 +476,10 @@ namespace GrafikoMat
             this.SystemBackdrop = null;
         }
 
-        private void OnDeclCloseOnly() => SwitchToDashboard();
-        private void OnDeclSaveAndCloseOnly()
-        {
-            _declarationsView.ViewModel.SaveCommand.Execute(null);
-            SwitchToDashboard();
-        }
+        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
+        // Logika została przeniesiona do metody SwitchToDeclarations
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-
         private async Task ShowInfo(string title, string message)
         {
             var dlg = App.CreateThemedDialog();
