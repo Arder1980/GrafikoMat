@@ -89,7 +89,6 @@ namespace GrafikoMat.ViewModels
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
-            this.PropertyChanged += OnMainViewModelPropertyChanged;
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
@@ -263,8 +262,25 @@ namespace GrafikoMat.ViewModels
             PriorityOrder = $"Priorytety: {string.Join(" > ", activePriorities)}";
         }
 
-        private string GetSolverDisplayName(SolverType solver) => solver.ToString();
-        private string GetPriorityDisplayName(SolverPriority priority) => priority.ToString();
+        private string GetSolverDisplayName(SolverType solver) => solver switch
+        {
+            SolverType.Backtracking => "BacktrackingSolver",
+            SolverType.AStar => "AStarSolver",
+            SolverType.Genetic => "GeneticSolver",
+            SolverType.SimulatedAnnealing => "SimulatedAnnealingSolver",
+            SolverType.TabuSearch => "TabuSearchSolver",
+            SolverType.AntColony => "AntColonySolver",
+            _ => solver.ToString()
+        };
+        private string GetPriorityDisplayName(SolverPriority priority) => priority switch
+        {
+            SolverPriority.InitialContinuity => "Ciągłość początkowa",
+            SolverPriority.TotalAssignments => "Maksymalizacja obsady",
+            SolverPriority.Fairness => "Sprawiedliwość obciążenia",
+            SolverPriority.Spacing => "Równomierność rozłożenia",
+            SolverPriority.DeclarationCompliance => "Zgodność z deklaracjami",
+            _ => priority.ToString()
+        };
         private static string PolishDayOfWeek(DayOfWeek dow) => new[] { "Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota" }[(int)dow];
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;

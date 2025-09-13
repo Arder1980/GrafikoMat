@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-13 20:22:10
+# Data:       2025-09-13 21:37:51
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -4137,7 +4137,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (31398 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (31514 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -4177,13 +4177,11 @@ namespace GrafikoMat
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> Actions { get; } = new();
+
+        // ZMIANA: Usunięto pole _declarationsView. Będzie tworzone w locie.
         private readonly DashboardView _dashboardView = new();
-        private readonly DeclarationsView _declarationsView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
-
-        private Action? _evtDeclSaveAndClose;
-        private Action? _evtDeclClose;
 
         private bool _isAnimating;
         private bool _isClosing;
@@ -4220,10 +4218,7 @@ namespace GrafikoMat
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
-            _evtDeclSaveAndClose = () => OnDeclSaveAndCloseOnly();
-            _evtDeclClose = () => OnDeclCloseOnly();
-            _declarationsView.SaveAndCloseRequested += _evtDeclSaveAndClose;
-            _declarationsView.CloseRequested += _evtDeclClose;
+            // ZMIANA: Usunięto subskrypcje zdarzeń dla _declarationsView w konstruktorze
 
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
@@ -4390,13 +4385,13 @@ namespace GrafikoMat
             Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
-        private void BuildActionsForDeclarations()
+        private void BuildActionsForDeclarations(DeclarationsView view)
         {
             Actions.Clear();
-            Actions.Add(new UiAction("Anuluj", new RelayCommand(OnDeclCloseOnly)));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => _declarationsView.ViewModel.ClearSelectionCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => _declarationsView.ViewModel.SaveCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(OnDeclSaveAndCloseOnly)));
+            Actions.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
+            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
+            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly)));
         }
 
         private void BuildActionsForSettings()
@@ -4419,9 +4414,7 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
-        // To jest tylko fragment pliku MainWindow.xaml.cs
-        // Proszę znaleźć metodę SwitchToDeclarations i ją zaktualizować.
-
+        // ZMIANA: Cała metoda została gruntownie przebudowana
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
@@ -4465,12 +4458,27 @@ namespace GrafikoMat
                 }
             );
 
-            // ZMIANA: Wywołanie jest teraz prostsze, bez przekazywania motywu
-            _declarationsView.AttachViewModel(declarationsVm);
+            // ZAWSZE tworzymy nową, świeżą instancję widoku
+            var declarationsView = new DeclarationsView();
 
-            _ = AnimateToAsync(_declarationsView, true);
-            BuildActionsForDeclarations();
+            // Definiujemy, co się stanie po zamknięciu widoku (np. przez przycisk "Anuluj")
+            void DeclCloseHandler() => SwitchToDashboard();
+            void DeclSaveAndCloseHandler()
+            {
+                declarationsView.ViewModel.SaveCommand.Execute(null);
+                SwitchToDashboard();
+            }
+
+            // Subskrybujemy zdarzenia dla tej konkretnej instancji
+            declarationsView.CloseRequested += DeclCloseHandler;
+            declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
+
+            declarationsView.AttachViewModel(declarationsVm);
+
+            await AnimateToAsync(declarationsView, true);
+            BuildActionsForDeclarations(declarationsView);
         }
+
         private static void DetachFromParent(FrameworkElement el)
         {
             if (el.Parent is ContentControl cc) cc.Content = null;
@@ -4600,8 +4608,7 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
 
-            if (_evtDeclSaveAndClose != null) _declarationsView.SaveAndCloseRequested -= _evtDeclSaveAndClose;
-            if (_evtDeclClose != null) _declarationsView.CloseRequested -= _evtDeclClose;
+            // ZMIANA: Usunięto odpinanie zdarzeń od nieistniejącego już pola _declarationsView
 
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
             try { ViewportNext.Content = null; } catch { }
@@ -4610,15 +4617,10 @@ namespace GrafikoMat
             this.SystemBackdrop = null;
         }
 
-        private void OnDeclCloseOnly() => SwitchToDashboard();
-        private void OnDeclSaveAndCloseOnly()
-        {
-            _declarationsView.ViewModel.SaveCommand.Execute(null);
-            SwitchToDashboard();
-        }
+        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
+        // Logika została przeniesiona do metody SwitchToDeclarations
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-
         private async Task ShowInfo(string title, string message)
         {
             var dlg = App.CreateThemedDialog();
@@ -8035,7 +8037,7 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (7185 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (7742 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
@@ -8051,9 +8053,11 @@ namespace GrafikoMat.Views
 {
     public sealed partial class DeclarationsView : UserControl
     {
-        public event Action? SaveRequested;
         public event Action? SaveAndCloseRequested;
         public event Action? CloseRequested;
+
+        public void OnDeclCloseOnly() => CloseRequested?.Invoke();
+        public void OnDeclSaveAndCloseOnly() => SaveAndCloseRequested?.Invoke();
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
         private bool _isDragging = false;
@@ -8074,40 +8078,32 @@ namespace GrafikoMat.Views
 
         private void UpdateCellBrushes(DayCell cell)
         {
-            // POBIERAMY MOTYW Z WYROCZNI
             var currentTheme = ThemeManagerService.Instance.CurrentTheme;
             var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
 
             if (currentTheme == ElementTheme.Light)
             {
+                // === PALETA KOLORÓW DLA MOTYWU JASNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeDayOff = Color.FromArgb(0x1A, 0, 0, 0);
-                var shadeOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
-                var headerBgStandard = Color.FromArgb(0x59, 0, 0, 0);
-                var headerBgDayOff = Color.FromArgb(0x47, 0, 0, 0);
-                var headerBgOtherMonth = Color.FromArgb(0x1A, 0, 0, 0);
-                var borderLight = Color.FromArgb(0x33, 0, 0, 0);
-                var borderOther = Color.FromArgb(0x4D, 0, 0, 0);
-                var textNormal = Color.FromArgb(0xE6, 0, 0, 0);
-                var textMutedDayOff = Color.FromArgb(0x4D, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
+                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);      // Tło Dnia Roboczego (Aktywny): 5% czerni
+                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);         // Tło Dnia Wolnego (Aktywny): 15% czerni
+                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);      // Tło Nagłówka (Aktywny): 35% czerni
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);  // Tło Nagłówka (Nieaktywny): 5% czerni
+                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);         // Ramka (Aktywny): 30% czerni
+                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);         // Ramka (Nieaktywny): 5% czerni
+                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);          // Czcionka (Aktywny): 75% czerni
+                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);           // ZMIANA: Czcionka (Nieaktywny): 10% czerni
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
-                if (cell.InMonth == false) bgColor = shadeOtherMonth;
-                else if (cell.IsDayOff) bgColor = shadeDayOff;
-                else bgColor = transparent;
-
-                if (cell.InMonth == false) headerBgColor = headerBgOtherMonth;
-                else if (cell.IsDayOff) headerBgColor = headerBgDayOff;
-                else headerBgColor = headerBgStandard;
-
-                borderColor = cell.InMonth == false ? borderOther : borderLight;
-
-                if (cell.InMonth == false)
-                    numFgColor = cell.IsDayOff ? textMutedDayOff : textMuted;
+                if (cell.InMonth)
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
                 else
-                    numFgColor = textNormal;
+                    bgColor = transparent;
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                borderColor = cell.InMonth ? borderLight : borderOther;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
 
                 (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
                 (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
@@ -8116,26 +8112,27 @@ namespace GrafikoMat.Views
             }
             else // Dark Theme
             {
+                // === PALETA KOLORÓW DLA MOTYWU CIEMNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeDayOff = Color.FromArgb(0x28, 255, 255, 255);
-                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
-                var headerBgStandard = Color.FromArgb(0x4D, 255, 255, 255);
-                var headerBgDayOff = Color.FromArgb(0x59, 255, 255, 255);
-                var headerBgOtherMonth = Color.FromArgb(0x4D, 255, 255, 255);
-                var textNormal = Color.FromArgb(0xF2, 255, 255, 255);
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);   // Tło Dnia Roboczego (Aktywny): 5% bieli
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);      // Tło Dnia Wolnego (Aktywny): 15% bieli
+                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);   // Tło Nagłówka (Aktywny): 35% bieli
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255); // Tło Nagłówka (Nieaktywny): 5% bieli
+                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);      // Ramka (Aktywny): 30% bieli
+                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);      // Ramka (Nieaktywny): 5% bieli
+                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);       // Czcionka (Aktywny): 90% bieli
+                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);        // ZMIANA: Czcionka (Nieaktywny): 10% bieli
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
-                if (cell.IsDayOff) bgColor = shadeDayOff;
-                else if (cell.InMonth) bgColor = shadeActiveDay;
-                else bgColor = transparent;
+                if (cell.InMonth)
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
+                else
+                    bgColor = transparent;
 
-                if (cell.InMonth == false) headerBgColor = headerBgOtherMonth;
-                else if (cell.IsDayOff) headerBgColor = headerBgDayOff;
-                else headerBgColor = headerBgStandard;
-
-                borderColor = cell.InMonth == false ? headerBgOtherMonth : headerBgStandard;
-                numFgColor = textNormal;
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                borderColor = cell.InMonth ? borderLight : borderOther;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
 
                 (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
                 (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
@@ -8145,7 +8142,6 @@ namespace GrafikoMat.Views
 
             cell.NotifyBrushUpdate();
         }
-
         private void OnThemeChanged(FrameworkElement sender, object args)
         {
             UpdateAllCellBrushes();

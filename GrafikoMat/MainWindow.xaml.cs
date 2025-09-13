@@ -16,8 +16,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -76,12 +78,40 @@ namespace GrafikoMat
             ApplyTitleBarMenuStyling();
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
+            ViewModel.PropertyChanged += OnMainViewModelPropertyChanged;
 
             // ZMIANA: Usunięto subskrypcje zdarzeń dla _declarationsView w konstruktorze
 
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
+        }
+        private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.EngineName) || e.PropertyName == nameof(MainViewModel.PriorityOrder))
+            {
+                // Animacja wygaszenia stopki
+                var sb = new Storyboard();
+                var fadeOut = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(150) };
+                Storyboard.SetTarget(fadeOut, BottomStatusBar);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+                sb.Children.Add(fadeOut);
+
+                var tcs = new TaskCompletionSource();
+                sb.Completed += (_, _) => tcs.TrySetResult();
+                sb.Begin();
+                await tcs.Task;
+
+                // W tym momencie tekst w tle został już podmieniony przez ViewModel
+
+                // Animacja pojawienia się stopki z nowym tekstem
+                sb = new Storyboard();
+                var fadeIn = new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(150) };
+                Storyboard.SetTarget(fadeIn, BottomStatusBar);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+                sb.Children.Add(fadeIn);
+                sb.Begin();
+            }
         }
 
         private async Task InitializeApplicationAsync()
