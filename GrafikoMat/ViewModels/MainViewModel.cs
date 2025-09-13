@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using CommunityToolkit.WinUI;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
@@ -36,6 +37,8 @@ namespace GrafikoMat.ViewModels
         private int _activeUnitIndex = -1;
 
         public bool IsCurrentUserAdmin { get; private set; }
+
+        public ElementTheme CurrentTheme { get; private set; } = ElementTheme.Light;
 
         [JsonIgnore]
         public XamlRoot? XamlRoot { get; set; }
@@ -80,7 +83,6 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
         public Dictionary<string, DoctorMonthDeclaration> Declarations => _declByKey;
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
-
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
@@ -93,12 +95,16 @@ namespace GrafikoMat.ViewModels
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
-        public void Receive(SettingsHaveChangedMessage message)
+        public async void Receive(SettingsHaveChangedMessage message)
         {
-            App.MainRoot?.DispatcherQueue.TryEnqueue(async () =>
+            // ZMIANA: Użycie poprawnej, asynchronicznej metody EnqueueAsync
+            if (App.MainRoot?.DispatcherQueue != null)
             {
-                await UpdateFooterFromSettingsAsync();
-            });
+                await App.MainRoot.DispatcherQueue.EnqueueAsync(async () =>
+                {
+                    await UpdateFooterFromSettingsAsync();
+                });
+            }
         }
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
@@ -125,7 +131,6 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
-
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
@@ -217,8 +222,8 @@ namespace GrafikoMat.ViewModels
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
                 string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
 
-                // ZMIANA: Użycie nowej metody GetHolidayName zamiast IsHoliday
-                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
+                date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
 
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
@@ -255,12 +260,19 @@ namespace GrafikoMat.ViewModels
         public async Task UpdateFooterFromSettingsAsync()
         {
             if (_settingsService == null) return;
-            var settings = await _settingsService.LoadSettingsAsync();
+            var settings = await _settingsService.LoadSettingsAsync(forceReload: true);
             EngineName = $"Silnik: {GetSolverDisplayName(settings.SelectedSolver)}";
             var activePriorities = settings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => GetPriorityDisplayName(p.Priority));
             PriorityOrder = $"Priorytety: {string.Join(" > ", activePriorities)}";
+
+            CurrentTheme = settings.Theme switch
+            {
+                AppTheme.Light => ElementTheme.Light,
+                AppTheme.Dark => ElementTheme.Dark,
+                _ => ElementTheme.Default
+            };
         }
 
         private string GetSolverDisplayName(SolverType solver) => solver.ToString();

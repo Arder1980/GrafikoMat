@@ -9,8 +9,6 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
-using Microsoft.UI;
 
 namespace GrafikoMat.ViewModels
 {
@@ -219,13 +217,15 @@ namespace GrafikoMat.ViewModels
         public string DayNumber => Date.Day.ToString("00");
         public bool IsWeekend { get; }
         public bool IsHoliday { get; }
+        public bool IsDayOff => IsHoliday || IsWeekend;
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        public Brush EffectiveBackground { get; private set; }
-        public Brush EffectiveBorderBrush { get; private set; }
-        public Brush DayNumberForeground { get; private set; }
-        public Brush EffectiveHeaderBackground { get; private set; }
+        // Pędzle publiczne, aby Widok mógł je ustawić
+        public Brush EffectiveBackground { get; set; }
+        public Brush EffectiveBorderBrush { get; set; }
+        public Brush DayNumberForeground { get; set; }
+        public Brush EffectiveHeaderBackground { get; set; }
 
         private bool _isSplit;
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
@@ -240,18 +240,16 @@ namespace GrafikoMat.ViewModels
         public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
 
         private bool _isSelected;
-        public bool IsSelected { get => _isSelected; private set => SetProperty(ref _isSelected, value); }
-
-        public Thickness BorderThickness => _isSelected ? new Thickness(2.0) : new Thickness(1.0);
+        public bool IsSelected { get; private set; }
 
         public void SetSelected(bool selected)
         {
             if (IsSelected == selected) return;
             IsSelected = selected;
-
-            var contentElement = App.MainRoot?.Content as FrameworkElement;
-            UpdateBrushesForTheme(contentElement?.ActualTheme ?? ElementTheme.Light);
+            OnPropertyChanged(nameof(BorderThickness));
         }
+
+        public Thickness BorderThickness => IsSelected ? new Thickness(2.0) : new Thickness(1.0);
 
         public void ClearData()
         {
@@ -261,89 +259,28 @@ namespace GrafikoMat.ViewModels
             IsSplit = false;
         }
 
-        private readonly bool _isFromOtherMonth;
         public DayCell(int index, DateTime date, bool inMonth, bool isWeekend, bool isHoliday, string? holidayName)
         {
             Index = index;
             Date = date;
             InMonth = inMonth;
-            _isFromOtherMonth = !inMonth;
             IsWeekend = isWeekend;
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            EffectiveBackground = new SolidColorBrush(Colors.Transparent);
-            EffectiveBorderBrush = new SolidColorBrush(Colors.Transparent);
-            DayNumberForeground = new SolidColorBrush(Colors.Transparent);
-            EffectiveHeaderBackground = new SolidColorBrush(Colors.Transparent);
-            UpdateBrushesForTheme(ElementTheme.Light);
+            // Inicjalizacja pustymi pędzlami - Widok nada im właściwe kolory
+            EffectiveBackground = new SolidColorBrush();
+            EffectiveBorderBrush = new SolidColorBrush();
+            DayNumberForeground = new SolidColorBrush();
+            EffectiveHeaderBackground = new SolidColorBrush();
         }
 
-        public void UpdateBrushesForTheme(ElementTheme currentTheme)
+        public void NotifyBrushUpdate()
         {
-            Color bgColor, borderColor, numFgColor, headerBgColor;
-            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
-            var isDayOff = IsHoliday || IsWeekend;
-
-            if (currentTheme == ElementTheme.Light)
-            {
-                var transparent = Color.FromArgb(0x00, 0, 0, 0);
-                var shadeDayOff = Color.FromArgb(0x1A, 0, 0, 0);         // 10% czerni
-                var shadeOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);     // 5% czerni (przyciemnione)
-                var headerBgStandard = Color.FromArgb(0x33, 0, 0, 0);    // 20% czerni
-                var headerBgDayOff = Color.FromArgb(0x22, 0, 0, 0);      // ~13% czerni
-                var headerBgOtherMonth = Color.FromArgb(0x1A, 0, 0, 0);  // 10% czerni (rozjaśnione względem standardowego)
-                var borderLight = Color.FromArgb(0x33, 0, 0, 0);
-                var borderOther = Color.FromArgb(0x4D, 0, 0, 0);
-                var textNormal = Color.FromArgb(0xE6, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
-
-                bgColor = transparent;
-                if (isDayOff) bgColor = shadeDayOff;
-                else if (_isFromOtherMonth) bgColor = shadeOtherMonth;
-
-                if (_isFromOtherMonth) headerBgColor = headerBgOtherMonth;
-                else if (isDayOff) headerBgColor = headerBgDayOff;
-                else headerBgColor = headerBgStandard;
-
-                borderColor = _isFromOtherMonth ? borderOther : borderLight;
-                numFgColor = _isFromOtherMonth ? textMuted : textNormal;
-            }
-            else // Dark Theme
-            {
-                var transparent = Color.FromArgb(0x00, 0, 0, 0);
-                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);       // 15% bieli (jasne tło)
-                var shadeOtherMonth = Color.FromArgb(0x1A, 255, 255, 255);   // 10% bieli (tło dni nieaktywnych)
-                var headerBgStandard = Color.FromArgb(0x40, 255, 255, 255);  // 25% bieli
-                var headerBgDayOff = Color.FromArgb(0x4D, 255, 255, 255);    // 30% bieli
-                var headerBgOtherMonth = Color.FromArgb(0x33, 255, 255, 255); // 20% bieli
-                var borderLight = headerBgStandard;
-                var borderOther = headerBgOtherMonth;
-                var textNormal = Color.FromArgb(0xF2, 255, 255, 255);        // 95% bieli (jasna czcionka)
-                var textMuted = Color.FromArgb(0xAA, 255, 255, 255);         // ~66% bieli
-
-                bgColor = transparent;
-                if (_isFromOtherMonth) bgColor = shadeOtherMonth;
-                else if (isDayOff) bgColor = shadeDayOff;
-
-                if (_isFromOtherMonth) headerBgColor = headerBgOtherMonth;
-                else if (isDayOff) headerBgColor = headerBgDayOff;
-                else headerBgColor = headerBgStandard;
-
-                borderColor = _isFromOtherMonth ? borderOther : borderLight;
-                numFgColor = textNormal; // Zawsze jasna czcionka w nagłówku
-            }
-
-            EffectiveBackground = new SolidColorBrush(bgColor);
-            EffectiveBorderBrush = new SolidColorBrush(IsSelected ? borderSelected : borderColor);
-            DayNumberForeground = new SolidColorBrush(numFgColor);
-            EffectiveHeaderBackground = new SolidColorBrush(headerBgColor);
-
             OnPropertyChanged(nameof(EffectiveBackground));
             OnPropertyChanged(nameof(EffectiveBorderBrush));
             OnPropertyChanged(nameof(DayNumberForeground));
             OnPropertyChanged(nameof(EffectiveHeaderBackground));
-            OnPropertyChanged(nameof(BorderThickness));
         }
     }
 }
