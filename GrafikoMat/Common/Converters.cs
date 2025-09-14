@@ -10,21 +10,40 @@ namespace GrafikoMat.Common
 {
     public class BooleanToOpacityConverter : IValueConverter
     {
-        public double TrueValue { get; set; } = 1.0;
-        public double FalseValue { get; set; } = 0.5;
+        public double TrueValue { get; set; } = 0.5;
+        public double FalseValue { get; set; } = 1.0;
         public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? TrueValue : FalseValue;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
     public class BooleanToVisibilityConverter : IValueConverter
     {
+        // ZMIANA: Dodano pełną i poprawną implementację konwertera
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
-            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase)) { isVisible = !isVisible; }
+
+            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                isVisible = !isVisible;
+            }
+
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
-        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            bool isVisible = value is Visibility v && v == Visibility.Visible;
+
+            if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                isVisible = !isVisible;
+            }
+
+            return isVisible;
+        }
     }
+
     public class BooleanToBrushConverter_DayOff : IValueConverter
     {
         public Brush DayOffBrush { get; set; } = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
@@ -32,11 +51,13 @@ namespace GrafikoMat.Common
         public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? DayOffBrush : WorkDayBrush;
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
     public class BooleanToThicknessConverter_LastItemBorder : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language) => (value is bool isLast && isLast) ? new Thickness(0) : new Thickness(0, 0, 0, 1);
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
     public class NullToVisibilityConverter : IValueConverter
     {
         public bool Invert { get; set; } = false;
@@ -50,6 +71,7 @@ namespace GrafikoMat.Common
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
+
     public class IntegerToItemsConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)

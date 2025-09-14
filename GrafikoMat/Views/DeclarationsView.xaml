@@ -10,6 +10,7 @@
     xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d"
     d:DataContext="{d:DesignInstance Type=vm:DeclarationsViewModel}"
+    xmlns:toolkitControls="using:CommunityToolkit.WinUI.Controls"
     x:Name="DeclarationsViewRoot">
 
     <UserControl.Resources>
@@ -40,7 +41,7 @@
             <ColumnDefinition Width="0.75*"/>
         </Grid.ColumnDefinitions>
 
-        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10">
+        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10" Padding="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -86,7 +87,7 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Column="1">
+        <Grid Grid.Column="1" Padding="0,12,12,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -102,7 +103,6 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-
                 <TextBlock Grid.Column="0" Text="Poniedziałek" HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="1" Text="Wtorek"       HorizontalAlignment="Center" Opacity="0.8"/>
                 <TextBlock Grid.Column="2" Text="Środa"        HorizontalAlignment="Center" Opacity="0.8"/>
@@ -112,49 +112,80 @@
                 <TextBlock Grid.Column="6" Text="Niedziela"    HorizontalAlignment="Center" Opacity="0.6"/>
             </Grid>
 
-            <ItemsControl x:Name="CalendarItemsControl" Grid.Row="1"
-                          ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}">
-                <ItemsControl.ItemsPanel>
+            <GridView Grid.Row="1"
+                      ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}"
+                      SelectionMode="Multiple"
+                      IsItemClickEnabled="False"
+                      RightTapped="Calendar_RightTapped"
+                      SelectionChanged="Calendar_SelectionChanged">
+                <GridView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
+                        <toolkitControls:UniformGrid Columns="7" RowSpacing="4" ColumnSpacing="4" />
                     </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
+                </GridView.ItemsPanel>
+                
+                <GridView.ItemContainerStyle>
+                    <Style TargetType="GridViewItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="GridViewItem">
+                                    <ListViewItemPresenter
+                                        ContentTransitions="{TemplateBinding ContentTransitions}"
+                                        SelectionCheckMarkVisualEnabled="True"
+                                        CheckBoxBrush="{ThemeResource ListViewItemCheckBoxBrush}"
+                                        ContentMargin="{TemplateBinding Padding}"
+                                        HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                        PointerOverBackground="{ThemeResource ListViewItemPointerOverBackgroundBrush}"
+                                        SelectedBackground="Transparent"
+                                        SelectedPointerOverBackground="{ThemeResource ListViewItemPointerOverBackgroundBrush}"
+                                        PressedBackground="{ThemeResource ListViewItemPressedBackgroundBrush}"
+                                        SelectedPressedBackground="{ThemeResource ListViewItemPressedBackgroundBrush}"
+                                        DisabledOpacity="{ThemeResource ListViewItemDisabledThemeOpacity}"
+                                        FocusBorderBrush="{ThemeResource ListViewItemFocusBorderBrush}"
+                                        FocusSecondaryBorderBrush="{ThemeResource ListViewItemFocusSecondaryBorderBrush}"
+                                        PlaceholderBackground="{ThemeResource ListViewItemPlaceholderBackgroundBrush}"
+                                        ReorderHintOffset="{ThemeResource ListViewItemReorderHintOffset}"
+                                        DragOpacity="{ThemeResource ListViewItemDragThemeOpacity}"
+                                        SelectionIndicatorBrush="Transparent"
+                                        SelectionIndicatorPointerOverBrush="Transparent"
+                                        SelectionIndicatorPressedBrush="Transparent" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </GridView.ItemContainerStyle>
 
-                <ItemsControl.ItemTemplate>
+                <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
                         <Border
                             IsHitTestVisible="{x:Bind IsInteractive, Mode=OneWay}"
-                            PointerPressed="Cell_PointerPressed"
-                            PointerMoved="Cell_PointerMoved"
-                            PointerReleased="Cell_PointerReleased"
-                            RightTapped="OnCellRightTapped"
                             Background="{x:Bind EffectiveBackground, Mode=OneWay}"
                             BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}"
                             BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
                             CornerRadius="4">
-
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-
                                 <Border Grid.Row="0"
                                         Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}"
                                         CornerRadius="4,4,0,0"/>
-
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-
                                     <TextBlock Grid.Column="0"
                                                Text="{x:Bind DayNumber}"
                                                FontWeight="SemiBold"
                                                Foreground="{x:Bind DayNumberForeground}"
                                                VerticalAlignment="Center"/>
-
                                     <TextBlock Grid.Column="1"
                                                Text="{x:Bind HolidayName}"
                                                Visibility="{x:Bind HolidayVisibility, Mode=OneWay}"
@@ -162,18 +193,15 @@
                                                HorizontalAlignment="Left" VerticalAlignment="Center"
                                                Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
                                 </Grid>
-
                                 <Grid Grid.Row="1">
                                     <TextBlock Style="{StaticResource SymbolTextBlock}"
                                                Text="{x:Bind SymbolFull, Mode=OneWay}"
                                                Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
-
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="*"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-
                                         <Border BorderBrush="{ThemeResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
                                         <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
                                         <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
@@ -182,8 +210,8 @@
                             </Grid>
                         </Border>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                </GridView.ItemTemplate>
+            </GridView>
         </Grid>
     </Grid>
 </UserControl>

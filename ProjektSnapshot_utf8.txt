@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-14 12:42:43
+# Data:       2025-09-14 18:27:55
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -3884,7 +3884,7 @@ namespace GrafikoMat.Controls
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Converters\BooleanToVisibilityConverter.cs (786 bytes)
+===== FILE: GrafikoMat\Converters\BooleanToVisibilityConverter.cs (823 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
@@ -3892,25 +3892,15 @@ using System;
 
 namespace GrafikoMat.Converters
 {
-    public class BooleanToVisibilityConverter : IValueConverter
+    public class BooleanToOpacityConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value is bool flag)
-            {
-                return flag ? Visibility.Visible : Visibility.Collapsed;
-            }
-            return Visibility.Collapsed;
-        }
+        // ZMIANA: Zamieniono wartości, aby poprawnie obsługiwać "wyszarzanie"
+        public double TrueValue { get; set; } = 1.0; // Wartość krycia, gdy warunek jest PRAWDZIWY (np. IsArchived = true)
+        public double FalseValue { get; set; } = 0.5; // Wartość krycia, gdy warunek jest FAŁSZYWY (np. IsArchived = false)
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            if (value is Visibility visibility)
-            {
-                return visibility == Visibility.Visible;
-            }
-            return false;
-        }
+        public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? TrueValue : FalseValue;
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 }
 
@@ -4070,7 +4060,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (9299 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (9300 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -4150,7 +4140,7 @@ namespace GrafikoMat.Converters
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:UiAction">
                         <Button Content="{x:Bind Label}" Command="{x:Bind Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"
-                                Style="{x:Bind IsPrimary, Converter={StaticResource BooleanToPrimaryStyleConverter}}"/>
+                                Style="{Binding IsPrimary, Converter={StaticResource BooleanToPrimaryStyleConverter}}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -4229,7 +4219,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (34448 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (34208 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Core.Data;
@@ -4283,8 +4273,7 @@ namespace GrafikoMat
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
 
-        // ZMIANA: Usunięto pole _isInitialPositionSet, ale dodano z powrotem _isInitialSizeSet
-        private bool _isInitialSizeSet = false;
+        // ZMIANA: Przywrócono pole do śledzenia inicjalizacji rozmiaru
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -4319,16 +4308,10 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
         }
 
-        // POPRAWIONA WERSJA METODY, KTÓRA POWODOWAŁA BŁĘDY
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
-            // TEN BLOK JEST KLUCZOWY I ZOSTAŁ PRZYWRÓCONY
-            if (!_isInitialSizeSet && _appWindow != null)
-            {
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-                _isInitialSizeSet = true;
-                TrySetSystemBackdrop();
-            }
+            // Stara, błędna logika ustawiania rozmiaru została usunięta.
+            // Ta metoda odpowiada teraz tylko za aktywację/deaktywację tła i paska tytułu.
 
             if (_isClosing) return;
             if (_backdropConfiguration != null)
@@ -4521,11 +4504,11 @@ namespace GrafikoMat
             ActionsLeft.Clear();
             ActionsRight.Clear();
             ActionsLeft.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
-            ActionsLeft.Add(new UiAction("Zarządzanie", new RelayCommand(() => SwitchToManagement())));
-            ActionsLeft.Add(new UiAction("Edytuj deklaracje", new RelayCommand(() => SwitchToDeclarations())));
+            ActionsLeft.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
+            ActionsLeft.Add(new UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
 
-            ActionsRight.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
             ActionsRight.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync), isPrimary: true));
+            ActionsRight.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
         private void BuildActionsForDeclarations(DeclarationsView view)
@@ -8038,7 +8021,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (10721 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (10755 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -8082,7 +8065,7 @@ namespace GrafikoMat.Views
             <ColumnDefinition Width="0.75*"/>
         </Grid.ColumnDefinitions>
 
-        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10">
+        <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10" Padding="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -8128,7 +8111,7 @@ namespace GrafikoMat.Views
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Column="1">
+        <Grid Grid.Column="1" Padding="0,12,12,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -9359,7 +9342,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3711 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3732 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.UnitsSettingsView"
@@ -9373,10 +9356,10 @@ namespace GrafikoMat.Views.Settings
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter" TrueValue="0.5" FalseValue="1.0" />
+
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
-
     <controls:ActionContainer x:Name="ActionContainer">
         <Grid Padding="20">
             <Grid.RowDefinitions>
@@ -9420,8 +9403,8 @@ namespace GrafikoMat.Views.Settings
                         <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
                             <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
                             <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
-                            <TextBlock Opacity="0.7" FontSize="12">
-                                <Run Text="{x:Bind HospitalFullName}"/>
+                            <TextBlock Opacity="0.7">
+                                 <Run Text="{x:Bind HospitalFullName}"/>
                             </TextBlock>
                         </StackPanel>
                     </DataTemplate>
@@ -9681,7 +9664,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml (2518 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml (3100 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.SettingsView"
@@ -9689,7 +9672,14 @@ namespace GrafikoMat.Views.Settings
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:GrafikoMat.Views"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:NullToVisibilityConverter x:Key="NullToVisibleConverter" Invert="False"/>
+        <common:NullToVisibilityConverter x:Key="NullToCollapsedConverter" Invert="True"/>
+    </UserControl.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -9707,8 +9697,11 @@ namespace GrafikoMat.Views.Settings
                   BorderThickness="1"
                   CornerRadius="8">
             <ListView.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}" FontSize="16" Margin="12,8"/>
+                <DataTemplate x:DataType="local:SettingsMenuItem">
+                    <StackPanel Padding="12,10">
+                        <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
@@ -9720,14 +9713,15 @@ namespace GrafikoMat.Views.Settings
                 CornerRadius="8">
             <Grid Padding="24">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                            Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                            Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToCollapsedConverter}, Mode=OneWay}">
                     <FontIcon Glyph="&#xE713;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Wybierz kategorię z menu po lewej stronie." Margin="0,12,0,0"
+                    <TextBlock Text="Wybierz kategorię z menu po lewej stronie."
+                               Margin="0,12,0,0"
                                Style="{ThemeResource BodyStrongTextBlockStyle}"/>
                 </StackPanel>
 
                 <ContentControl x:Name="SettingsDetailContent"
-                                Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}"
+                                Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibleConverter}, Mode=OneWay}"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch"/>
             </Grid>
@@ -9736,7 +9730,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (4462 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (5370 bytes)
 ----- BEGIN -----
 using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
@@ -9745,24 +9739,34 @@ using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace GrafikoMat.Views
 {
+    // Nowa, pomocnicza struktura danych dla elementu menu
+    public record SettingsMenuItem(string Title, string Subtitle);
+
     public sealed partial class SettingsView : UserControl
     {
         private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
         public event Action? ReloadRequired;
-
         public SettingsView()
         {
             this.InitializeComponent();
-            SettingsMenu.ItemsSource = new[]
+
+            // ZMIANA: Użycie nowej listy obiektów z poprawną kolejnością
+            SettingsMenu.ItemsSource = new List<SettingsMenuItem>
             {
-                "Baza danych", "Jednostki", "Priorytety", "Wybór silnika", "Wygląd"
+                new("Wygląd i Motyw", "Zmiana jasnego i ciemnego motywu aplikacji."),
+                new("Połączenie z Bazą Danych", "Konfiguracja adresu URL i klucza API dla Supabase."),
+                new("Zarządzanie Jednostkami", "Dodawanie i edycja szpitali oraz oddziałów."),
+                new("Priorytety Obliczeń Grafiku", "Ustalanie kolejności i wagi kryteriów optymalizacji."),
+                new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
             };
+
             SettingsMenu.SelectedIndex = -1;
         }
 
@@ -9772,20 +9776,22 @@ namespace GrafikoMat.Views
             _settingsService = settingsService;
             _appSettings = settings;
 
-            SettingsMenu.SelectedIndex = 0;
+            // ZMIANA: Usunięto domyślne zaznaczanie pierwszego elementu
+            // SettingsMenu.SelectedIndex = 0; 
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (e.AddedItems.FirstOrDefault() is not string selectedItem)
+            // ZMIANA: Dostosowanie do nowego typu danych w menu
+            if (e.AddedItems.FirstOrDefault() is not SettingsMenuItem selectedItem)
             {
                 SettingsDetailContent.Content = null;
                 return;
             }
-            LoadSubView(selectedItem);
+            LoadSubView(selectedItem.Title);
         }
 
-        private async void LoadSubView(string? selectedItem)
+        private async void LoadSubView(string? selectedItemName)
         {
             if (_settingsService == null)
             {
@@ -9793,18 +9799,19 @@ namespace GrafikoMat.Views
                 return;
             }
 
-            _appSettings = await _settingsService.LoadSettingsAsync();
+            // Upewniamy się, że zawsze mamy najświeższe ustawienia
+            _appSettings = await _settingsService.LoadSettingsAsync(forceReload: true);
             object? viewToLoad = null;
 
-            switch (selectedItem)
+            switch (selectedItemName)
             {
-                case "Baza danych":
+                case "Połączenie z Bazą Danych":
                     var connectionView = new ConnectionSettingsView();
                     connectionView.Initialize(_settingsService, _appSettings);
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
                     viewToLoad = connectionView;
                     break;
-                case "Jednostki":
+                case "Zarządzanie Jednostkami":
                     if (_unitRepository != null)
                     {
                         viewToLoad = new UnitsSettingsView(_unitRepository);
@@ -9814,10 +9821,9 @@ namespace GrafikoMat.Views
                         viewToLoad = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
                     }
                     break;
-                case "Priorytety":
+                case "Priorytety Obliczeń Grafiku":
                     if (_appSettings != null)
                     {
-                        // ZMIANA: Dodano brakujący argument 'this.DispatcherQueue' do konstruktora
                         var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
                         var container = new ActionContainer { Content = prioritiesView };
@@ -9825,7 +9831,7 @@ namespace GrafikoMat.Views
                         viewToLoad = container;
                     }
                     break;
-                case "Wybór silnika":
+                case "Silnik Obliczeniowy":
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
@@ -9834,7 +9840,7 @@ namespace GrafikoMat.Views
                         viewToLoad = container;
                     }
                     break;
-                case "Wygląd":
+                case "Wygląd i Motyw":
                     var appearanceView = new AppearanceSettingsView();
                     if (_appSettings != null)
                     {

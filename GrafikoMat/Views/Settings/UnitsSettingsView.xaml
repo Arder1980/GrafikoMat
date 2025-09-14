@@ -10,10 +10,10 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter" TrueValue="0.5" FalseValue="1.0" />
+
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
-
     <controls:ActionContainer x:Name="ActionContainer">
         <Grid Padding="20">
             <Grid.RowDefinitions>
@@ -57,8 +57,8 @@
                         <StackPanel Margin="12" Spacing="4" Opacity="{x:Bind IsArchived, Converter={StaticResource ArchiveOpacityConverter}}">
                             <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" FontSize="16"/>
                             <TextBlock Text="{x:Bind DepartmentName}" FontSize="14"/>
-                            <TextBlock Opacity="0.7" FontSize="12">
-                                <Run Text="{x:Bind HospitalFullName}"/>
+                            <TextBlock Opacity="0.7">
+                                 <Run Text="{x:Bind HospitalFullName}"/>
                             </TextBlock>
                         </StackPanel>
                     </DataTemplate>

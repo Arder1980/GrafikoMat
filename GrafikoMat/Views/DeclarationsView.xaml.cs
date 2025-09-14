@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Linq;
 using Windows.UI;
 
 namespace GrafikoMat.Views
@@ -19,8 +20,6 @@ namespace GrafikoMat.Views
         public void OnDeclSaveAndCloseOnly() => SaveAndCloseRequested?.Invoke();
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
-        private bool _isDragging = false;
-        private int _dragStartIndex = -1;
 
         public DeclarationsView()
         {
@@ -42,16 +41,15 @@ namespace GrafikoMat.Views
 
             if (currentTheme == ElementTheme.Light)
             {
-                // === PALETA KOLORÓW DLA MOTYWU JASNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);      // Tło Dnia Roboczego (Aktywny): 5% czerni
-                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);         // Tło Dnia Wolnego (Aktywny): 15% czerni
-                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);      // Tło Nagłówka (Aktywny): 35% czerni
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);  // Tło Nagłówka (Nieaktywny): 5% czerni
-                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);         // Ramka (Aktywny): 30% czerni
-                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);         // Ramka (Nieaktywny): 5% czerni
-                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);          // Czcionka (Aktywny): 75% czerni
-                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);           // ZMIANA: Czcionka (Nieaktywny): 10% czerni
+                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);
+                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);
+                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
+                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);
+                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);
+                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
@@ -71,16 +69,15 @@ namespace GrafikoMat.Views
             }
             else // Dark Theme
             {
-                // === PALETA KOLORÓW DLA MOTYWU CIEMNEGO (zgodnie z tabelą) ===
                 var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);   // Tło Dnia Roboczego (Aktywny): 5% bieli
-                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);      // Tło Dnia Wolnego (Aktywny): 15% bieli
-                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);   // Tło Nagłówka (Aktywny): 35% bieli
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255); // Tło Nagłówka (Nieaktywny): 5% bieli
-                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);      // Ramka (Aktywny): 30% bieli
-                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);      // Ramka (Nieaktywny): 5% bieli
-                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);       // Czcionka (Aktywny): 90% bieli
-                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);        // ZMIANA: Czcionka (Nieaktywny): 10% bieli
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);
+                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
+                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);
+                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);
+                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
+                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);
 
                 Color bgColor, borderColor, numFgColor, headerBgColor;
 
@@ -98,9 +95,9 @@ namespace GrafikoMat.Views
                 (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
                 (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
             }
-
             cell.NotifyBrushUpdate();
         }
+
         private void OnThemeChanged(FrameworkElement sender, object args)
         {
             UpdateAllCellBrushes();
@@ -121,46 +118,68 @@ namespace GrafikoMat.Views
             this.Unloaded -= OnDeclarationsViewUnloaded;
         }
 
-        private void Cell_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void Calendar_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (ViewModel != null && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && sender is FrameworkElement element && element.DataContext is DayCell cell)
+            if (ViewModel == null || sender is not GridView gridView) return;
+
+            // ZMIANA: Blokada zaznaczania dni nieaktywnych
+            var invalidSelections = e.AddedItems.OfType<DayCell>().Where(c => !c.IsInteractive).ToList();
+            if (invalidSelections.Any())
             {
-                if (!cell.IsInteractive) return;
-                _isDragging = true;
-                _dragStartIndex = cell.Index;
-                element.CapturePointer(e.Pointer);
-                ViewModel.SelectSingle(cell.Index);
-                UpdateCellBrushes(cell);
-                e.Handled = true;
+                foreach (var invalid in invalidSelections)
+                {
+                    gridView.SelectedItems.Remove(invalid);
+                }
+            }
+
+            // Zdejmij nasz wizualny wskaźnik z komórek, które zostały odznaczone
+            foreach (var item in e.RemovedItems)
+            {
+                if (item is DayCell cell)
+                {
+                    cell.SetSelected(false);
+                    UpdateCellBrushes(cell);
+                }
+            }
+
+            // Ustaw nasz wizualny wskaźnik na nowo wybranych komórkach
+            foreach (var item in e.AddedItems)
+            {
+                if (item is DayCell cell)
+                {
+                    cell.SetSelected(true);
+                    UpdateCellBrushes(cell);
+                }
+            }
+
+            // Zsynchronizuj listę indeksów w ViewModelu
+            ViewModel.SelectedIndices.Clear();
+            foreach (var item in gridView.SelectedItems)
+            {
+                if (item is DayCell cell)
+                {
+                    ViewModel.SelectedIndices.Add(cell.Index);
+                }
             }
         }
 
-        private void Cell_PointerMoved(object sender, PointerRoutedEventArgs e)
+        private void Calendar_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            if (ViewModel != null && _isDragging && sender is FrameworkElement element && element.DataContext is DayCell cell)
-            {
-                if (!cell.IsInteractive) return;
-                ViewModel.SelectRange(_dragStartIndex, cell.Index);
-                UpdateAllCellBrushes();
-                e.Handled = true;
-            }
-        }
+            if (ViewModel == null) return;
 
-        private void Cell_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (_isDragging && sender is FrameworkElement element)
-            {
-                _isDragging = false;
-                element.ReleasePointerCapture(e.Pointer);
-                e.Handled = true;
-            }
-        }
+            var originalSource = e.OriginalSource as FrameworkElement;
+            var tappedCell = originalSource?.DataContext as DayCell;
 
-        private void OnCellRightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element && element.DataContext is DayCell cell)
+            if (tappedCell != null && tappedCell.IsInteractive)
             {
-                if (!cell.IsInteractive) return;
+                var gridView = (GridView)sender;
+                if (!gridView.SelectedItems.Contains(tappedCell))
+                {
+                    ViewModel.ClearSelection();
+                    gridView.SelectedItems.Add(tappedCell);
+                }
+
+                // TODO: Logika menu kontekstowego
                 e.Handled = true;
             }
         }

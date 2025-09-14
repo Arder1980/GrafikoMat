@@ -73,9 +73,8 @@ namespace GrafikoMat.Controls
 
                 var rect = new Rect(x, y, cellW, cellH);
 
-                // Mierzenie i układanie odbywa się tutaj, w jednej fazie.
-                // Dziecko jest informowane o swoim ostatecznym rozmiarze i pozycji.
-                Children[i].Measure(new Size(cellW, cellH));
+                // W fazie Arrange wywołujemy TYLKO Arrange.
+                // Dziecko samo dostosuje swój wewnętrzny rozmiar do przekazanego prostokąta.
                 Children[i].Arrange(rect);
             }
             return finalSize;
