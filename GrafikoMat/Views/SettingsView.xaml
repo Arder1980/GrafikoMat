@@ -4,7 +4,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:GrafikoMat.Views"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:NullToVisibilityConverter x:Key="NullToVisibleConverter" Invert="False"/>
+        <common:NullToVisibilityConverter x:Key="NullToCollapsedConverter" Invert="True"/>
+    </UserControl.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -22,8 +29,11 @@
                   BorderThickness="1"
                   CornerRadius="8">
             <ListView.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding}" FontSize="16" Margin="12,8"/>
+                <DataTemplate x:DataType="local:SettingsMenuItem">
+                    <StackPanel Padding="12,10">
+                        <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
@@ -35,14 +45,15 @@
                 CornerRadius="8">
             <Grid Padding="24">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                            Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                            Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToCollapsedConverter}, Mode=OneWay}">
                     <FontIcon Glyph="&#xE713;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Wybierz kategorię z menu po lewej stronie." Margin="0,12,0,0"
+                    <TextBlock Text="Wybierz kategorię z menu po lewej stronie."
+                               Margin="0,12,0,0"
                                Style="{ThemeResource BodyStrongTextBlockStyle}"/>
                 </StackPanel>
 
                 <ContentControl x:Name="SettingsDetailContent"
-                                Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}"
+                                Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToVisibleConverter}, Mode=OneWay}"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch"/>
             </Grid>
