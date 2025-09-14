@@ -21,6 +21,8 @@ namespace GrafikoMat.Services
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
         public AppTheme Theme { get; init; } = AppTheme.SystemDefault;
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
+        public WindowPosition LastWindowPosition { get; init; } = new(0, 0); // NOWA WŁAŚCIWOŚĆ
+        public bool WasWindowMaximized { get; init; } = false; // NOWA WŁAŚCIWOŚĆ
         public Guid? LastActiveUnitId { get; init; }
 
         // NOWA WŁAŚCIWOŚĆ: Przechowuje listę ustawień priorytetów
@@ -28,6 +30,8 @@ namespace GrafikoMat.Services
     }
 
     public record WindowSize(int Width, int Height);
+
+    public record WindowPosition(int X, int Y); // NOWY REKORD
 
     public sealed class SettingsService
     {
@@ -87,6 +91,15 @@ namespace GrafikoMat.Services
             }
 
             return _currentSettings;
+        }
+
+        public void SaveSettings(AppSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            _currentSettings = settings;
+            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+            // Używamy synchronicznej metody zapisu do pliku
+            File.WriteAllText(_settingsPath, json);
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)

@@ -50,7 +50,7 @@ namespace GrafikoMat
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
-        private bool _isInitialSizeSet = false;
+        private GCHandle _wndProcGCHandle;
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -492,21 +492,42 @@ namespace GrafikoMat
             try { _activeStoryboard?.Stop(); } catch { }
             _activeStoryboard = null;
             _isAnimating = false;
+
+            if (_oldWndProc != IntPtr.Zero)
+            {
+                SetWindowLongPtr(WindowNative.GetWindowHandle(this), -4, _oldWndProc);
+                _oldWndProc = IntPtr.Zero;
+            }
+            if (_wndProcGCHandle.IsAllocated)
+            {
+                _wndProcGCHandle.Free();
+            }
+
             this.Activated -= OnWindowActivated;
             this.Closed -= OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
-
-            // ZMIANA: Usunięto odpinanie zdarzeń od nieistniejącego już pola _declarationsView
-
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
+
+            if (_appWindow?.Presenter is OverlappedPresenter p && _appSettings != null)
+            {
+                var pos = _appWindow.Position;
+                var size = _appWindow.Size;
+                var newSettings = _appSettings with
+                {
+                    LastWindowPosition = new WindowPosition(pos.X, pos.Y),
+                    LastWindowSize = new WindowSize(size.Width, size.Height),
+                    WasWindowMaximized = (p.State == OverlappedPresenterState.Maximized)
+                };
+                // ZMIANA: Użycie bezpiecznej, synchronicznej metody zapisu
+                _settingsService.SaveSettings(newSettings);
+            }
+
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
             if (_acrylicController != null) { _acrylicController.Dispose(); _acrylicController = null; }
             this.SystemBackdrop = null;
-        }
-
-        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
+        }        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
         // Logika została przeniesiona do metody SwitchToDeclarations
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
@@ -609,12 +630,8 @@ namespace GrafikoMat
         }
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
-            if (!_isInitialSizeSet && _appWindow != null)
-            {
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-                _isInitialSizeSet = true;
-                TrySetSystemBackdrop();
-            }
+            // Stara logika ustawiania rozmiaru i pozycji została usunięta
+
             if (_isClosing) return;
             if (_backdropConfiguration != null)
             {
@@ -625,7 +642,11 @@ namespace GrafikoMat
         private void SubclassWindow(IntPtr hwnd)
         {
             _newWndProc = new WndProc(AppWndProc);
-            _oldWndProc = SetWindowLongPtr(hwnd, -4, Marshal.GetFunctionPointerForDelegate(_newWndProc));
+            // "Przypinamy" delegata w pamięci, aby GC go nie usunął
+            _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
+
+            var wndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
+            _oldWndProc = SetWindowLongPtr(hwnd, -4, wndProcPtr); // GWL_WNDPROC = -4
         }
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
