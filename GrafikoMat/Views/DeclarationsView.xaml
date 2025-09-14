@@ -112,23 +112,16 @@
             </Grid>
 
             <GridView Grid.Row="1"
-          x:Name="CalendarGrid"
-          ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}"
-          SelectionMode="Multiple"
-          IsMultiSelectCheckBoxEnabled="False"
-          IsItemClickEnabled="False"
-          RightTapped="Calendar_RightTapped"
-          SelectionChanged="Calendar_SelectionChanged"
-          PointerPressed="Calendar_PointerPressed"
-          PointerMoved="Calendar_PointerMoved"
-          PointerReleased="Calendar_PointerReleased"
-          PointerCanceled="Calendar_PointerCanceled">
-                <GridView.ItemsPanel>
+                      x:Name="CalendarGridView"
+                      ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}"
+                      SelectionMode="None"
+                      IsItemClickEnabled="False">
+                <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
                     </ItemsPanelTemplate>
-                </GridView.ItemsPanel>
-
+                </ItemsControl.ItemsPanel>
+                
                 <GridView.ItemContainerStyle>
                     <Style TargetType="GridViewItem">
                         <Setter Property="Padding" Value="0"/>
@@ -141,22 +134,19 @@
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
                         <Border
-                            IsHitTestVisible="{x:Bind IsInteractive, Mode=OneWay}"
+                            IsHitTestVisible="False"
                             Background="{x:Bind EffectiveBackground, Mode=OneWay}"
                             BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}"
                             BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
                             CornerRadius="4">
-
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-
                                 <Border Grid.Row="0"
                                         Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}"
                                         CornerRadius="4,4,0,0"/>
-
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -172,10 +162,8 @@
                                                Visibility="{x:Bind HolidayVisibility, Mode=OneWay}"
                                                FontSize="11" Opacity="0.9"
                                                HorizontalAlignment="Left" VerticalAlignment="Center"
-                                               Margin="6,0,0,0" TextTrimming="CharacterEllipsis"/>
-                                    <!-- ✅ Ptaszek – widoczny gdy komórka jest zaznaczona -->
+                                               Margin="6,0,0,0"/>
                                 </Grid>
-
                                 <Grid Grid.Row="1">
                                     <TextBlock Style="{StaticResource SymbolTextBlock}"
                                                Text="{x:Bind SymbolFull, Mode=OneWay}"
