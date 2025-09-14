@@ -246,6 +246,7 @@ namespace GrafikoMat.ViewModels
         {
             if (IsSelected == selected) return;
             IsSelected = selected;
+            OnPropertyChanged(nameof(IsSelected));        // ← to było brakujące
             OnPropertyChanged(nameof(BorderThickness));
         }
 
