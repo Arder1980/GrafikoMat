@@ -243,7 +243,7 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private async Task SaveCurrentUnitAsync()
+        public async Task SaveCurrentUnitAsync()
         {
             if (_settingsService == null) return;
             var settings = await _settingsService.LoadSettingsAsync();

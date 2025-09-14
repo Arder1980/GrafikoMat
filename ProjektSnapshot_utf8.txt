@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-13 21:37:51
+# Data:       2025-09-14 12:42:43
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -3186,16 +3186,20 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (3176 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (6396 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.IO;
 using System.Text.Json;
+using Windows.Graphics;
 using Windows.Storage;
+using WinRT.Interop;
 
 namespace GrafikoMat
 {
@@ -3210,16 +3214,15 @@ namespace GrafikoMat
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            // Rejestracja globalnego orkiestratora
             var orchestrator = new UxActionOrchestrator(WeakReferenceMessenger.Default);
             ServiceProvider.Register<IUxActionOrchestrator>(orchestrator);
 
             MainRoot = new MainWindow();
 
-            // Ustaw motyw PRZED aktywacją okna, aby uniknąć mignięcia
+            // Ustaw motyw i stan okna PRZED aktywacją
             ApplyThemeEarly(MainRoot);
+            ApplyInitialWindowState(MainRoot); // <-- DODAJ TĘ LINIĘ
 
-            // ZMIANA: Inicjalizacja i rejestracja serwisu motywu ("Wyroczni")
             if (MainRoot.Content is FrameworkElement rootElement)
             {
                 var initialTheme = rootElement.ActualTheme;
@@ -3228,10 +3231,9 @@ namespace GrafikoMat
             }
 
             MainRoot.Activate();
-        }
-        /// <summary>
-        /// Wczytuje ustawienia i natychmiastowo aplikuje motyw, aby uniknąć mignięcia przy starcie.
-        /// </summary>
+        }        /// <summary>
+                 /// Wczytuje ustawienia i natychmiastowo aplikuje motyw, aby uniknąć mignięcia przy starcie.
+                 /// </summary>
         private void ApplyThemeEarly(Window window)
         {
             AppSettings settings;
@@ -3277,6 +3279,75 @@ namespace GrafikoMat
                 dialog.RequestedTheme = rootElement.ActualTheme;
             }
             return dialog;
+        }
+        private void ApplyInitialWindowState(Window window)
+        {
+            // Ta metoda wczytuje ustawienia w ten sam sposób co ApplyThemeEarly
+            AppSettings settings;
+            try
+            {
+                var settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, "settings.json");
+                if (File.Exists(settingsPath))
+                {
+                    var json = File.ReadAllText(settingsPath);
+                    settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                }
+                else
+                {
+                    settings = new AppSettings();
+                }
+            }
+            catch
+            {
+                settings = new AppSettings();
+            }
+
+            var hwnd = WindowNative.GetWindowHandle(window);
+            var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
+            var appWindow = AppWindow.GetFromWindowId(windowId);
+
+            if (appWindow != null)
+            {
+                // Sprawdzamy, czy to pierwsze uruchomienie (brak zapisanej pozycji i nie był zmaksymalizowany)
+                bool isFirstRun = !settings.WasWindowMaximized && settings.LastWindowPosition.X == 0 && settings.LastWindowPosition.Y == 0;
+
+                if (isFirstRun)
+                {
+                    // --- LOGIKA DLA PIERWSZEGO URUCHOMIENIA ---
+                    const int defaultWidth = 1600;
+                    const int defaultHeight = 1000;
+
+                    // Ustawiamy domyślny rozmiar
+                    appWindow.Resize(new SizeInt32(defaultWidth, defaultHeight));
+
+                    // Pobieramy informacje o ekranie, na którym jest okno
+                    DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
+                    if (displayArea != null)
+                    {
+                        // Obliczamy pozycję, aby wyśrodkować okno
+                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - appWindow.Size.Width) / 2;
+                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - appWindow.Size.Height) / 2;
+
+                        // Przesuwamy okno na środek
+                        appWindow.Move(new PointInt32(centerX, centerY));
+                    }
+                }
+                else
+                {
+                    // --- LOGIKA DLA KOLEJNYCH URUCHOMIEŃ (BEZ ZMIAN) ---
+                    if (settings.WasWindowMaximized && appWindow.Presenter is OverlappedPresenter op)
+                    {
+                        op.Maximize();
+                    }
+                    else
+                    {
+                        var lastSize = settings.LastWindowSize;
+                        var lastPos = settings.LastWindowPosition;
+                        appWindow.Resize(new SizeInt32(Math.Max(1600, lastSize.Width), Math.Max(1000, lastSize.Height)));
+                        appWindow.Move(new PointInt32(lastPos.X, lastPos.Y));
+                    }
+                }
+            }
         }
     }
 }
@@ -3999,7 +4070,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (8057 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (9299 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -4007,9 +4078,15 @@ namespace GrafikoMat.Converters
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:GrafikoMat"
+    xmlns:models="using:GrafikoMat.Models"
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.Resources>
+            <local:BooleanToPrimaryStyleConverter x:Key="BooleanToPrimaryStyleConverter"/>
+        </Grid.Resources>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="100"/>
@@ -4046,18 +4123,34 @@ namespace GrafikoMat.Converters
         </Grid>
 
         <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
-            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}" VerticalAlignment="Center">
-                <ItemsControl.RenderTransform>
-                    <TranslateTransform/>
-                </ItemsControl.RenderTransform>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ItemsControl x:Name="ActionButtonsLeft" Grid.Column="0" ItemsSource="{x:Bind ActionsLeft}" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:UiAction">
+                        <Button Content="{x:Bind Label}" Command="{x:Bind Command}" Margin="0,0,6,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl x:Name="ActionButtonsRight" Grid.Column="1" ItemsSource="{x:Bind ActionsRight}" VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Content="{Binding Label}" Command="{Binding Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
+                    <DataTemplate x:DataType="models:UiAction">
+                        <Button Content="{x:Bind Label}" Command="{x:Bind Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"
+                                Style="{x:Bind IsPrimary, Converter={StaticResource BooleanToPrimaryStyleConverter}}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -4073,7 +4166,7 @@ namespace GrafikoMat.Converters
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <Border Grid.Column="1" Width="1" Background="#22000000"/>
+            <Border Grid.Column="1" Width="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"/>
             <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" VerticalAlignment="Center"/>
         </Grid>
 
@@ -4106,7 +4199,7 @@ namespace GrafikoMat.Converters
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" IsEnabled="False">
+                    <MenuFlyoutItem Text="{Binding ViewModel.CurrentUserName, Mode=OneWay}" IsEnabled="False">
                         <MenuFlyoutItem.Icon>
                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE779;"/>
                         </MenuFlyoutItem.Icon>
@@ -4132,15 +4225,13 @@ namespace GrafikoMat.Converters
                 <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;" FontSize="14"/>
             </Button>
         </Grid>
-
     </Grid>
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (31514 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (34448 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
-using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
@@ -4155,11 +4246,12 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -4176,9 +4268,9 @@ namespace GrafikoMat
         private const int MIN_H = 1000;
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
-        public ObservableCollection<UiAction> Actions { get; } = new();
+        public ObservableCollection<UiAction> ActionsLeft { get; } = new();
+        public ObservableCollection<UiAction> ActionsRight { get; } = new();
 
-        // ZMIANA: Usunięto pole _declarationsView. Będzie tworzone w locie.
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
@@ -4189,6 +4281,9 @@ namespace GrafikoMat
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
+        private GCHandle _wndProcGCHandle;
+
+        // ZMIANA: Usunięto pole _isInitialPositionSet, ale dodano z powrotem _isInitialSizeSet
         private bool _isInitialSizeSet = false;
 
         private readonly SettingsService _settingsService;
@@ -4209,6 +4304,7 @@ namespace GrafikoMat
 
             ViewModel = new MainViewModel();
             ViewModel.SetSettingsService(_settingsService);
+            ViewModel.PropertyChanged += OnMainViewModelPropertyChanged;
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(DragBar);
@@ -4218,11 +4314,56 @@ namespace GrafikoMat
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
-            // ZMIANA: Usunięto subskrypcje zdarzeń dla _declarationsView w konstruktorze
-
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
+        }
+
+        // POPRAWIONA WERSJA METODY, KTÓRA POWODOWAŁA BŁĘDY
+        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
+        {
+            // TEN BLOK JEST KLUCZOWY I ZOSTAŁ PRZYWRÓCONY
+            if (!_isInitialSizeSet && _appWindow != null)
+            {
+                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
+                _isInitialSizeSet = true;
+                TrySetSystemBackdrop();
+            }
+
+            if (_isClosing) return;
+            if (_backdropConfiguration != null)
+            {
+                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            }
+            ApplyTitleBarMenuStyling();
+        }
+
+        private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
+            {
+                await ViewModel.SaveCurrentUnitAsync();
+                await ViewModel.UpdateFooterFromSettingsAsync();
+            }
+            else if (e.PropertyName == nameof(MainViewModel.EngineName) || e.PropertyName == nameof(MainViewModel.PriorityOrder))
+            {
+                var sb = new Storyboard();
+                var fadeOut = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(150) };
+                Storyboard.SetTarget(fadeOut, BottomStatusBar);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+                sb.Children.Add(fadeOut);
+                var tcs = new TaskCompletionSource();
+                sb.Completed += (_, _) => tcs.TrySetResult();
+                sb.Begin();
+                await tcs.Task;
+
+                sb = new Storyboard();
+                var fadeIn = new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(150) };
+                Storyboard.SetTarget(fadeIn, BottomStatusBar);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+                sb.Children.Add(fadeIn);
+                sb.Begin();
+            }
         }
 
         private async Task InitializeApplicationAsync()
@@ -4377,33 +4518,39 @@ namespace GrafikoMat
 
         private void BuildActionsForDashboard()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
-            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
-            Actions.Add(new UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
-            Actions.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync)));
-            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
+            ActionsLeft.Add(new UiAction("Zarządzanie", new RelayCommand(() => SwitchToManagement())));
+            ActionsLeft.Add(new UiAction("Edytuj deklaracje", new RelayCommand(() => SwitchToDeclarations())));
+
+            ActionsRight.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
+            ActionsRight.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync), isPrimary: true));
         }
 
         private void BuildActionsForDeclarations(DeclarationsView view)
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly)));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            ActionsLeft.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
+
+            ActionsRight.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
+            ActionsRight.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
         }
 
         private void BuildActionsForSettings()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private void BuildActionsForManage()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private async void SwitchToDashboard()
@@ -4414,7 +4561,6 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
-        // ZMIANA: Cała metoda została gruntownie przebudowana
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
@@ -4458,10 +4604,8 @@ namespace GrafikoMat
                 }
             );
 
-            // ZAWSZE tworzymy nową, świeżą instancję widoku
             var declarationsView = new DeclarationsView();
 
-            // Definiujemy, co się stanie po zamknięciu widoku (np. przez przycisk "Anuluj")
             void DeclCloseHandler() => SwitchToDashboard();
             void DeclSaveAndCloseHandler()
             {
@@ -4469,7 +4613,6 @@ namespace GrafikoMat
                 SwitchToDashboard();
             }
 
-            // Subskrybujemy zdarzenia dla tej konkretnej instancji
             declarationsView.CloseRequested += DeclCloseHandler;
             declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
 
@@ -4603,22 +4746,41 @@ namespace GrafikoMat
             try { _activeStoryboard?.Stop(); } catch { }
             _activeStoryboard = null;
             _isAnimating = false;
+
+            if (_oldWndProc != IntPtr.Zero)
+            {
+                SetWindowLongPtr(WindowNative.GetWindowHandle(this), -4, _oldWndProc);
+                _oldWndProc = IntPtr.Zero;
+            }
+            if (_wndProcGCHandle.IsAllocated)
+            {
+                _wndProcGCHandle.Free();
+            }
+
             this.Activated -= OnWindowActivated;
             this.Closed -= OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
-
-            // ZMIANA: Usunięto odpinanie zdarzeń od nieistniejącego już pola _declarationsView
-
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
+
+            if (_appWindow?.Presenter is OverlappedPresenter p && _appSettings != null)
+            {
+                var pos = _appWindow.Position;
+                var size = _appWindow.Size;
+                var newSettings = _appSettings with
+                {
+                    LastWindowPosition = new WindowPosition(pos.X, pos.Y),
+                    LastWindowSize = new WindowSize(size.Width, size.Height),
+                    WasWindowMaximized = (p.State == OverlappedPresenterState.Maximized)
+                };
+                _settingsService.SaveSettings(newSettings);
+            }
+
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
             if (_acrylicController != null) { _acrylicController.Dispose(); _acrylicController = null; }
             this.SystemBackdrop = null;
         }
-
-        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
-        // Logika została przeniesiona do metody SwitchToDeclarations
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
         private async Task ShowInfo(string title, string message)
@@ -4660,7 +4822,6 @@ namespace GrafikoMat
         }
 
         #region Window Setup and Win32 Interop
-        private void TitleBarSettings_Click(object sender, RoutedEventArgs e) => SwitchToSettings();
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
@@ -4718,25 +4879,13 @@ namespace GrafikoMat
             if (args.DidPresenterChange && !_isClosing) { TrySetSystemBackdrop(); }
             ApplyTitleBarMenuStyling();
         }
-        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
-        {
-            if (!_isInitialSizeSet && _appWindow != null)
-            {
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
-                _isInitialSizeSet = true;
-                TrySetSystemBackdrop();
-            }
-            if (_isClosing) return;
-            if (_backdropConfiguration != null)
-            {
-                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
-            }
-            ApplyTitleBarMenuStyling();
-        }
+
         private void SubclassWindow(IntPtr hwnd)
         {
             _newWndProc = new WndProc(AppWndProc);
-            _oldWndProc = SetWindowLongPtr(hwnd, -4, Marshal.GetFunctionPointerForDelegate(_newWndProc));
+            _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
+            var wndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
+            _oldWndProc = SetWindowLongPtr(hwnd, -4, wndProcPtr);
         }
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
@@ -4771,6 +4920,23 @@ namespace GrafikoMat
         [DllImport("user32.dll")] private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
         #endregion
+    }
+
+    public class BooleanToPrimaryStyleConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool isPrimary && isPrimary)
+            {
+                if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var style))
+                {
+                    return style as Style;
+                }
+            }
+            return Application.Current.Resources["DefaultButtonStyle"] as Style;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 }
 ----- END -----
@@ -4811,24 +4977,23 @@ namespace GrafikoMat.Models
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Models\UiAction.cs (455 bytes)
+===== FILE: GrafikoMat\Models\UiAction.cs (459 bytes)
 ----- BEGIN -----
 using System.Windows.Input;
 
 namespace GrafikoMat.Models
 {
-    /// <summary>
-    /// Reprezentuje pojedynczą akcję (przycisk) w interfejsie użytkownika.
-    /// </summary>
     public sealed class UiAction
     {
         public string Label { get; }
         public ICommand Command { get; }
+        public bool IsPrimary { get; } // NOWA WŁAŚCIWOŚĆ
 
-        public UiAction(string label, ICommand command)
+        public UiAction(string label, ICommand command, bool isPrimary = false)
         {
             Label = label;
             Command = command;
+            IsPrimary = isPrimary;
         }
     }
 }
@@ -5229,7 +5394,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (4605 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (5295 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Scheduling.Models;
 using System;
@@ -5254,6 +5419,8 @@ namespace GrafikoMat.Services
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
         public AppTheme Theme { get; init; } = AppTheme.SystemDefault;
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
+        public WindowPosition LastWindowPosition { get; init; } = new(0, 0); // NOWA WŁAŚCIWOŚĆ
+        public bool WasWindowMaximized { get; init; } = false; // NOWA WŁAŚCIWOŚĆ
         public Guid? LastActiveUnitId { get; init; }
 
         // NOWA WŁAŚCIWOŚĆ: Przechowuje listę ustawień priorytetów
@@ -5261,6 +5428,8 @@ namespace GrafikoMat.Services
     }
 
     public record WindowSize(int Width, int Height);
+
+    public record WindowPosition(int X, int Y); // NOWY REKORD
 
     public sealed class SettingsService
     {
@@ -5320,6 +5489,15 @@ namespace GrafikoMat.Services
             }
 
             return _currentSettings;
+        }
+
+        public void SaveSettings(AppSettings settings)
+        {
+            if (settings == null) throw new ArgumentNullException(nameof(settings));
+            _currentSettings = settings;
+            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+            // Używamy synchronicznej metody zapisu do pliku
+            File.WriteAllText(_settingsPath, json);
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)
@@ -6431,7 +6609,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (15726 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (16493 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -6524,7 +6702,6 @@ namespace GrafikoMat.ViewModels
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
-            this.PropertyChanged += OnMainViewModelPropertyChanged;
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
@@ -6679,7 +6856,7 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private async Task SaveCurrentUnitAsync()
+        public async Task SaveCurrentUnitAsync()
         {
             if (_settingsService == null) return;
             var settings = await _settingsService.LoadSettingsAsync();
@@ -6698,8 +6875,25 @@ namespace GrafikoMat.ViewModels
             PriorityOrder = $"Priorytety: {string.Join(" > ", activePriorities)}";
         }
 
-        private string GetSolverDisplayName(SolverType solver) => solver.ToString();
-        private string GetPriorityDisplayName(SolverPriority priority) => priority.ToString();
+        private string GetSolverDisplayName(SolverType solver) => solver switch
+        {
+            SolverType.Backtracking => "BacktrackingSolver",
+            SolverType.AStar => "AStarSolver",
+            SolverType.Genetic => "GeneticSolver",
+            SolverType.SimulatedAnnealing => "SimulatedAnnealingSolver",
+            SolverType.TabuSearch => "TabuSearchSolver",
+            SolverType.AntColony => "AntColonySolver",
+            _ => solver.ToString()
+        };
+        private string GetPriorityDisplayName(SolverPriority priority) => priority switch
+        {
+            SolverPriority.InitialContinuity => "Ciągłość początkowa",
+            SolverPriority.TotalAssignments => "Maksymalizacja obsady",
+            SolverPriority.Fairness => "Sprawiedliwość obciążenia",
+            SolverPriority.Spacing => "Równomierność rozłożenia",
+            SolverPriority.DeclarationCompliance => "Zgodność z deklaracjami",
+            _ => priority.ToString()
+        };
         private static string PolishDayOfWeek(DayOfWeek dow) => new[] { "Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota" }[(int)dow];
         public void PrevYear() => SelectedYear -= 1;
         public void NextYear() => SelectedYear += 1;

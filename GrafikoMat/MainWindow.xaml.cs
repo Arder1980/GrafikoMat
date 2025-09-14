@@ -1,5 +1,4 @@
 ﻿using CommunityToolkit.Mvvm.Input;
-using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
@@ -14,13 +13,12 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -37,9 +35,9 @@ namespace GrafikoMat
         private const int MIN_H = 1000;
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
-        public ObservableCollection<UiAction> Actions { get; } = new();
+        public ObservableCollection<UiAction> ActionsLeft { get; } = new();
+        public ObservableCollection<UiAction> ActionsRight { get; } = new();
 
-        // ZMIANA: Usunięto pole _declarationsView. Będzie tworzone w locie.
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
@@ -51,6 +49,8 @@ namespace GrafikoMat
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
+
+        // ZMIANA: Przywrócono pole do śledzenia inicjalizacji rozmiaru
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -70,6 +70,7 @@ namespace GrafikoMat
 
             ViewModel = new MainViewModel();
             ViewModel.SetSettingsService(_settingsService);
+            ViewModel.PropertyChanged += OnMainViewModelPropertyChanged;
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(DragBar);
@@ -78,33 +79,44 @@ namespace GrafikoMat
             ApplyTitleBarMenuStyling();
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
-            ViewModel.PropertyChanged += OnMainViewModelPropertyChanged;
-
-            // ZMIANA: Usunięto subskrypcje zdarzeń dla _declarationsView w konstruktorze
 
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
         }
+
+        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
+        {
+            // Stara, błędna logika ustawiania rozmiaru została usunięta.
+            // Ta metoda odpowiada teraz tylko za aktywację/deaktywację tła i paska tytułu.
+
+            if (_isClosing) return;
+            if (_backdropConfiguration != null)
+            {
+                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            }
+            ApplyTitleBarMenuStyling();
+        }
+
         private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(MainViewModel.EngineName) || e.PropertyName == nameof(MainViewModel.PriorityOrder))
+            if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
-                // Animacja wygaszenia stopki
+                await ViewModel.SaveCurrentUnitAsync();
+                await ViewModel.UpdateFooterFromSettingsAsync();
+            }
+            else if (e.PropertyName == nameof(MainViewModel.EngineName) || e.PropertyName == nameof(MainViewModel.PriorityOrder))
+            {
                 var sb = new Storyboard();
                 var fadeOut = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(150) };
                 Storyboard.SetTarget(fadeOut, BottomStatusBar);
                 Storyboard.SetTargetProperty(fadeOut, "Opacity");
                 sb.Children.Add(fadeOut);
-
                 var tcs = new TaskCompletionSource();
                 sb.Completed += (_, _) => tcs.TrySetResult();
                 sb.Begin();
                 await tcs.Task;
 
-                // W tym momencie tekst w tle został już podmieniony przez ViewModel
-
-                // Animacja pojawienia się stopki z nowym tekstem
                 sb = new Storyboard();
                 var fadeIn = new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(150) };
                 Storyboard.SetTarget(fadeIn, BottomStatusBar);
@@ -266,33 +278,39 @@ namespace GrafikoMat
 
         private void BuildActionsForDashboard()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
-            Actions.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
-            Actions.Add(new UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
-            Actions.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync)));
-            Actions.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
+            ActionsLeft.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
+            ActionsLeft.Add(new UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
+
+            ActionsRight.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync), isPrimary: true));
+            ActionsRight.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
         private void BuildActionsForDeclarations(DeclarationsView view)
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
-            Actions.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
-            Actions.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly)));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            ActionsLeft.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
+
+            ActionsRight.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
+            ActionsRight.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
         }
 
         private void BuildActionsForSettings()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private void BuildActionsForManage()
         {
-            Actions.Clear();
-            Actions.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            ActionsLeft.Clear();
+            ActionsRight.Clear();
+            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private async void SwitchToDashboard()
@@ -303,7 +321,6 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
-        // ZMIANA: Cała metoda została gruntownie przebudowana
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
@@ -347,10 +364,8 @@ namespace GrafikoMat
                 }
             );
 
-            // ZAWSZE tworzymy nową, świeżą instancję widoku
             var declarationsView = new DeclarationsView();
 
-            // Definiujemy, co się stanie po zamknięciu widoku (np. przez przycisk "Anuluj")
             void DeclCloseHandler() => SwitchToDashboard();
             void DeclSaveAndCloseHandler()
             {
@@ -358,7 +373,6 @@ namespace GrafikoMat
                 SwitchToDashboard();
             }
 
-            // Subskrybujemy zdarzenia dla tej konkretnej instancji
             declarationsView.CloseRequested += DeclCloseHandler;
             declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
 
@@ -519,7 +533,6 @@ namespace GrafikoMat
                     LastWindowSize = new WindowSize(size.Width, size.Height),
                     WasWindowMaximized = (p.State == OverlappedPresenterState.Maximized)
                 };
-                // ZMIANA: Użycie bezpiecznej, synchronicznej metody zapisu
                 _settingsService.SaveSettings(newSettings);
             }
 
@@ -527,8 +540,7 @@ namespace GrafikoMat
             try { ViewportCurrent.Content = null; } catch { }
             if (_acrylicController != null) { _acrylicController.Dispose(); _acrylicController = null; }
             this.SystemBackdrop = null;
-        }        // ZMIANA: Usunięto metody OnDeclCloseOnly i OnDeclSaveAndCloseOnly
-        // Logika została przeniesiona do metody SwitchToDeclarations
+        }
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
         private async Task ShowInfo(string title, string message)
@@ -570,7 +582,6 @@ namespace GrafikoMat
         }
 
         #region Window Setup and Win32 Interop
-        private void TitleBarSettings_Click(object sender, RoutedEventArgs e) => SwitchToSettings();
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
@@ -628,25 +639,13 @@ namespace GrafikoMat
             if (args.DidPresenterChange && !_isClosing) { TrySetSystemBackdrop(); }
             ApplyTitleBarMenuStyling();
         }
-        private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
-        {
-            // Stara logika ustawiania rozmiaru i pozycji została usunięta
 
-            if (_isClosing) return;
-            if (_backdropConfiguration != null)
-            {
-                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
-            }
-            ApplyTitleBarMenuStyling();
-        }
         private void SubclassWindow(IntPtr hwnd)
         {
             _newWndProc = new WndProc(AppWndProc);
-            // "Przypinamy" delegata w pamięci, aby GC go nie usunął
             _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
-
             var wndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
-            _oldWndProc = SetWindowLongPtr(hwnd, -4, wndProcPtr); // GWL_WNDPROC = -4
+            _oldWndProc = SetWindowLongPtr(hwnd, -4, wndProcPtr);
         }
         private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
@@ -681,5 +680,22 @@ namespace GrafikoMat
         [DllImport("user32.dll")] private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
         #endregion
+    }
+
+    public class BooleanToPrimaryStyleConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool isPrimary && isPrimary)
+            {
+                if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var style))
+                {
+                    return style as Style;
+                }
+            }
+            return Application.Current.Resources["DefaultButtonStyle"] as Style;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 }

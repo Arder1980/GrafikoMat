@@ -4,9 +4,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:GrafikoMat"
+    xmlns:models="using:GrafikoMat.Models"
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.Resources>
+            <local:BooleanToPrimaryStyleConverter x:Key="BooleanToPrimaryStyleConverter"/>
+        </Grid.Resources>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="100"/>
@@ -43,18 +49,34 @@
         </Grid>
 
         <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Padding="12,4,12,10" Opacity="0">
-            <ItemsControl x:Name="ActionButtons" ItemsSource="{x:Bind Actions}" VerticalAlignment="Center">
-                <ItemsControl.RenderTransform>
-                    <TranslateTransform/>
-                </ItemsControl.RenderTransform>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ItemsControl x:Name="ActionButtonsLeft" Grid.Column="0" ItemsSource="{x:Bind ActionsLeft}" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:UiAction">
+                        <Button Content="{x:Bind Label}" Command="{x:Bind Command}" Margin="0,0,6,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl x:Name="ActionButtonsRight" Grid.Column="1" ItemsSource="{x:Bind ActionsRight}" VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Content="{Binding Label}" Command="{Binding Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"/>
+                    <DataTemplate x:DataType="models:UiAction">
+                        <Button Content="{x:Bind Label}" Command="{x:Bind Command}" Margin="6,0,0,0" MinHeight="28" MinWidth="128" Padding="12,6"
+                                Style="{Binding IsPrimary, Converter={StaticResource BooleanToPrimaryStyleConverter}}"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -70,7 +92,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="{x:Bind ViewModel.EngineName, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <Border Grid.Column="1" Width="1" Background="#22000000"/>
+            <Border Grid.Column="1" Width="1" Background="{ThemeResource CardStrokeColorDefaultBrush}"/>
             <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.PriorityOrder, Mode=OneWay}" Opacity="0.9" FontSize="13" FontWeight="SemiBold" Margin="0,2,0,0" VerticalAlignment="Center"/>
         </Grid>
 
@@ -103,7 +125,7 @@
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator/>
-                    <MenuFlyoutItem Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" IsEnabled="False">
+                    <MenuFlyoutItem Text="{Binding ViewModel.CurrentUserName, Mode=OneWay}" IsEnabled="False">
                         <MenuFlyoutItem.Icon>
                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE779;"/>
                         </MenuFlyoutItem.Icon>
@@ -129,6 +151,5 @@
                 <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE700;" FontSize="14"/>
             </Button>
         </Grid>
-
     </Grid>
 </Window>
