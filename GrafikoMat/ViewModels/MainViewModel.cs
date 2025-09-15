@@ -21,7 +21,8 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>
+    // ================== ZMIANA SYGNATURY KLASY ==================
+    public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -90,16 +91,26 @@ namespace GrafikoMat.ViewModels
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
+            // ================== NOWA REJESTRACJA ==================
+            WeakReferenceMessenger.Default.Register<UnitDataChangedMessage>(this);
+            // =======================================================
         }
 
         public void Receive(SettingsHaveChangedMessage message)
         {
-            // Użycie EnqueueAsync jest nadal poprawne dla operacji UI
             if (App.MainRoot?.DispatcherQueue != null)
             {
                 _ = App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
             }
         }
+
+        // ================== NOWA METODA OBSŁUGI ==================
+        public async void Receive(UnitDataChangedMessage message)
+        {
+            await LoadUserAndUnitDataAsync();
+            LoadDataForActiveUnit();
+        }
+        // ========================================================
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
         {
@@ -125,10 +136,12 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
+
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
             _userUnits.Clear();
+
             if (IsCurrentUserAdmin)
             {
                 var allUnits = await _unitRepository.GetAllAsync();
@@ -218,7 +231,6 @@ namespace GrafikoMat.ViewModels
 
                 bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
                 date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
-
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }

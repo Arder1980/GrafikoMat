@@ -1,14 +1,19 @@
 ﻿using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
-using Microsoft.UI;
+using Microsoft.UI; // POPRAWKA: Dodano brakujący using dla klasy Colors
+using Windows.UI.Core; // POPRAWKA: Dodano using dla CoreVirtualKeyStates
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.ComponentModel;
 using System.Linq;
 using Windows.Foundation;
+using Windows.System; // POPRAWKA: Dodano using dla VirtualKey
 using Windows.UI;
+
 
 namespace GrafikoMat.Views
 {
@@ -21,8 +26,11 @@ namespace GrafikoMat.Views
         public void OnDeclSaveAndCloseOnly() => SaveAndCloseRequested?.Invoke();
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
+
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
+        private SlotPart _dragStartSlotPart;
+        private SelectedSlot? _lastClickedSlot;
 
         public DeclarationsView()
         {
@@ -30,8 +38,6 @@ namespace GrafikoMat.Views
             this.ActualThemeChanged += OnThemeChanged;
             this.Unloaded += OnDeclarationsViewUnloaded;
 
-            // Rejestrujemy obsługę zdarzeń myszy dla całej kontrolki GridView
-            // Użycie AddHandler z 'handledEventsToo = true' gwarantuje, że zdarzenia do nas dotrą
             this.Loaded += (_, __) =>
             {
                 CalendarGridView.AddHandler(PointerPressedEvent, new PointerEventHandler(Calendar_PointerPressed), true);
@@ -45,129 +51,93 @@ namespace GrafikoMat.Views
         public void AttachViewModel(DeclarationsViewModel vm)
         {
             this.DataContext = vm;
+            if (vm != null)
+            {
+                vm.PropertyChanged += Vm_PropertyChanged;
+            }
             UpdateAllCellBrushes();
         }
 
-        private void UpdateCellBrushes(DayCell cell)
+        private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
-            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
-
-            if (currentTheme == ElementTheme.Light)
+            if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
-                var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);
-                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);
-                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
-                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);
-                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);
-                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);
-
-                Color bgColor, borderColor, numFgColor, headerBgColor;
-
-                if (cell.InMonth)
-                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
-                else
-                    bgColor = transparent;
-
-                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
-                borderColor = cell.InMonth ? borderLight : borderOther;
-                numFgColor = cell.InMonth ? textNormal : textMuted;
-
-                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
-                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
-                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
-                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
-            }
-            else // Dark Theme
-            {
-                var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
-                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);
-                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
-                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);
-                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);
-                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
-                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);
-
-                Color bgColor, borderColor, numFgColor, headerBgColor;
-
-                if (cell.InMonth)
-                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
-                else
-                    bgColor = transparent;
-
-                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
-                borderColor = cell.InMonth ? borderLight : borderOther;
-                numFgColor = cell.InMonth ? textNormal : textMuted;
-
-                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
-                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
-                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
-                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
-            }
-
-            cell.NotifyBrushUpdate();
-        }
-
-        private void OnThemeChanged(FrameworkElement sender, object args)
-        {
-            UpdateAllCellBrushes();
-        }
-
-        private void UpdateAllCellBrushes()
-        {
-            if (ViewModel?.DayCells == null) return;
-            foreach (var cell in ViewModel.DayCells)
-            {
-                UpdateCellBrushes(cell);
+                _lastClickedSlot = null;
+                UpdateAllCellBrushes();
             }
         }
 
-        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        private (int index, SlotPart part) GetIndexAndSlotFromPoint(Point p)
         {
-            this.ActualThemeChanged -= OnThemeChanged;
-            this.Unloaded -= OnDeclarationsViewUnloaded;
-        }
-
-        private int GetIndexFromPoint(Point p)
-        {
-            if (ViewModel == null || ViewModel.DayCells.Count == 0 || p.X < 0 || p.Y < 0) return -1;
+            if (ViewModel == null || ViewModel.DayCells.Count == 0 || p.X < 0 || p.Y < 0)
+                return (-1, SlotPart.Full);
 
             var grid = CalendarGridView;
             for (int i = 0; i < ViewModel.DayCells.Count; i++)
             {
-                if (grid.ContainerFromIndex(i) is FrameworkElement container)
+                if (grid.ContainerFromIndex(i) is FrameworkElement container && container.ActualHeight > 0)
                 {
                     var transform = container.TransformToVisual(grid);
                     var bounds = transform.TransformBounds(new Rect(0, 0, container.ActualWidth, container.ActualHeight));
                     if (bounds.Contains(p))
                     {
-                        return i;
+                        var cellVM = ViewModel.DayCells[i];
+                        if (!cellVM.IsSplit)
+                        {
+                            return (i, SlotPart.Full);
+                        }
+                        else
+                        {
+                            var relativeY = p.Y - bounds.Top;
+                            var headerHeight = 24;
+                            var contentHeight = container.ActualHeight - headerHeight;
+
+                            if (relativeY < headerHeight) return (i, SlotPart.Day);
+
+                            var part = (relativeY < headerHeight + contentHeight / 2) ? SlotPart.Day : SlotPart.Night;
+                            return (i, part);
+                        }
                     }
                 }
             }
-            return -1;
+            return (-1, SlotPart.Full);
         }
 
         private void Calendar_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (ViewModel == null) return;
             var point = e.GetCurrentPoint(CalendarGridView).Position;
-            int index = GetIndexFromPoint(point);
+            var (index, slotPart) = GetIndexAndSlotFromPoint(point);
 
-            if (index != -1 && ViewModel.DayCells[index].IsInteractive)
+            if (index != -1 && ViewModel.DayCells[index].InMonth)
             {
-                _isDragging = true;
-                _dragStartIndex = index;
-                CalendarGridView.CapturePointer(e.Pointer);
-
-                ViewModel.SelectSingle(index);
-                UpdateAllCellBrushes();
                 e.Handled = true;
+
+                // POPRAWKA: Prawidłowy sposób sprawdzania stanu klawiszy
+                var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
+                var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
+                bool isCtrlPressed = ctrlState.HasFlag(CoreVirtualKeyStates.Down);
+                bool isShiftPressed = shiftState.HasFlag(CoreVirtualKeyStates.Down);
+
+                if (isShiftPressed && _lastClickedSlot != null)
+                {
+                    ViewModel.SelectSlotRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part);
+                }
+                else if (isCtrlPressed)
+                {
+                    ViewModel.ToggleSlotSelection(index, slotPart);
+                    _lastClickedSlot = new SelectedSlot(index, slotPart);
+                }
+                else
+                {
+                    _isDragging = true;
+                    _dragStartIndex = index;
+                    _dragStartSlotPart = slotPart;
+                    CalendarGridView.CapturePointer(e.Pointer);
+
+                    ViewModel.SelectSingleSlot(index, slotPart);
+                    _lastClickedSlot = new SelectedSlot(index, slotPart);
+                }
             }
         }
 
@@ -176,12 +146,11 @@ namespace GrafikoMat.Views
             if (ViewModel != null && _isDragging)
             {
                 var point = e.GetCurrentPoint(CalendarGridView).Position;
-                int index = GetIndexFromPoint(point);
+                var (currentIndex, _) = GetIndexAndSlotFromPoint(point);
 
-                if (index != -1 && ViewModel.DayCells[index].IsInteractive)
+                if (currentIndex != -1 && ViewModel.DayCells[currentIndex].InMonth)
                 {
-                    ViewModel.SelectRange(_dragStartIndex, index);
-                    UpdateAllCellBrushes();
+                    ViewModel.SelectSlotRange(_dragStartIndex, currentIndex, _dragStartSlotPart);
                     e.Handled = true;
                 }
             }
@@ -211,21 +180,97 @@ namespace GrafikoMat.Views
         {
             if (ViewModel == null) return;
             var point = e.GetPosition(CalendarGridView);
-            int index = GetIndexFromPoint(point);
+            var (index, slotPart) = GetIndexAndSlotFromPoint(point);
 
             var tappedCell = (index >= 0 && index < ViewModel.DayCells.Count) ? ViewModel.DayCells[index] : null;
 
-            if (tappedCell != null && tappedCell.IsInteractive)
+            if (tappedCell != null && tappedCell.InMonth)
             {
-                if (!ViewModel.SelectedIndices.Contains(tappedCell.Index))
+                var currentSelection = new SelectedSlot(index, slotPart);
+                if (!ViewModel.SelectedSlots.Contains(currentSelection))
                 {
-                    ViewModel.SelectSingle(tappedCell.Index);
-                    UpdateAllCellBrushes();
+                    ViewModel.SelectSingleSlot(index, slotPart);
+                    _lastClickedSlot = currentSelection;
                 }
 
-                // TODO: Logika menu kontekstowego
+                // TODO: Logika otwierania menu kontekstowego
                 e.Handled = true;
             }
+        }
+
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            UpdateAllCellBrushes();
+        }
+
+        private void UpdateAllCellBrushes()
+        {
+            if (ViewModel?.DayCells == null) return;
+            foreach (var cell in ViewModel.DayCells)
+            {
+                UpdateCellBrushes(cell);
+            }
+        }
+
+        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel != null) ViewModel.PropertyChanged -= Vm_PropertyChanged;
+            this.ActualThemeChanged -= OnThemeChanged;
+            this.Unloaded -= OnDeclarationsViewUnloaded;
+        }
+
+        private void UpdateCellBrushes(DayCell cell)
+        {
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+
+            if (currentTheme == ElementTheme.Light)
+            {
+                var transparent = Colors.Transparent;
+                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);
+                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);
+                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
+                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);
+
+                Color bgColor, numFgColor, headerBgColor;
+                if (cell.InMonth)
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
+                else
+                    bgColor = transparent;
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
+
+                (cell.EffectiveBackground as SolidColorBrush)!.Color = bgColor;
+                (cell.DayNumberForeground as SolidColorBrush)!.Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush)!.Color = headerBgColor;
+            }
+            else // Dark Theme
+            {
+                var transparent = Colors.Transparent;
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);
+                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
+                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
+                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);
+
+                Color bgColor, numFgColor, headerBgColor;
+                if (cell.InMonth)
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
+                else
+                    bgColor = transparent;
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
+
+                (cell.EffectiveBackground as SolidColorBrush)!.Color = bgColor;
+                (cell.DayNumberForeground as SolidColorBrush)!.Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush)!.Color = headerBgColor;
+            }
+
+            cell.NotifyBrushUpdate();
         }
     }
 }

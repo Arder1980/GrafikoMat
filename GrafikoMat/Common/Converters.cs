@@ -18,28 +18,23 @@ namespace GrafikoMat.Common
 
     public class BooleanToVisibilityConverter : IValueConverter
     {
-        // ZMIANA: Dodano pełną i poprawną implementację konwertera
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;
             }
-
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is Visibility v && v == Visibility.Visible;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;
             }
-
             return isVisible;
         }
     }
@@ -126,6 +121,7 @@ namespace GrafikoMat.Common
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
     public class BooleanToBrushConverter : IValueConverter
     {
         public Brush TrueBrush { get; set; }
@@ -138,4 +134,29 @@ namespace GrafikoMat.Common
 
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
+    // ================== NOWY, WYMAGANY KONWERTER ==================
+    /// <summary>
+    /// Konwertuje wartość typu Enum na Visibility. Zwraca Visible, jeśli wartość
+    /// jest równa wartości podanej w parametrze, w przeciwnym razie Collapsed.
+    /// </summary>
+    public class EnumToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value == null || parameter == null)
+                return Visibility.Collapsed;
+
+            string? enumValue = value.ToString();
+            string? targetValue = parameter.ToString();
+
+            return enumValue == targetValue ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+    // =============================================================
 }

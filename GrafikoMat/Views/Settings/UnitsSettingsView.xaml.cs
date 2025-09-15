@@ -12,6 +12,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.System;
+// NOWE USINGI
+using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Models;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -149,7 +152,6 @@ namespace GrafikoMat.Views.Settings
         private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź archiwizację";
             dialog.Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'?";
@@ -191,7 +193,6 @@ namespace GrafikoMat.Views.Settings
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowUnitDialogAsync(null);
-
         private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit) await ShowUnitDialogAsync(selectedUnit);
@@ -203,18 +204,20 @@ namespace GrafikoMat.Views.Settings
             bool isEditMode = existingUnit != null;
             _currentSuggestion = null;
             _isAutocompleteActive = true;
-
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
-
+            var use12hCheckBox = new CheckBox
+            {
+                Content = "Używaj domyślnie dyżurów 12-godzinnych (Dzień/Noc)",
+                IsChecked = existingUnit?.UseTwelveHourShiftsByDefault ?? false,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
             hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
             hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
             hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
             hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
-
-            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox }, Width = 650 };
-
+            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox, use12hCheckBox }, Width = 650 };
             var dialog = App.CreateThemedDialog();
             dialog.Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę";
             dialog.Content = panel;
@@ -224,10 +227,12 @@ namespace GrafikoMat.Views.Settings
 
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
+
             var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
             unitToSave.Name = nameTextBox.Text;
             unitToSave.HospitalFullName = hospitalNameTextBox.Text;
             unitToSave.DepartmentName = departmentNameTextBox.Text;
+            unitToSave.UseTwelveHourShiftsByDefault = use12hCheckBox.IsChecked ?? false;
 
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
@@ -239,7 +244,12 @@ namespace GrafikoMat.Views.Settings
                 },
                 successMessage: isEditMode ? "Poprawnie zapisano zmiany w jednostce." : "Nowa jednostka została pomyślnie dodana.",
                 errorMessageTitle: "Błąd zapisu jednostki"
-             );
+            );
+
+            // ================== NOWA LINIA ==================
+            // Informujemy resztę aplikacji, że dane jednostek mogły się zmienić.
+            WeakReferenceMessenger.Default.Send(new UnitDataChangedMessage());
+            // ==============================================
         }
     }
 }

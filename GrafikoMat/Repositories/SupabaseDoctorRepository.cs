@@ -21,12 +21,10 @@ namespace GrafikoMat.Repositories
         public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
             if (_supabase.Auth.CurrentUser?.Id is null) return null;
-
             var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
             var response = await _supabase.From<DoctorProfile>()
                 .Where(d => d.Id == userId)
                 .Single();
-
             return response;
         }
 
@@ -56,7 +54,11 @@ namespace GrafikoMat.Repositories
                     RequiresPasswordChange = profile.RequiresPasswordChange
                 };
 
-                await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
+                // ================== POPRAWIONA LINIA ==================
+                await _supabase.From<DoctorForUpdate>()
+                    .Where(d => d.Id == profile.Id)
+                    .Update(doctorDataForUpdate);
+                // ======================================================
             }
 
             var assignmentRepo = new SupabaseAssignmentRepository(_supabase);

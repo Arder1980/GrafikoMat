@@ -24,6 +24,14 @@ namespace GrafikoMat.Core.Data
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
 
+        // ================== NOWA WŁAŚCIWOŚĆ ==================
+        /// <summary>
+        /// Gdy true, dyżury dla tej jednostki domyślnie dzielone są na 12h (Dzień/Noc).
+        /// </summary>
+        [Column("use_twelve_hour_shifts")]
+        public bool UseTwelveHourShiftsByDefault { get; set; } = false;
+        // ======================================================
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 

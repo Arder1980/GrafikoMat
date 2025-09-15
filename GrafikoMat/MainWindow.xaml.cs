@@ -41,7 +41,6 @@ namespace GrafikoMat
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
-
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
@@ -49,8 +48,6 @@ namespace GrafikoMat
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
-
-        // ZMIANA: Przywrócono pole do śledzenia inicjalizacji rozmiaru
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -74,7 +71,6 @@ namespace GrafikoMat
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(DragBar);
-
             InitAppWindow();
             ApplyTitleBarMenuStyling();
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
@@ -87,9 +83,6 @@ namespace GrafikoMat
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
-            // Stara, błędna logika ustawiania rozmiaru została usunięta.
-            // Ta metoda odpowiada teraz tylko za aktywację/deaktywację tła i paska tytułu.
-
             if (_isClosing) return;
             if (_backdropConfiguration != null)
             {
@@ -321,9 +314,12 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
+        // ================== ZMIENIONA METODA ==================
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
+            if (ViewModel.ActiveUnit == null) return; // Zabezpieczenie przed brakiem aktywnej jednostki
+
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
 
@@ -359,11 +355,11 @@ namespace GrafikoMat
                 initialIndex,
                 ViewModel.Declarations,
                 ViewModel.IsCurrentUserAdmin,
+                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, // <-- DODANY BRAKUJĄCY ARGUMENT
                 () => {
                     ViewModel.RefreshDeclarationsForDashboard();
                 }
             );
-
             var declarationsView = new DeclarationsView();
 
             void DeclCloseHandler() => SwitchToDashboard();
@@ -377,10 +373,10 @@ namespace GrafikoMat
             declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
 
             declarationsView.AttachViewModel(declarationsVm);
-
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
         }
+        // =======================================================
 
         private static void DetachFromParent(FrameworkElement el)
         {
@@ -522,7 +518,6 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
-
             if (_appWindow?.Presenter is OverlappedPresenter p && _appSettings != null)
             {
                 var pos = _appWindow.Position;
