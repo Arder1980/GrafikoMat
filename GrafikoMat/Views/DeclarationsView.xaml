@@ -26,7 +26,6 @@
             </ResourceDictionary.ThemeDictionaries>
 
             <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            <common:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter"/>
 
             <Style TargetType="TextBlock" x:Key="SymbolTextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
@@ -113,19 +112,15 @@
                         <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                     </Style>
                 </GridView.ItemContainerStyle>
-
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
-                        <Border IsHitTestVisible="False"
-                                Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.5}"
-                                Background="{x:Bind EffectiveBackground, Mode=OneWay}"
-                                CornerRadius="4">
+                        <Border IsHitTestVisible="False" Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.5}"
+                                Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-
                                 <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
@@ -135,34 +130,31 @@
                                     <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" FontSize="11" Opacity="0.9" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </Grid>
-
                                 <Grid Grid.Row="1" MinHeight="48">
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                                         <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"/>
                                     </Grid>
-
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="*"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-
                                         <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
                                         </Viewbox>
                                         <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center">
                                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
                                         </Viewbox>
-
                                         <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-
                                         <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
                                         <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
                                     </Grid>
                                 </Grid>
 
-                                <Border BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="2"
-                                        Visibility="{x:Bind CurrentSelectionState, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Full}"/>
+                                <Border BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4"/>
+
+                                <Border BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="4"
+                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                                 <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay}">
                                     <Grid.RowDefinitions>
@@ -170,14 +162,13 @@
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 
-                                    <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0" BorderThickness="2"
-                                            Visibility="{x:Bind CurrentSelectionState, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Day}"/>
+                                    <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
+                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-                                    <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="2"
-                                            Visibility="{x:Bind CurrentSelectionState, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Night}"/>
-
-                                    <Border Grid.RowSpan="2" BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="2"
-                                            Visibility="{x:Bind CurrentSelectionState, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Both}"/>
+                                    <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
+                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
                         </Border>

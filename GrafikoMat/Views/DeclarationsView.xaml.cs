@@ -1,7 +1,6 @@
 ﻿using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
-using Microsoft.UI; // POPRAWKA: Dodano brakujący using dla klasy Colors
-using Windows.UI.Core; // POPRAWKA: Dodano using dla CoreVirtualKeyStates
+using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,9 +10,9 @@ using System;
 using System.ComponentModel;
 using System.Linq;
 using Windows.Foundation;
-using Windows.System; // POPRAWKA: Dodano using dla VirtualKey
+using Windows.System;
 using Windows.UI;
-
+using Windows.UI.Core;
 
 namespace GrafikoMat.Views
 {
@@ -91,9 +90,7 @@ namespace GrafikoMat.Views
                             var relativeY = p.Y - bounds.Top;
                             var headerHeight = 24;
                             var contentHeight = container.ActualHeight - headerHeight;
-
                             if (relativeY < headerHeight) return (i, SlotPart.Day);
-
                             var part = (relativeY < headerHeight + contentHeight / 2) ? SlotPart.Day : SlotPart.Night;
                             return (i, part);
                         }
@@ -113,7 +110,6 @@ namespace GrafikoMat.Views
             {
                 e.Handled = true;
 
-                // POPRAWKA: Prawidłowy sposób sprawdzania stanu klawiszy
                 var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
                 var shiftState = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift);
                 bool isCtrlPressed = ctrlState.HasFlag(CoreVirtualKeyStates.Down);
@@ -121,10 +117,11 @@ namespace GrafikoMat.Views
 
                 if (isShiftPressed && _lastClickedSlot != null)
                 {
-                    ViewModel.SelectSlotRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part);
+                    ViewModel.SelectDragRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part, slotPart);
                 }
                 else if (isCtrlPressed)
                 {
+                    _isDragging = false;
                     ViewModel.ToggleSlotSelection(index, slotPart);
                     _lastClickedSlot = new SelectedSlot(index, slotPart);
                 }
@@ -146,11 +143,11 @@ namespace GrafikoMat.Views
             if (ViewModel != null && _isDragging)
             {
                 var point = e.GetCurrentPoint(CalendarGridView).Position;
-                var (currentIndex, _) = GetIndexAndSlotFromPoint(point);
+                var (currentIndex, currentPart) = GetIndexAndSlotFromPoint(point);
 
                 if (currentIndex != -1 && ViewModel.DayCells[currentIndex].InMonth)
                 {
-                    ViewModel.SelectSlotRange(_dragStartIndex, currentIndex, _dragStartSlotPart);
+                    ViewModel.SelectDragRange(_dragStartIndex, currentIndex, _dragStartSlotPart, currentPart);
                     e.Handled = true;
                 }
             }
@@ -198,10 +195,7 @@ namespace GrafikoMat.Views
             }
         }
 
-        private void OnThemeChanged(FrameworkElement sender, object args)
-        {
-            UpdateAllCellBrushes();
-        }
+        private void OnThemeChanged(FrameworkElement sender, object args) => UpdateAllCellBrushes();
 
         private void UpdateAllCellBrushes()
         {
@@ -231,13 +225,13 @@ namespace GrafikoMat.Views
                 var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
                 var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
                 var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
 
                 Color bgColor, numFgColor, headerBgColor;
                 if (cell.InMonth)
                     bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
                 else
-                    bgColor = transparent;
+                    bgColor = Color.FromArgb(0x05, 0, 0, 0);
 
                 headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
                 numFgColor = cell.InMonth ? textNormal : textMuted;
@@ -254,13 +248,13 @@ namespace GrafikoMat.Views
                 var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
                 var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
                 var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
-                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);
+                var textMuted = Color.FromArgb(0x66, 255, 255, 255);
 
                 Color bgColor, numFgColor, headerBgColor;
                 if (cell.InMonth)
                     bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
                 else
-                    bgColor = transparent;
+                    bgColor = Color.FromArgb(0x05, 255, 255, 255);
 
                 headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
                 numFgColor = cell.InMonth ? textNormal : textMuted;

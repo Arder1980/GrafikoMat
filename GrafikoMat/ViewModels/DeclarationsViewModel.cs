@@ -157,7 +157,6 @@ namespace GrafikoMat.ViewModels
                     result.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
                 }
             }
-
             _sharedDeclarations[key] = result;
         }
 
@@ -183,7 +182,6 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
-        // ================== NOWA METODA DLA CTRL+KLIK ==================
         public void ToggleSlotSelection(int index, SlotPart part)
         {
             if (index < 0 || index >= DayCells.Count) return;
@@ -199,9 +197,8 @@ namespace GrafikoMat.ViewModels
             }
             UpdateSelectionVisuals();
         }
-        // =============================================================
 
-        public void SelectSlotRange(int startIndex, int endIndex, SlotPart partToSelect)
+        public void SelectRange(int startIndex, int endIndex, SlotPart partToSelect)
         {
             SelectedSlots.Clear();
             int start = Math.Min(startIndex, endIndex);
@@ -222,6 +219,44 @@ namespace GrafikoMat.ViewModels
                 else
                 {
                     if (partToSelect == SlotPart.Full)
+                    {
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
+                    }
+                }
+            }
+            UpdateSelectionVisuals();
+        }
+
+        public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
+        {
+            SelectedSlots.Clear();
+            int start = Math.Min(startIndex, endIndex);
+            int end = Math.Max(startIndex, endIndex);
+
+            bool expandToFullDays = (startPart != endPart) &&
+                                    (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
+                                    (endPart == SlotPart.Day || endPart == SlotPart.Night);
+
+            for (int i = start; i <= end; i++)
+            {
+                var cell = DayCells[i];
+                if (!cell.InMonth) continue;
+
+                if (expandToFullDays && cell.IsSplit)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                    SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
+                }
+                else
+                {
+                    if (cell.IsSplit)
+                    {
+                        if (startPart == SlotPart.Day || startPart == SlotPart.Night)
+                        {
+                            SelectedSlots.Add(new SelectedSlot(i, startPart));
+                        }
+                    }
+                    else
                     {
                         SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
                     }
@@ -260,8 +295,6 @@ namespace GrafikoMat.ViewModels
 
     public sealed class DayCell : ObservableObject
     {
-        public enum SelectionState { None, Full, Day, Night, Both }
-
         public int Index { get; }
         public DateTime Date { get; }
         public bool InMonth { get; }
@@ -290,34 +323,49 @@ namespace GrafikoMat.ViewModels
         private string _symbolNight = "";
         public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
 
-        private SelectionState _currentSelectionState = SelectionState.None;
-        public SelectionState CurrentSelectionState { get => _currentSelectionState; private set => SetProperty(ref _currentSelectionState, value); }
+        private bool _isFullSelected;
+        public bool IsFullSelected { get => _isFullSelected; private set => SetProperty(ref _isFullSelected, value); }
+
+        private bool _isDaySelected;
+        public bool IsDaySelected { get => _isDaySelected; private set => SetProperty(ref _isDaySelected, value); }
+
+        private bool _isNightSelected;
+        public bool IsNightSelected { get => _isNightSelected; private set => SetProperty(ref _isNightSelected, value); }
+
+        private Thickness _daySelectionBorderThickness = new Thickness(0);
+        public Thickness DaySelectionBorderThickness { get => _daySelectionBorderThickness; private set => SetProperty(ref _daySelectionBorderThickness, value); }
+
+        private Thickness _nightSelectionBorderThickness = new Thickness(0);
+        public Thickness NightSelectionBorderThickness { get => _nightSelectionBorderThickness; private set => SetProperty(ref _nightSelectionBorderThickness, value); }
 
         public void UpdateSelection(HashSet<SlotPart> selectedParts)
         {
-            if (selectedParts.Count == 0)
+            IsFullSelected = selectedParts.Contains(SlotPart.Full);
+            IsDaySelected = selectedParts.Contains(SlotPart.Day);
+            IsNightSelected = selectedParts.Contains(SlotPart.Night);
+
+            if (IsDaySelected && IsNightSelected)
             {
-                CurrentSelectionState = SelectionState.None;
+                DaySelectionBorderThickness = new Thickness(4, 4, 4, 2);
+                NightSelectionBorderThickness = new Thickness(4, 2, 4, 4);
             }
-            else if (selectedParts.Contains(SlotPart.Full))
+            else if (IsDaySelected)
             {
-                CurrentSelectionState = SelectionState.Full;
+                DaySelectionBorderThickness = new Thickness(4);
+                NightSelectionBorderThickness = new Thickness(0);
             }
-            else if (selectedParts.Contains(SlotPart.Day) && selectedParts.Contains(SlotPart.Night))
+            else if (IsNightSelected)
             {
-                CurrentSelectionState = SelectionState.Both;
+                NightSelectionBorderThickness = new Thickness(4);
+                DaySelectionBorderThickness = new Thickness(0);
             }
-            else if (selectedParts.Contains(SlotPart.Day))
+            else
             {
-                CurrentSelectionState = SelectionState.Day;
-            }
-            else if (selectedParts.Contains(SlotPart.Night))
-            {
-                CurrentSelectionState = SelectionState.Night;
+                DaySelectionBorderThickness = new Thickness(0);
+                NightSelectionBorderThickness = new Thickness(0);
             }
         }
 
-        public Thickness BorderThickness => CurrentSelectionState != SelectionState.None ? new Thickness(2.0) : new Thickness(1.0);
         public void ClearData()
         {
             SymbolFull = "";
