@@ -16,6 +16,49 @@
     </UserControl.Resources>
 
     <Grid Padding="20,20,20,0">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="DetailsStateGroup">
+                <VisualState x:Name="DetailsCollapsed">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0.2" Value="Collapsed"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <DoubleAnimation Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2"/>
+                        <DoubleAnimation Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="-10" Duration="0:0:0.2"/>
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="DetailsVisible">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <DoubleAnimation Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                        <DoubleAnimation Storyboard.TargetName="DetailsBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-10" To="0" Duration="0:0:0.2"/>
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="SettingsStateGroup">
+                <VisualState x:Name="SettingsCollapsed">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0:0:0.2" Value="Collapsed"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <DoubleAnimation Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.2"/>
+                        <DoubleAnimation Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" To="-10" Duration="0:0:0.2"/>
+                    </Storyboard>
+                </VisualState>
+                <VisualState x:Name="SettingsVisible">
+                    <Storyboard>
+                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="Visibility">
+                            <DiscreteObjectKeyFrame KeyTime="0" Value="Visible"/>
+                        </ObjectAnimationUsingKeyFrames>
+                        <DoubleAnimation Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                        <DoubleAnimation Storyboard.TargetName="SettingsBorder" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-10" To="0" Duration="0:0:0.2"/>
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -46,10 +89,59 @@
                                     <ColumnDefinition Width="2.6*"/>
                                     <ColumnDefinition Width="1.2*"/>
                                 </Grid.ColumnDefinitions>
+
                                 <TextBlock Grid.Column="0" Text="Nazwa silnika" FontWeight="SemiBold" HorizontalAlignment="Left"/>
-                                <TextBlock Grid.Column="1" Text="Typ algorytmu" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                <TextBlock Grid.Column="2" Text="Rodzaj" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                                <TextBlock Grid.Column="3" Text="Wielowątkowość" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="Typ algorytmu" FontWeight="SemiBold"/>
+                                    <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip MaxWidth="600">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run FontWeight="Bold">Algorytm przeszukiwania zupełnego:</Run><LineBreak/>
+                                                    <Run>przeszukuje całą przestrzeń rozwiązań, gwarantując znalezienie optimum.</Run><LineBreak/><LineBreak/>
+                                                    <Run FontWeight="Bold">Algorytm przeszukiwania heurystycznego:</Run><LineBreak/>
+                                                    <Run>inteligentnie wybiera ścieżki, dążąc do optimum.</Run><LineBreak/><LineBreak/>
+                                                    <Run FontWeight="Bold">Metaheurystyka:</Run><LineBreak/>
+                                                    <Run>technika optymalizacji, która znajduje bardzo dobre rozwiązania w rozsądnym czasie, bez gwarancji optimum.</Run>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="Rodzaj" FontWeight="SemiBold"/>
+                                    <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip MaxWidth="400">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run FontWeight="Bold">Deterministyczny:</Run><LineBreak/>
+                                                    <Run>ten sam wynik dla tych samych danych wejściowych.</Run><LineBreak/><LineBreak/>
+                                                    <Run FontWeight="Bold">Stochastyczny:</Run><LineBreak/>
+                                                    <Run>zawiera element losowości.</Run>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <TextBlock Text="Wielowątkowość" FontWeight="SemiBold"/>
+                                    <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
+                                        <ToolTipService.ToolTip>
+                                            <ToolTip MaxWidth="400">
+                                                <TextBlock TextWrapping="Wrap">
+                                                    <Run FontWeight="Bold">Tak:</Run><LineBreak/>
+                                                    <Run>algorytm wykorzystuje wiele rdzeni procesora, co przyspiesza obliczenia.</Run><LineBreak/><LineBreak/>
+                                                    <Run FontWeight="Bold">Nie:</Run><LineBreak/>
+                                                    <Run>obliczenia są wykonywane sekwencyjnie na jednym rdzeniu.</Run>
+                                                </TextBlock>
+                                            </ToolTip>
+                                        </ToolTipService.ToolTip>
+                                    </TextBlock>
+                                </StackPanel>
+
                                 <TextBlock Grid.Column="4" Text="Jakość wyniku" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                                 <TextBlock Grid.Column="5" Text="Czas obliczeń" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                             </Grid>
@@ -80,12 +172,10 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <Border Visibility="{x:Bind ViewModel.SelectedEngine, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}">
-                    <Border.Transitions>
-                        <TransitionCollection>
-                            <EntranceThemeTransition/>
-                        </TransitionCollection>
-                    </Border.Transitions>
+                <Border x:Name="DetailsBorder" Visibility="Collapsed">
+                    <Border.RenderTransform>
+                        <TranslateTransform/>
+                    </Border.RenderTransform>
                     <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -95,16 +185,20 @@
                             <TextBlock Text="Charakterystyka wybranego silnika" FontWeight="SemiBold"/>
                         </Border>
                         <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue=''}"
-                                   TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify" Opacity="0.9" Padding="12"/>
+                                   TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify" Opacity="0.9" Padding="12">
+                            <TextBlock.Transitions>
+                                <TransitionCollection>
+                                    <ContentThemeTransition/>
+                                </TransitionCollection>
+                            </TextBlock.Transitions>
+                        </TextBlock>
                     </Grid>
                 </Border>
 
-                <Border Visibility="{x:Bind ViewModel.HasConfigurableParameters, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Border.Transitions>
-                        <TransitionCollection>
-                            <EntranceThemeTransition IsStaggeringEnabled="True"/>
-                        </TransitionCollection>
-                    </Border.Transitions>
+                <Border x:Name="SettingsBorder" Visibility="Collapsed">
+                    <Border.RenderTransform>
+                        <TranslateTransform/>
+                    </Border.RenderTransform>
                     <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -114,35 +208,145 @@
                             <TextBlock Text="Ustawienia wybranego silnika" FontWeight="SemiBold"/>
                         </Border>
                         <StackPanel Grid.Row="1" Spacing="16" Padding="12">
+                            <StackPanel.Transitions>
+                                <TransitionCollection>
+                                    <ContentThemeTransition/>
+                                </TransitionCollection>
+                            </StackPanel.Transitions>
+
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=SimulatedAnnealing}">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="Szybciej" Opacity="0.8" VerticalAlignment="Center"/>
-                                    <Slider Grid.Column="1" Minimum="0.9" Maximum="0.999" SmallChange="0.001" StepFrequency="0.001" Header="Tempo schładzania" Value="{x:Bind ViewModel.CoolingRateValue, Mode=TwoWay}"/>
-                                    <TextBlock Grid.Column="2" Text="Dokładniej" Opacity="0.8" VerticalAlignment="Center"/>
-                                </Grid>
+                                <Slider Minimum="0.9" Maximum="0.999" SmallChange="0.001" StepFrequency="0.001" Value="{x:Bind ViewModel.CoolingRateValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Tempo schładzania"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Określa, jak szybko algorytm staje się "wybredny".<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Niższa wartość (lewo):</Run> szybsze obliczenia, ale większe ryzyko utknięcia w lokalnym optimum (niższa jakość).<LineBreak/>
+                                                            <Run FontWeight="Bold">Wyższa wartość (prawo):</Run> dłuższe obliczenia, ale większa szansa na znalezienie globalnie lepszego rozwiązania (wyższa jakość).
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetSimulatedAnnealingCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Genetic}">
-                                <Slider Minimum="20" Maximum="500" SmallChange="10" StepFrequency="10" Header="Rozmiar populacji" Value="{x:Bind ViewModel.GeneticPopulationSizeValue, Mode=TwoWay}"/>
-                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Header="Liczba generacji" Value="{x:Bind ViewModel.GeneticGenerationsValue, Mode=TwoWay}"/>
+                                <Slider Minimum="20" Maximum="500" SmallChange="10" StepFrequency="10" Value="{x:Bind ViewModel.GeneticPopulationSizeValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Rozmiar populacji"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Liczba "osobników" (kandydatów na grafiki) w każdej generacji.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> większa różnorodność genetyczna, potencjalnie lepszy wynik, ale wolniejsze działanie.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
+                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Value="{x:Bind ViewModel.GeneticGenerationsValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Liczba generacji"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Jak długo algorytm ma "ewoluować" w poszukiwaniu rozwiązania.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na optymalizację, potencjalnie lepszy wynik, ale dłuższy czas obliczeń.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetGeneticCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=AntColony}">
-                                <Slider Minimum="10" Maximum="200" SmallChange="5" StepFrequency="5" Header="Liczba mrówek" Value="{x:Bind ViewModel.AntColonyAntsValue, Mode=TwoWay}"/>
-                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Header="Liczba generacji" Value="{x:Bind ViewModel.AntColonyGenerationsValue, Mode=TwoWay}"/>
+                                <Slider Minimum="10" Maximum="200" SmallChange="5" StepFrequency="5" Value="{x:Bind ViewModel.AntColonyAntsValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Liczba mrówek"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Liczba "agentów" poszukujących rozwiązania w każdej iteracji.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> szersze przeszukiwanie przestrzeni rozwiązań, potencjalnie lepszy wynik, ale wolniejsze działanie.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
+                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Value="{x:Bind ViewModel.AntColonyGenerationsValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Liczba generacji"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Określa, jak długo "mrówki" będą nanosić i podążać za śladami feromonowymi.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na zbiegnięcie się algorytmu do dobrego rozwiązania, ale dłuższy czas obliczeń.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetAntColonyCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=TabuSearch}">
-                                <Slider Minimum="10" Maximum="100" SmallChange="5" StepFrequency="5" Header="Rozmiar listy Tabu" Value="{x:Bind ViewModel.TabuListSizeValue, Mode=TwoWay}"/>
-                                <Slider Minimum="100" Maximum="2000" SmallChange="100" StepFrequency="100" Header="Maksymalna liczba iteracji" Value="{x:Bind ViewModel.TabuMaxIterationsValue, Mode=TwoWay}"/>
+                                <Slider Minimum="10" Maximum="100" SmallChange="5" StepFrequency="5" Value="{x:Bind ViewModel.TabuListSizeValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Rozmiar listy Tabu"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Jak długo algorytm "pamięta", aby nie wracać do niedawno sprawdzonych rozwiązań.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> większa dywersyfikacja (unikanie lokalnych optimów), ale może spowalniać zbieżność.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
+                                <Slider Minimum="100" Maximum="2000" SmallChange="100" StepFrequency="100" Value="{x:Bind ViewModel.TabuMaxIterationsValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Maksymalna liczba iteracji"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Całkowity czas działania algorytmu.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na znalezienie lepszego rozwiązania, ale dłuższy czas obliczeń.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetTabuSearchCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
                         </StackPanel>

@@ -29,12 +29,11 @@ namespace GrafikoMat.ViewModels
                 if (SetProperty(ref _selectedEngine, value))
                 {
                     foreach (var option in EngineOptions) { option.IsSelected = (option == value); }
-                    OnPropertyChanged(nameof(HasConfigurableParameters)); // ZMIANA: Powiadom o zmianie
+                    OnPropertyChanged(nameof(HasConfigurableParameters));
                 }
             }
         }
 
-        // ZMIANA: Nowa właściwość sterująca widocznością panelu ustawień
         public bool HasConfigurableParameters =>
             SelectedEngine?.Type is SolverType.SimulatedAnnealing or SolverType.Genetic or SolverType.AntColony or SolverType.TabuSearch;
 
@@ -61,12 +60,10 @@ namespace GrafikoMat.ViewModels
 
         public IAsyncRelayCommand SaveCommand { get; }
 
-        // ================== NOWE KOMENDY ==================
         public ICommand ResetSimulatedAnnealingCommand { get; }
         public ICommand ResetGeneticCommand { get; }
         public ICommand ResetAntColonyCommand { get; }
         public ICommand ResetTabuSearchCommand { get; }
-        // ================================================
 
         public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings)
         {
@@ -75,7 +72,6 @@ namespace GrafikoMat.ViewModels
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
 
-            // ZMIANA: Inicjalizacja komend
             ResetSimulatedAnnealingCommand = new RelayCommand(() => CoolingRateValue = 0.995);
             ResetGeneticCommand = new RelayCommand(() =>
             {
@@ -147,12 +143,43 @@ namespace GrafikoMat.ViewModels
         private void LoadEngineData()
         {
             EngineOptions.Clear();
-            EngineOptions.Add(new EngineOption(SolverType.Backtracking, "BacktrackingSolver", "Działa jak skrupulatny detektyw w labiryncie. Systematycznie, krok po kroku, podąża jedną ścieżką, przypisując dyżury dzień po dniu. Gdy trafia w ślepy zaułek (sytuację, w której nie da się obsadzić dyżuru zgodnie z regułami), powraca (backtrack) do ostatniego skrzyżowania i próbuje innej drogi. Gwarantuje znalezienie idealnego rozwiązania, ale dla złożonych problemów jego praca może trwać bardzo długo.", "Algorytm z nawrotami", "Przeszukiwanie zupełne", "Deterministyczny", "Nie", "Gwarancja znalezienia wyniku najlepszego z możliwych.", "Od b. krótkiego do astronomicznie długiego"));
-            EngineOptions.Add(new EngineOption(SolverType.AStar, "AStarSolver", "Można go porównać do doświadczonego nawigatora z mapą i kompasem. W każdym momencie analizuje nie tylko już przebytą drogę, ale również inteligentnie szacuje odległość, jaka jeszcze pozostała do celu. Zamiast ślepo badać wszystkie ścieżki jak Backtracking, A* koncentruje swoje wysiłki na tych, które wydają się najbardziej obiecujące. Dzięki temu potrafi znaleźć optymalną trasę znacznie szybciej.", "Wielokryterialny algorytm A*", "Przeszukiwanie heurystyczne", "Deterministyczny", "Nie", "Gwarancja znalezienia wyniku optymalnego (przy dopuszczalnej heurystyce).", "Krótki / Średni"));
-            EngineOptions.Add(new EngineOption(SolverType.Genetic, "GeneticSolver", "Inspirowany teorią ewolucji. Algorytm tworzy początkową 'populację' losowych grafików, a następnie poddaje ją procesowi naturalnej selekcji przez wiele pokoleń. Najlepsze grafiki ('osobniki') są ze sobą 'krzyżowane', tworząc nowe 'potomstwo'. Z pokolenia na pokolenie słabsze rozwiązania są eliminowane, a populacja jako całość staje się coraz 'silniejsza', dążąc do wyłonienia niemal idealnego grafiku.", "Algorytm genetyczny", "Metaheurystyka", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
-            EngineOptions.Add(new EngineOption(SolverType.SimulatedAnnealing, "SimulatedAnnealingSolver", "Naśladuje proces powolnego studzenia (wyżarzania) metalu, aby uzyskać jego idealną, krystaliczną strukturę. Algorytm zaczyna od wysokiej 'temperatury', na której chętnie akceptuje nawet gorsze modyfikacje grafiku, co pozwala mu na unikanie utknięcia w lokalnych optimach. W miarę jak 'temperatura' opada, algorytm staje się coraz bardziej 'wybredny' i akceptuje już tylko zmiany, które faktycznie poprawiają wynik.", "Algorytm symulowanego wyżarzania", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik dobrej jakości, silnie zależny od parametrów wyżarzania.", "Średni"));
-            EngineOptions.Add(new EngineOption(SolverType.TabuSearch, "TabuSearchSolver", "Wyobraź sobie eksploratora, który notuje w dzienniku ostatnio odwiedzone miejsca, by do nich od razu nie wracać. Algorytm w każdym kroku szuka najlepszej modyfikacji grafiku, a żeby uniknąć zapętlenia, prowadzi 'listę tabu' – krótkoterminową pamięć ruchów, które są tymczasowo 'zakazane'. Pozwala to na wydostanie się z lokalnych optimów i zbadanie szerszego obszaru potencjalnych grafików.", "Algorytm przeszukiwania z zakazami", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
-            EngineOptions.Add(new EngineOption(SolverType.AntColony, "AntColonySolver", "Działa w oparciu o obserwację kolonii mrówek. Wiele wirtualnych 'mrówek' jednocześnie buduje kompletne grafiki. Każda mrówka, która stworzy dobry grafik, zostawia cyfrowy 'ślad feromonowy' na fragmentach, z których korzystała. Kolejne 'pokolenia' mrówek są przyciągane do silniejszych śladów, co naturalnie wzmacnia najlepsze elementy i prowadzi całą kolonię do szybkiego znalezienia optymalnego rozwiązania.", "Algorytm kolonii mrówek", "Metaheurystyka", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
+
+            // ZMIANA: Rozbudowane opisy
+            EngineOptions.Add(new EngineOption(
+                SolverType.Backtracking,
+                "BacktrackingSolver",
+                "Wyobraź sobie skrupulatnego bibliotekarza, który musi ułożyć książki na półkach według bardzo ścisłych reguł. Zaczyna od pierwszej półki i pierwszej książki, stawia ją, a następnie bierze drugą i sprawdza, czy pasuje obok. Jeśli tak, kontynuuje. Jeśli jednak dojdzie do momentu, w którym żadna z pozostałych książek nie pasuje, cofa się (stąd 'backtrack' - nawrót), zabiera ostatnio postawioną książkę i próbuje na jej miejsce postawić inną. Powtarza ten proces, systematycznie sprawdzając każdą możliwą kombinację, aż znajdzie idealne ułożenie lub wyczerpie wszystkie możliwości. Jest to metoda gwarantująca znalezienie najlepszego rozwiązania, ale jej koszt czasowy może być ogromny, jeśli problem ma wiele możliwych kombinacji (jak grafik z wieloma lekarzami i dniami).",
+                "Algorytm z nawrotami", "Przeszukiwanie zupełne", "Deterministyczny", "Nie", "Gwarancja znalezienia wyniku najlepszego z możliwych.", "Od b. krótkiego do astronomicznie długiego"));
+
+            EngineOptions.Add(new EngineOption(
+                SolverType.AStar,
+                "AStarSolver",
+                "Ten algorytm działa jak zaawansowany system nawigacji GPS w mieście, w którym jest nieskończenie wiele dróg. Zamiast jechać na ślepo, A* w każdym momencie analizuje dwie rzeczy: koszt już przebytej trasy (ile dyżurów już przypisano i jak dobrze) oraz szacowany koszt dotarcia do celu (jak 'obiecujące' są pozostałe dni do obsadzenia). Dzięki tej heurystycznej ocenie przyszłości, algorytm inteligentnie wybiera najbardziej obiecujące ścieżki, ignorując te, które już na wczesnym etapie wydają się prowadzić do gorszego wyniku. To sprawia, że jest znacznie wydajniejszy od czystego backtrackingu, zachowując przy tym zdolność do znalezienia optymalnego rozwiązania, jeśli jego 'mapa' (heurystyka) jest dobrze skalibrowana.",
+                "Wielokryterialny algorytm A*", "Przeszukiwanie heurystyczne", "Deterministyczny", "Nie", "Gwarancja znalezienia wyniku optymalnego (przy dopuszczalnej heurystyce).", "Krótki / Średni"));
+
+            EngineOptions.Add(new EngineOption(
+                SolverType.Genetic,
+                "GeneticSolver",
+                "Działa na zasadach ewolucji. Na początku tworzy dużą 'populację' całkowicie losowych, często bezsensownych grafików. Następnie ocenia 'przystosowanie' każdego z nich – jak dobrze spełnia założone kryteria. Najlepsze grafiki ('osobniki') są wybierane do 'rozmnażania': ich fragmenty są ze sobą mieszane (krzyżowanie), tworząc nowe 'potomstwo', które dziedziczy cechy po 'rodzicach'. Dodatkowo, wprowadzane są losowe 'mutacje' (np. zmiana lekarza w jednym dniu), aby zwiększyć różnorodność. Z pokolenia na pokolenie słabe rozwiązania wymierają, a cała populacja staje się coraz lepsza, zbiegając się w kierunku rozwiązania o bardzo wysokiej jakości. To potężna, wielowątkowa technika, idealna do złożonych problemów.",
+                "Algorytm genetyczny", "Metaheurystyka", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
+
+            EngineOptions.Add(new EngineOption(
+                SolverType.SimulatedAnnealing,
+                "SimulatedAnnealingSolver",
+                "Naśladuje proces wyżarzania stali w hucie. Metal jest najpierw podgrzewany do bardzo wysokiej temperatury, co pozwala atomom na swobodne przemieszczanie się, a następnie jest bardzo powoli schładzany, aby atomy mogły ułożyć się w idealnie uporządkowaną, stabilną strukturę krystaliczną. W algorytmie 'temperatura' to prawdopodobieństwo akceptacji gorszego rozwiązania. Na początku, przy wysokiej temperaturze, algorytm chętnie dokonuje nawet losowych, pogarszających wynik zmian, co pozwala mu 'wyskakiwać' z lokalnych optimów i eksplorować całą przestrzeń rozwiązań. W miarę jak 'temperatura' spada, staje się coraz bardziej zachowawczy, akceptując już tylko te zmiany, które faktycznie poprawiają grafik. Tempo schładzania jest kluczowym parametrem do znalezienia złotego środka między jakością a czasem.",
+                "Algorytm symulowanego wyżarzania", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik dobrej jakości, silnie zależny od parametrów wyżarzania.", "Średni"));
+
+            EngineOptions.Add(new EngineOption(
+                SolverType.TabuSearch,
+                "TabuSearchSolver",
+                "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
+                "Algorytm przeszukiwania z zakazami", "Metaheurystyka", "Stochastyczny", "Nie", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
+
+            EngineOptions.Add(new EngineOption(
+                SolverType.AntColony,
+                "AntColonySolver",
+                "Inspirowany zachowaniem mrówek szukających najkrótszej drogi do pożywienia. Wirtualna 'kolonia mrówek' jest wysyłana do budowania grafików. Każda 'mrówka' konstruuje kompletny grafik od początku do końca, dokonując po drodze wyborów (którego lekarza przypisać do dnia) w oparciu o dwie wskazówki: atrakcyjność danej opcji (np. deklaracja 'Chcę') oraz siłę 'śladu feromonowego' pozostawionego przez poprzednie mrówki. Gdy mrówka ukończy dobry grafik, wraca i wzmacnia feromonem ścieżki, z których korzystała. Z czasem feromon na gorszych ścieżkach 'paruje', a na najlepszych kumuluje się, co sprawia, że kolejne pokolenia mrówek coraz częściej podążają w kierunku optymalnego rozwiązania. To inteligentny, równoległy proces, który dobrze radzi sobie ze złożonymi problemami.",
+                "Algorytm kolonii mrówek", "Metaheurystyka", "Stochastyczny", "Tak", "Wynik bardzo wysokiej jakości, bliski najlepszemu.", "Krótki"));
         }
     }
 }
