@@ -5,6 +5,7 @@ using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
+using Supabase.Gotrue;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -103,6 +104,7 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
         public async Task InitializeAsync()
         {
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
@@ -145,19 +147,16 @@ namespace GrafikoMat.ViewModels
         {
             FilteredDoctors.Clear();
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
-
             var filteredResult = (string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
                     d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase)))
                 .ToList();
-
             var duplicateFullNames = filteredResult
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToHashSet();
-
             foreach (var doctor in filteredResult.OrderBy(d => d.LastName).ThenBy(d => d.FirstName))
             {
                 bool needsDifferentiator = duplicateFullNames.Contains(doctor.FullName);
@@ -195,7 +194,6 @@ namespace GrafikoMat.ViewModels
         private async Task SaveDoctorAsync()
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
-
             var newAssignments = EditorViewModel.Assignments.Where(a => a.IsAssigned && !a.IsPersisted).ToList();
             if (newAssignments.Any())
             {
@@ -225,12 +223,20 @@ namespace GrafikoMat.ViewModels
                 {
                     if (isNew)
                     {
-                        await _supabaseService.Client.Auth.SignUp(profile.Email, password);
-                        var userId = _supabaseService.Client.Auth.CurrentUser?.Id;
-                        if (string.IsNullOrWhiteSpace(userId))
-                            throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
+                        if (_supabaseService.Client == null)
+                        {
+                            throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
+                        }
 
-                        profile.Id = Guid.Parse(userId);
+                        // ================== KLUCZOWA POPRAWKA ==================
+                        // Używamy generycznej wersji Rpc<string>, aby otrzymać bezpośrednio wartość tekstową
+                        var newUserIdString = await _supabaseService.Client.Rpc<string>("create_new_user", new { email = profile.Email, password = password });
+                        // =======================================================
+
+                        if (string.IsNullOrWhiteSpace(newUserIdString))
+                            throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (funkcja RPC nie zwróciła ID).");
+
+                        profile.Id = Guid.Parse(newUserIdString);
                         profile.RequiresPasswordChange = true;
                         await _supabaseService.Client.From<DoctorProfile>().Insert(profile);
                         savedProfileId = profile.Id;
@@ -239,7 +245,6 @@ namespace GrafikoMat.ViewModels
                     var desiredAssignments = EditorViewModel.Assignments
                         .Where(a => a.IsAssigned)
                         .Select(a => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = a.UnitId, IsActive = a.IsActive });
-
                     await _doctorRepository.SaveAsync(profile, desiredAssignments);
                 },
                 verificationAsync: async () =>
@@ -274,7 +279,6 @@ namespace GrafikoMat.ViewModels
         private async Task ArchiveDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź archiwizację";
             dialog.Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.DisplayName}?";
@@ -307,7 +311,6 @@ namespace GrafikoMat.ViewModels
         private async Task RestoreDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-
             var restoredDoctorId = SelectedDoctor.Id;
             var restoredDoctorName = SelectedDoctor.DisplayName;
 
@@ -329,7 +332,6 @@ namespace GrafikoMat.ViewModels
         private async Task ResetPasswordAsync()
         {
             if (SelectedDoctor == null || EditorViewModel == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź resetowanie hasła";
             dialog.Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.DisplayName}?";
@@ -382,7 +384,6 @@ namespace GrafikoMat.ViewModels
             var existingAbbreviations = _allDoctorsMasterList
                 .Where(d => d.Id != doctorProfile.Id)
                 .Select(d => d.Abbreviation);
-
             var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
 
             EditorViewModel = new DoctorEditorViewModel(

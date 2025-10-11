@@ -49,7 +49,14 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private List<Chromosome> _population = new();
         private readonly Random _random = new();
 
-        public GeneticSolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        // ZMIANA: Konstruktor został zaktualizowany, aby przyjmować parametry z zewnątrz.
+        public GeneticSolver(
+            ScheduleInput scheduleInput,
+            List<SolverPriority> priorities,
+            int populationSize, // <-- Nowy parametr
+            int generations,    // <-- Nowy parametr
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -57,9 +64,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
 
-            int problemSize = _scheduleInput.Doctors.Count * _scheduleInput.DaysInMonth.Count;
-            _populationSize = Math.Max(50, problemSize / 5);
-            _generations = Math.Max(150, problemSize * 2);
+            _populationSize = populationSize;
+            _generations = generations;
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -84,7 +90,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     Mutation(child);
                     newPopulation.Add(child);
                 });
-
                 _population = newPopulation.ToList();
                 CalculateFitness();
                 _progressReporter?.Report((double)(i + 1) / _generations);
@@ -137,7 +142,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             for (int i = 0; i < days.Count; i++)
             {
-                childGenes[days[i]] = i < crossoverPoint ? parent1.Genes[days[i]] : parent2.Genes[days[i]];
+                childGenes[days[i]] = i < crossoverPoint ?
+                    parent1.Genes[days[i]] : parent2.Genes[days[i]];
             }
 
             ConstraintValidationService.RepairSchedule(childGenes, _scheduleInput);

@@ -5,41 +5,31 @@ using System.Threading;
 
 namespace GrafikoMat.Core.Scheduling.Engines
 {
-    /// <summary>
-    /// Fabryka odpowiedzialna za tworzenie instancji odpowiednich silników generujących grafik.
-    /// </summary>
     public static class ScheduleSolverFactory
     {
         public static IScheduleSolver Create(
-            SolverType solverType,
             ScheduleInput input,
-            List<SolverPriority> priorities,
+            SolverParameters parameters,
+            List<SolverPriority> activePriorities,
             IProgress<double>? progress = null,
             CancellationToken token = default)
         {
-            switch (solverType)
+            switch (parameters.SolverType)
             {
                 case SolverType.Backtracking:
-                    return new BacktrackingSolver(input, priorities, progress, token);
-
+                    return new BacktrackingSolver(input, activePriorities, progress, token);
                 case SolverType.SimulatedAnnealing:
-                    return new SimulatedAnnealingSolver(input, priorities, progress, token);
-
+                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, progress, token);
                 case SolverType.Genetic:
-                    return new GeneticSolver(input, priorities, progress, token);
-
+                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, progress, token);
                 case SolverType.TabuSearch:
-                    return new TabuSearchSolver(input, priorities, progress, token);
-
+                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, progress, token);
                 case SolverType.AntColony:
-                    return new AntColonySolver(input, priorities, progress, token);
-
+                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, progress, token);
                 case SolverType.AStar:
-                    return new AStarSolver(input, priorities, progress, token);
-
+                    return new AStarSolver(input, activePriorities, progress, token);
                 default:
-                    // Domyślnie, w razie braku implementacji, używamy Backtrackingu.
-                    return new BacktrackingSolver(input, priorities, progress, token);
+                    return new BacktrackingSolver(input, activePriorities, progress, token);
             }
         }
     }

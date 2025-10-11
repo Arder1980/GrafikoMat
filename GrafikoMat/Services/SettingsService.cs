@@ -11,9 +11,7 @@ namespace GrafikoMat.Services
 {
     public enum AppTheme { Light, Dark, SystemDefault }
 
-    // NOWA STRUKTURA: Reprezentuje pojedyncze ustawienie priorytetu (typ + czy aktywny)
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
-
     public record AppSettings
     {
         public string SupabaseUrl { get; init; } = string.Empty;
@@ -21,24 +19,32 @@ namespace GrafikoMat.Services
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
         public AppTheme Theme { get; init; } = AppTheme.SystemDefault;
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
-        public WindowPosition LastWindowPosition { get; init; } = new(0, 0); // NOWA WŁAŚCIWOŚĆ
-        public bool WasWindowMaximized { get; init; } = false; // NOWA WŁAŚCIWOŚĆ
+        public WindowPosition LastWindowPosition { get; init; } = new(0, 0);
+        public bool WasWindowMaximized { get; init; } = false;
         public Guid? LastActiveUnitId { get; init; }
 
-        // NOWA WŁAŚCIWOŚĆ: Przechowuje listę ustawień priorytetów
         public List<PrioritySetting> Priorities { get; init; } = new();
+
+        // ================== NOWE WŁAŚCIWOŚCI ==================
+        public double CoolingRate { get; init; } = 0.995;
+        public int GeneticPopulationSize { get; init; } = 100;
+        public int GeneticGenerations { get; init; } = 300;
+        public int AntColonyAnts { get; init; } = 75;
+        public int AntColonyGenerations { get; init; } = 300;
+        public int TabuListSize { get; init; } = 30;
+        public int TabuMaxIterations { get; init; } = 500;
+        // ======================================================
     }
 
     public record WindowSize(int Width, int Height);
 
-    public record WindowPosition(int X, int Y); // NOWY REKORD
+    public record WindowPosition(int X, int Y);
 
     public sealed class SettingsService
     {
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
-
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
             if (_currentSettings != null && !forceReload)
@@ -60,27 +66,21 @@ namespace GrafikoMat.Services
             }
 
             _currentSettings ??= new AppSettings();
-
-            // ZMIANA: Upewnij się, że priorytety istnieją i są kompletne
             if (_currentSettings.Priorities == null || !_currentSettings.Priorities.Any())
             {
-                // Jeśli lista jest pusta (nowe ustawienia), stwórz domyślną
                 _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
             }
             else
             {
-                // Jeśli lista istnieje, sprawdź, czy zawiera wszystkie możliwe priorytety
-                // (na wypadek dodania nowych w przyszłych wersjach enum SolverPriority)
                 var existingPriorities = _currentSettings.Priorities.Select(p => p.Priority).ToHashSet();
                 var allPriorities = (SolverPriority[])Enum.GetValues(typeof(SolverPriority));
                 bool needsUpdate = false;
                 var updatedList = new List<PrioritySetting>(_currentSettings.Priorities);
-
                 foreach (var priority in allPriorities)
                 {
                     if (!existingPriorities.Contains(priority))
                     {
-                        updatedList.Add(new PrioritySetting(priority, true)); // Nowe priorytety domyślnie aktywne
+                        updatedList.Add(new PrioritySetting(priority, true));
                         needsUpdate = true;
                     }
                 }
@@ -98,7 +98,6 @@ namespace GrafikoMat.Services
             if (settings == null) throw new ArgumentNullException(nameof(settings));
             _currentSettings = settings;
             var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            // Używamy synchronicznej metody zapisu do pliku
             File.WriteAllText(_settingsPath, json);
         }
 
@@ -110,7 +109,6 @@ namespace GrafikoMat.Services
             await File.WriteAllTextAsync(_settingsPath, json);
         }
 
-        // NOWA METODA: Tworzy domyślną, początkową listę priorytetów
         private List<PrioritySetting> GetDefaultPriorities()
         {
             return new List<PrioritySetting>

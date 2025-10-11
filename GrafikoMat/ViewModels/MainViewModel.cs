@@ -21,7 +21,6 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
-    // ================== ZMIANA SYGNATURY KLASY ==================
     public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -91,9 +90,7 @@ namespace GrafikoMat.ViewModels
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
-            // ================== NOWA REJESTRACJA ==================
             WeakReferenceMessenger.Default.Register<UnitDataChangedMessage>(this);
-            // =======================================================
         }
 
         public void Receive(SettingsHaveChangedMessage message)
@@ -104,13 +101,11 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ================== NOWA METODA OBSŁUGI ==================
         public async void Receive(UnitDataChangedMessage message)
         {
             await LoadUserAndUnitDataAsync();
             LoadDataForActiveUnit();
         }
-        // ========================================================
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
         {
@@ -136,12 +131,10 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
-
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
             _userUnits.Clear();
-
             if (IsCurrentUserAdmin)
             {
                 var allUnits = await _unitRepository.GetAllAsync();
@@ -246,15 +239,6 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(ActiveUnit))
-            {
-                await SaveCurrentUnitAsync();
-                await UpdateFooterFromSettingsAsync();
-            }
-        }
-
         public async Task SaveCurrentUnitAsync()
         {
             if (_settingsService == null) return;
@@ -311,7 +295,19 @@ namespace GrafikoMat.ViewModels
             var scheduleInput = new ScheduleInput();
             try
             {
-                var solver = ScheduleSolverFactory.Create(settings.SelectedSolver, scheduleInput, activePriorities);
+                // ZMIANA: Tworzymy i przekazujemy nowy, rozbudowany obiekt SolverParameters.
+                var solverParams = new SolverParameters
+                {
+                    SolverType = settings.SelectedSolver,
+                    CoolingRate = settings.CoolingRate,
+                    GeneticPopulationSize = settings.GeneticPopulationSize,
+                    GeneticGenerations = settings.GeneticGenerations,
+                    AntColonyAnts = settings.AntColonyAnts,
+                    AntColonyGenerations = settings.AntColonyGenerations,
+                    TabuListSize = settings.TabuListSize,
+                    TabuMaxIterations = settings.TabuMaxIterations
+                };
+                var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities);
                 var solution = await Task.Run(() => solver.FindOptimalSolution());
             }
             catch (Exception ex) { /* TODO: Błąd */ }

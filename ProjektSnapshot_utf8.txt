@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-09-15 17:47:26
+# Data:       2025-10-11 07:21:24
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -239,7 +239,7 @@ namespace GrafikoMat.Core.Data
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Data\Unit.cs (1160 bytes)
+===== FILE: GrafikoMat.Core\Data\Unit.cs (1557 bytes)
 ----- BEGIN -----
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
@@ -266,6 +266,14 @@ namespace GrafikoMat.Core.Data
         // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
+
+        // ================== NOWA WŁAŚCIWOŚĆ ==================
+        /// <summary>
+        /// Gdy true, dyżury dla tej jednostki domyślnie dzielone są na 12h (Dzień/Noc).
+        /// </summary>
+        [Column("use_twelve_hour_shifts")]
+        public bool UseTwelveHourShiftsByDefault { get; set; } = false;
+        // ======================================================
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
@@ -3353,7 +3361,7 @@ namespace GrafikoMat
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (5901 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (6846 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -3375,28 +3383,23 @@ namespace GrafikoMat.Common
 
     public class BooleanToVisibilityConverter : IValueConverter
     {
-        // ZMIANA: Dodano pełną i poprawną implementację konwertera
         public object Convert(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is bool b && b;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;
             }
-
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
         {
             bool isVisible = value is Visibility v && v == Visibility.Visible;
-
             if (parameter is string s && s.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
             {
                 isVisible = !isVisible;
             }
-
             return isVisible;
         }
     }
@@ -3483,6 +3486,7 @@ namespace GrafikoMat.Common
         }
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
     public class BooleanToBrushConverter : IValueConverter
     {
         public Brush TrueBrush { get; set; }
@@ -3495,6 +3499,31 @@ namespace GrafikoMat.Common
 
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
+
+    // ================== NOWY, WYMAGANY KONWERTER ==================
+    /// <summary>
+    /// Konwertuje wartość typu Enum na Visibility. Zwraca Visible, jeśli wartość
+    /// jest równa wartości podanej w parametrze, w przeciwnym razie Collapsed.
+    /// </summary>
+    public class EnumToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value == null || parameter == null)
+                return Visibility.Collapsed;
+
+            string? enumValue = value.ToString();
+            string? targetValue = parameter.ToString();
+
+            return enumValue == targetValue ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+    // =============================================================
 }
 ----- END -----
 
@@ -3622,7 +3651,7 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml (1037 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml (1154 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Controls.ActionContainer"
@@ -3630,34 +3659,34 @@ namespace GrafikoMat.Common
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:media="using:Microsoft.UI.Xaml.Media">
 
-	<Grid>
-		<ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
+    <Grid>
+        <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
 
-		<Grid x:Name="OverlayHost" Visibility="Collapsed">
+        <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
 
-			<Grid>
-				<Grid.Background>
-					<media:AcrylicBrush
+            <Grid>
+                <Grid.Background>
+                    <media:AcrylicBrush
                         TintOpacity="0.1"
                         TintColor="{ThemeResource SystemChromeAltLowColor}"/>
-				</Grid.Background>
-			</Grid>
+                </Grid.Background>
+            </Grid>
 
-			<ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
+            <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
-			<InfoBar x:Name="ActionInfoBar"
+            <InfoBar x:Name="ActionInfoBar"
                      IsOpen="False"
                      IsClosable="False"
                      HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      MinWidth="340"
                      MaxWidth="500"/>
-		</Grid>
-	</Grid>
+        </Grid>
+    </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (3060 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (2730 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI.Xaml;
@@ -3682,21 +3711,17 @@ namespace GrafikoMat.Controls
         public ActionContainer()
         {
             this.InitializeComponent();
-            // ZMIANA: Zdarzenie Unloaded jest teraz prawidłowo podpięte do wyrejestrowania
             this.Loaded += OnLoaded;
             this.Unloaded += OnUnloaded;
         }
 
-        // ZMIANA: Nowa, bezpieczna metoda obsługi zdarzenia Loaded
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             // Najpierw wyrejestruj, aby uniknąć podwójnej subskrypcji.
-            // To sprawia, że operacja jest bezpieczna do wielokrotnego wywołania.
             WeakReferenceMessenger.Default.UnregisterAll(this);
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        // ZMIANA: Nowa metoda do obsługi Unloaded dla czystości kodu
         private void OnUnloaded(object sender, RoutedEventArgs e)
         {
             WeakReferenceMessenger.Default.UnregisterAll(this);
@@ -3705,7 +3730,6 @@ namespace GrafikoMat.Controls
         public void Receive(ShowBusyOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
-
             DispatcherQueue.TryEnqueue(() =>
             {
                 ActionProgressRing.IsActive = true;
@@ -3717,7 +3741,6 @@ namespace GrafikoMat.Controls
         public void Receive(ShowStatusOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
-
             DispatcherQueue.TryEnqueue(() =>
             {
                 ActionProgressRing.IsActive = false;
@@ -3732,7 +3755,6 @@ namespace GrafikoMat.Controls
         public void Receive(HideOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
-
             DispatcherQueue.TryEnqueue(() =>
             {
                 OverlayHost.Visibility = Visibility.Collapsed;
@@ -4252,7 +4274,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (34208 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (34288 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Core.Data;
@@ -4297,7 +4319,6 @@ namespace GrafikoMat
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
-
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
@@ -4305,8 +4326,6 @@ namespace GrafikoMat
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
-
-        // ZMIANA: Przywrócono pole do śledzenia inicjalizacji rozmiaru
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -4330,7 +4349,6 @@ namespace GrafikoMat
 
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(DragBar);
-
             InitAppWindow();
             ApplyTitleBarMenuStyling();
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
@@ -4343,9 +4361,6 @@ namespace GrafikoMat
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
-            // Stara, błędna logika ustawiania rozmiaru została usunięta.
-            // Ta metoda odpowiada teraz tylko za aktywację/deaktywację tła i paska tytułu.
-
             if (_isClosing) return;
             if (_backdropConfiguration != null)
             {
@@ -4577,9 +4592,12 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
+        // ================== ZMIENIONA METODA ==================
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
+            if (ViewModel.ActiveUnit == null) return; // Zabezpieczenie przed brakiem aktywnej jednostki
+
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
 
@@ -4615,11 +4633,11 @@ namespace GrafikoMat
                 initialIndex,
                 ViewModel.Declarations,
                 ViewModel.IsCurrentUserAdmin,
+                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, // <-- DODANY BRAKUJĄCY ARGUMENT
                 () => {
                     ViewModel.RefreshDeclarationsForDashboard();
                 }
             );
-
             var declarationsView = new DeclarationsView();
 
             void DeclCloseHandler() => SwitchToDashboard();
@@ -4633,10 +4651,10 @@ namespace GrafikoMat
             declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
 
             declarationsView.AttachViewModel(declarationsVm);
-
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
         }
+        // =======================================================
 
         private static void DetachFromParent(FrameworkElement el)
         {
@@ -4778,7 +4796,6 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
             if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
             if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
-
             if (_appWindow?.Presenter is OverlappedPresenter p && _appSettings != null)
             {
                 var pos = _appWindow.Position;
@@ -4982,7 +4999,7 @@ namespace GrafikoMat.Models
 
 ----- END -----
 
-===== FILE: GrafikoMat\Models\GlobalMessages.cs (236 bytes)
+===== FILE: GrafikoMat\Models\GlobalMessages.cs (491 bytes)
 ----- BEGIN -----
 namespace GrafikoMat.Models
 {
@@ -4990,6 +5007,12 @@ namespace GrafikoMat.Models
     /// Wiadomość rozgłaszana w aplikacji, gdy ustawienia (np. silnik, priorytety) zostały zmienione.
     /// </summary>
     public sealed record SettingsHaveChangedMessage;
+
+    /// <summary>
+    /// Wiadomość rozgłaszana, gdy dane jednostek lub lekarzy zostały zmodyfikowane w bazie,
+    /// co wymaga odświeżenia głównych list w MainViewModel.
+    /// </summary>
+    public sealed record UnitDataChangedMessage;
 }
 ----- END -----
 
@@ -5067,7 +5090,7 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Repositories\SupabaseDoctorRepository.cs (4130 bytes)
+===== FILE: GrafikoMat\Repositories\SupabaseDoctorRepository.cs (4351 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
@@ -5092,12 +5115,10 @@ namespace GrafikoMat.Repositories
         public async Task<DoctorProfile?> GetCurrentDoctorProfileAsync()
         {
             if (_supabase.Auth.CurrentUser?.Id is null) return null;
-
             var userId = Guid.Parse(_supabase.Auth.CurrentUser.Id);
             var response = await _supabase.From<DoctorProfile>()
                 .Where(d => d.Id == userId)
                 .Single();
-
             return response;
         }
 
@@ -5127,7 +5148,11 @@ namespace GrafikoMat.Repositories
                     RequiresPasswordChange = profile.RequiresPasswordChange
                 };
 
-                await _supabase.From<DoctorForUpdate>().Update(doctorDataForUpdate);
+                // ================== POPRAWIONA LINIA ==================
+                await _supabase.From<DoctorForUpdate>()
+                    .Where(d => d.Id == profile.Id)
+                    .Update(doctorDataForUpdate);
+                // ======================================================
             }
 
             var assignmentRepo = new SupabaseAssignmentRepository(_supabase);
@@ -5919,33 +5944,38 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (11320 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (16140 bytes)
 ----- BEGIN -----
+using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Models;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
-using CommunityToolkit.Mvvm.Input;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 
 namespace GrafikoMat.ViewModels
 {
+    public enum SlotPart { Full, Day, Night }
+    public record SelectedSlot(int Index, SlotPart Part);
+
     public sealed class DeclarationsViewModel : ObservableObject
     {
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
+        private readonly bool _use12hShiftsByDefault;
 
         public int Year { get; }
         public int MonthIndex { get; }
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
         public ObservableCollection<DoctorProfile> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
-        public HashSet<int> SelectedIndices { get; } = new();
+
+        public HashSet<SelectedSlot> SelectedSlots { get; } = new();
 
         public bool CanSwitchDoctors { get; }
 
@@ -5973,30 +6003,22 @@ namespace GrafikoMat.ViewModels
         public ICommand SelectPrevDoctorCommand { get; }
 
         public DeclarationsViewModel(
-            int year,
-            int monthIndex,
-            List<DoctorProfile> doctors,
-            int initialDoctorIndex,
-            Dictionary<string, DoctorMonthDeclaration> sharedDeclarations,
-            bool isAdmin,
-            Action onSaveCallback)
+            int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
+            Dictionary<string, DoctorMonthDeclaration> sharedDeclarations, bool isAdmin,
+            bool use12hShifts, Action onSaveCallback)
         {
             Year = year;
             MonthIndex = monthIndex;
             _sharedDeclarations = sharedDeclarations;
             CanSwitchDoctors = isAdmin;
             _onSaveCallback = onSaveCallback;
+            _use12hShiftsByDefault = use12hShifts;
 
             doctors.ForEach(d => Doctors.Add(d));
             _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
-            SaveCommand = new RelayCommand(() =>
-            {
-                CommitChangesToSharedState();
-                _onSaveCallback?.Invoke();
-            });
+            SaveCommand = new RelayCommand(() => { CommitChangesToSharedState(); _onSaveCallback?.Invoke(); });
             ClearSelectionCommand = new RelayCommand(ClearSelection);
-
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
 
@@ -6008,21 +6030,19 @@ namespace GrafikoMat.ViewModels
         {
             DayCells.Clear();
             var firstDay = new DateTime(Year, MonthIndex + 1, 1);
-            int offset = ((int)firstDay.DayOfWeek + 6) % 7; // pon=0
+            int offset = ((int)firstDay.DayOfWeek + 6) % 7;
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
             int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
             var startDate = firstDay.AddDays(-offset);
-
             for (int i = 0; i < weeks * 7; i++)
             {
                 var date = startDate.AddDays(i);
-                bool inMonth = (date.Month == MonthIndex + 1);
+                var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
+                    date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
+                    !string.IsNullOrEmpty(PolishHolidays.GetHolidayName(date)),
+                    PolishHolidays.GetHolidayName(date));
 
-                var holiday = PolishHolidays.GetHolidayName(date);
-                bool isWeekend = (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday);
-                bool isHoliday = !string.IsNullOrEmpty(holiday);
-
-                var cell = new DayCell(i, date, inMonth, isWeekend, isHoliday, holiday);
+                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
                 DayCells.Add(cell);
             }
         }
@@ -6030,15 +6050,18 @@ namespace GrafikoMat.ViewModels
         private void LoadDeclarationsForSelectedDoctor()
         {
             ClearSelection();
-            foreach (var cell in DayCells) cell.ClearData();
+            foreach (var cell in DayCells)
+            {
+                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
+                cell.ClearData();
+            }
             if (SelectedDoctor == null) return;
 
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             if (_sharedDeclarations.TryGetValue(key, out var decl))
             {
-                foreach (var cell in DayCells)
+                foreach (var cell in DayCells.Where(c => c.InMonth))
                 {
-                    if (!cell.InMonth) continue;
                     int dayIdx = cell.Date.Day - 1;
                     if (dayIdx >= 0 && dayIdx < decl.Days.Length)
                     {
@@ -6057,7 +6080,6 @@ namespace GrafikoMat.ViewModels
             if (SelectedDoctor == null) return;
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
-
             var result = new DoctorMonthDeclaration
             {
                 Doctor = SelectedDoctor.FullName,
@@ -6083,7 +6105,6 @@ namespace GrafikoMat.ViewModels
                     result.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
                 }
             }
-
             _sharedDeclarations[key] = result;
         }
 
@@ -6099,32 +6120,121 @@ namespace GrafikoMat.ViewModels
                 SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
         }
 
-        public void SelectSingle(int index)
+        public void SelectSingleSlot(int index, SlotPart part)
         {
-            SelectedIndices.Clear();
-            if (index >= 0 && index < DayCells.Count) SelectedIndices.Add(index);
+            SelectedSlots.Clear();
+            if (index >= 0 && index < DayCells.Count)
+            {
+                SelectedSlots.Add(new SelectedSlot(index, part));
+            }
             UpdateSelectionVisuals();
         }
 
-        public void SelectRange(int a, int b)
+        public void ToggleSlotSelection(int index, SlotPart part)
         {
-            SelectedIndices.Clear();
-            int start = Math.Min(a, b);
-            int end = Math.Max(a, b);
-            for (int i = start; i <= end; i++) SelectedIndices.Add(i);
+            if (index < 0 || index >= DayCells.Count) return;
+
+            var slotToToggle = new SelectedSlot(index, part);
+            if (SelectedSlots.Contains(slotToToggle))
+            {
+                SelectedSlots.Remove(slotToToggle);
+            }
+            else
+            {
+                SelectedSlots.Add(slotToToggle);
+            }
+            UpdateSelectionVisuals();
+        }
+
+        public void SelectRange(int startIndex, int endIndex, SlotPart partToSelect)
+        {
+            SelectedSlots.Clear();
+            int start = Math.Min(startIndex, endIndex);
+            int end = Math.Max(startIndex, endIndex);
+
+            for (int i = start; i <= end; i++)
+            {
+                var cell = DayCells[i];
+                if (!cell.InMonth) continue;
+
+                if (cell.IsSplit)
+                {
+                    if (partToSelect == SlotPart.Day || partToSelect == SlotPart.Night)
+                    {
+                        SelectedSlots.Add(new SelectedSlot(i, partToSelect));
+                    }
+                }
+                else
+                {
+                    if (partToSelect == SlotPart.Full)
+                    {
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
+                    }
+                }
+            }
+            UpdateSelectionVisuals();
+        }
+
+        public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
+        {
+            SelectedSlots.Clear();
+            int start = Math.Min(startIndex, endIndex);
+            int end = Math.Max(startIndex, endIndex);
+
+            bool expandToFullDays = (startPart != endPart) &&
+                                    (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
+                                    (endPart == SlotPart.Day || endPart == SlotPart.Night);
+
+            for (int i = start; i <= end; i++)
+            {
+                var cell = DayCells[i];
+                if (!cell.InMonth) continue;
+
+                if (expandToFullDays && cell.IsSplit)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                    SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
+                }
+                else
+                {
+                    if (cell.IsSplit)
+                    {
+                        if (startPart == SlotPart.Day || startPart == SlotPart.Night)
+                        {
+                            SelectedSlots.Add(new SelectedSlot(i, startPart));
+                        }
+                    }
+                    else
+                    {
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
+                    }
+                }
+            }
             UpdateSelectionVisuals();
         }
 
         public void ClearSelection()
         {
-            SelectedIndices.Clear();
+            SelectedSlots.Clear();
             UpdateSelectionVisuals();
         }
 
         private void UpdateSelectionVisuals()
         {
-            foreach (var c in DayCells)
-                c.SetSelected(SelectedIndices.Contains(c.Index));
+            var selectedByCellIndex = SelectedSlots.GroupBy(s => s.Index)
+                .ToDictionary(g => g.Key, g => g.Select(s => s.Part).ToHashSet());
+
+            foreach (var cell in DayCells)
+            {
+                if (selectedByCellIndex.TryGetValue(cell.Index, out var selectedParts))
+                {
+                    cell.UpdateSelection(selectedParts);
+                }
+                else
+                {
+                    cell.UpdateSelection(new HashSet<SlotPart>());
+                }
+            }
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
@@ -6144,7 +6254,6 @@ namespace GrafikoMat.ViewModels
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        // Pędzle publiczne, aby Widok mógł je ustawić
         public Brush EffectiveBackground { get; set; }
         public Brush EffectiveBorderBrush { get; set; }
         public Brush DayNumberForeground { get; set; }
@@ -6162,25 +6271,54 @@ namespace GrafikoMat.ViewModels
         private string _symbolNight = "";
         public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
 
-        private bool _isSelected;
-        public bool IsSelected { get; private set; }
+        private bool _isFullSelected;
+        public bool IsFullSelected { get => _isFullSelected; private set => SetProperty(ref _isFullSelected, value); }
 
-        public void SetSelected(bool selected)
+        private bool _isDaySelected;
+        public bool IsDaySelected { get => _isDaySelected; private set => SetProperty(ref _isDaySelected, value); }
+
+        private bool _isNightSelected;
+        public bool IsNightSelected { get => _isNightSelected; private set => SetProperty(ref _isNightSelected, value); }
+
+        private Thickness _daySelectionBorderThickness = new Thickness(0);
+        public Thickness DaySelectionBorderThickness { get => _daySelectionBorderThickness; private set => SetProperty(ref _daySelectionBorderThickness, value); }
+
+        private Thickness _nightSelectionBorderThickness = new Thickness(0);
+        public Thickness NightSelectionBorderThickness { get => _nightSelectionBorderThickness; private set => SetProperty(ref _nightSelectionBorderThickness, value); }
+
+        public void UpdateSelection(HashSet<SlotPart> selectedParts)
         {
-            if (IsSelected == selected) return;
-            IsSelected = selected;
-            OnPropertyChanged(nameof(IsSelected));        // ← to było brakujące
-            OnPropertyChanged(nameof(BorderThickness));
-        }
+            IsFullSelected = selectedParts.Contains(SlotPart.Full);
+            IsDaySelected = selectedParts.Contains(SlotPart.Day);
+            IsNightSelected = selectedParts.Contains(SlotPart.Night);
 
-        public Thickness BorderThickness => IsSelected ? new Thickness(2.0) : new Thickness(1.0);
+            if (IsDaySelected && IsNightSelected)
+            {
+                DaySelectionBorderThickness = new Thickness(4, 4, 4, 2);
+                NightSelectionBorderThickness = new Thickness(4, 2, 4, 4);
+            }
+            else if (IsDaySelected)
+            {
+                DaySelectionBorderThickness = new Thickness(4);
+                NightSelectionBorderThickness = new Thickness(0);
+            }
+            else if (IsNightSelected)
+            {
+                NightSelectionBorderThickness = new Thickness(4);
+                DaySelectionBorderThickness = new Thickness(0);
+            }
+            else
+            {
+                DaySelectionBorderThickness = new Thickness(0);
+                NightSelectionBorderThickness = new Thickness(0);
+            }
+        }
 
         public void ClearData()
         {
             SymbolFull = "";
             SymbolDay = "";
             SymbolNight = "";
-            IsSplit = false;
         }
 
         public DayCell(int index, DateTime date, bool inMonth, bool isWeekend, bool isHoliday, string? holidayName)
@@ -6192,7 +6330,6 @@ namespace GrafikoMat.ViewModels
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            // Inicjalizacja pustymi pędzlami - Widok nada im właściwe kolory
             EffectiveBackground = new SolidColorBrush();
             EffectiveBorderBrush = new SolidColorBrush();
             DayNumberForeground = new SolidColorBrush();
@@ -6626,7 +6763,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (16493 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (17070 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -6651,7 +6788,8 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>
+    // ================== ZMIANA SYGNATURY KLASY ==================
+    public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -6720,16 +6858,26 @@ namespace GrafikoMat.ViewModels
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
             UpdateRosterForSelectedMonth();
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
+            // ================== NOWA REJESTRACJA ==================
+            WeakReferenceMessenger.Default.Register<UnitDataChangedMessage>(this);
+            // =======================================================
         }
 
         public void Receive(SettingsHaveChangedMessage message)
         {
-            // Użycie EnqueueAsync jest nadal poprawne dla operacji UI
             if (App.MainRoot?.DispatcherQueue != null)
             {
                 _ = App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
             }
         }
+
+        // ================== NOWA METODA OBSŁUGI ==================
+        public async void Receive(UnitDataChangedMessage message)
+        {
+            await LoadUserAndUnitDataAsync();
+            LoadDataForActiveUnit();
+        }
+        // ========================================================
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
         {
@@ -6755,10 +6903,12 @@ namespace GrafikoMat.ViewModels
 
             var userProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (userProfile == null) return;
+
             CurrentUserName = $"Zalogowano jako: {userProfile.FullName}";
             IsCurrentUserAdmin = userProfile.IsAdmin;
             OnPropertyChanged(nameof(IsCurrentUserAdmin));
             _userUnits.Clear();
+
             if (IsCurrentUserAdmin)
             {
                 var allUnits = await _unitRepository.GetAllAsync();
@@ -6848,7 +6998,6 @@ namespace GrafikoMat.ViewModels
 
                 bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
                 date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
-
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }
@@ -6967,7 +7116,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (16707 bytes)
+===== FILE: GrafikoMat\ViewModels\ManagementViewModel.cs (17247 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -6976,6 +7125,7 @@ using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
+using Supabase.Gotrue;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7074,6 +7224,7 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
         public async Task InitializeAsync()
         {
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
@@ -7116,19 +7267,16 @@ namespace GrafikoMat.ViewModels
         {
             FilteredDoctors.Clear();
             var sourceList = ShowArchived ? _allDoctorsMasterList : _allDoctorsMasterList.Where(d => !d.IsArchived);
-
             var filteredResult = (string.IsNullOrWhiteSpace(SearchText)
                 ? sourceList
                 : sourceList.Where(d =>
                     d.FullName.Contains(SearchText, StringComparison.InvariantCultureIgnoreCase)))
                 .ToList();
-
             var duplicateFullNames = filteredResult
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToHashSet();
-
             foreach (var doctor in filteredResult.OrderBy(d => d.LastName).ThenBy(d => d.FirstName))
             {
                 bool needsDifferentiator = duplicateFullNames.Contains(doctor.FullName);
@@ -7166,7 +7314,6 @@ namespace GrafikoMat.ViewModels
         private async Task SaveDoctorAsync()
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
-
             var newAssignments = EditorViewModel.Assignments.Where(a => a.IsAssigned && !a.IsPersisted).ToList();
             if (newAssignments.Any())
             {
@@ -7196,12 +7343,20 @@ namespace GrafikoMat.ViewModels
                 {
                     if (isNew)
                     {
-                        await _supabaseService.Client.Auth.SignUp(profile.Email, password);
-                        var userId = _supabaseService.Client.Auth.CurrentUser?.Id;
-                        if (string.IsNullOrWhiteSpace(userId))
-                            throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (brak CurrentUser).");
+                        if (_supabaseService.Client == null)
+                        {
+                            throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
+                        }
 
-                        profile.Id = Guid.Parse(userId);
+                        // ================== KLUCZOWA POPRAWKA ==================
+                        // Używamy generycznej wersji Rpc<string>, aby otrzymać bezpośrednio wartość tekstową
+                        var newUserIdString = await _supabaseService.Client.Rpc<string>("create_new_user", new { email = profile.Email, password = password });
+                        // =======================================================
+
+                        if (string.IsNullOrWhiteSpace(newUserIdString))
+                            throw new Exception("Nie udało się utworzyć użytkownika w Supabase Auth (funkcja RPC nie zwróciła ID).");
+
+                        profile.Id = Guid.Parse(newUserIdString);
                         profile.RequiresPasswordChange = true;
                         await _supabaseService.Client.From<DoctorProfile>().Insert(profile);
                         savedProfileId = profile.Id;
@@ -7210,7 +7365,6 @@ namespace GrafikoMat.ViewModels
                     var desiredAssignments = EditorViewModel.Assignments
                         .Where(a => a.IsAssigned)
                         .Select(a => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = a.UnitId, IsActive = a.IsActive });
-
                     await _doctorRepository.SaveAsync(profile, desiredAssignments);
                 },
                 verificationAsync: async () =>
@@ -7245,7 +7399,6 @@ namespace GrafikoMat.ViewModels
         private async Task ArchiveDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź archiwizację";
             dialog.Content = $"Czy na pewno chcesz zarchiwizować profil lekarza {SelectedDoctor.DisplayName}?";
@@ -7278,7 +7431,6 @@ namespace GrafikoMat.ViewModels
         private async Task RestoreDoctorAsync()
         {
             if (SelectedDoctor == null) return;
-
             var restoredDoctorId = SelectedDoctor.Id;
             var restoredDoctorName = SelectedDoctor.DisplayName;
 
@@ -7300,7 +7452,6 @@ namespace GrafikoMat.ViewModels
         private async Task ResetPasswordAsync()
         {
             if (SelectedDoctor == null || EditorViewModel == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź resetowanie hasła";
             dialog.Content = $"Czy na pewno chcesz zresetować hasło dla użytkownika {SelectedDoctor.DisplayName}?";
@@ -7353,7 +7504,6 @@ namespace GrafikoMat.ViewModels
             var existingAbbreviations = _allDoctorsMasterList
                 .Where(d => d.Id != doctorProfile.Id)
                 .Select(d => d.Abbreviation);
-
             var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
 
             EditorViewModel = new DoctorEditorViewModel(
@@ -8055,7 +8205,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (11011 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (12385 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -8076,9 +8226,11 @@ namespace GrafikoMat.Views
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33000000"/>
+                    <SolidColorBrush x:Key="CalendarCellHeaderSeparatorBrush" Color="#1A000000"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33FFFFFF"/>
+                    <SolidColorBrush x:Key="CalendarCellHeaderSeparatorBrush" Color="#1AFFFFFF"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -8107,38 +8259,24 @@ namespace GrafikoMat.Views
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-
-            <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2"
-                       Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}"/>
-
+            <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2" Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}"/>
             <Grid Grid.Row="1">
-                <StackPanel Orientation="Horizontal" Spacing="8"
-                            Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                    <Button Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets"
-                            Command="{x:Bind ViewModel.SelectPrevDoctorCommand}"
-                            ToolTipService.ToolTip="Poprzedni lekarz"/>
-                    <ComboBox ItemsSource="{x:Bind ViewModel.Doctors, Mode=OneWay}"
-                              SelectedIndex="{x:Bind ViewModel.SelectedDoctorIndex, Mode=TwoWay}"
-                              MinWidth="180" HorizontalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Button Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Command="{x:Bind ViewModel.SelectPrevDoctorCommand}" ToolTipService.ToolTip="Poprzedni lekarz"/>
+                    <ComboBox ItemsSource="{x:Bind ViewModel.Doctors, Mode=OneWay}" SelectedIndex="{x:Bind ViewModel.SelectedDoctorIndex, Mode=TwoWay}" MinWidth="180" HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="data:DoctorProfile">
                                 <TextBlock Text="{x:Bind FullName}"/>
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <Button Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets"
-                            Command="{x:Bind ViewModel.SelectNextDoctorCommand}"
-                            ToolTipService.ToolTip="Następny lekarz"/>
+                    <Button Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets" Command="{x:Bind ViewModel.SelectNextDoctorCommand}" ToolTipService.ToolTip="Następny lekarz"/>
                 </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Spacing="8"
-                            Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                     <TextBlock Text="Lekarz:" VerticalAlignment="Center" Opacity="0.9"/>
-                    <TextBlock Text="{x:Bind ViewModel.SelectedDoctor.FullName, Mode=OneWay, FallbackValue='.'}"
-                               VerticalAlignment="Center" FontWeight="SemiBold"/>
+                    <TextBlock Text="{x:Bind ViewModel.SelectedDoctor.FullName, Mode=OneWay, FallbackValue='.'}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </StackPanel>
             </Grid>
-
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="Limity:" VerticalAlignment="Center" Opacity="0.85"/>
                 <TextBox Width="120" IsEnabled="False" PlaceholderText="wkrótce."/>
@@ -8150,7 +8288,6 @@ namespace GrafikoMat.Views
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-
             <Grid Padding="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -8162,25 +8299,20 @@ namespace GrafikoMat.Views
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="Poniedziałek" HorizontalAlignment="Center" Opacity="0.8"/>
-                <TextBlock Grid.Column="1" Text="Wtorek"       HorizontalAlignment="Center" Opacity="0.8"/>
-                <TextBlock Grid.Column="2" Text="Środa"        HorizontalAlignment="Center" Opacity="0.8"/>
-                <TextBlock Grid.Column="3" Text="Czwartek"     HorizontalAlignment="Center" Opacity="0.8"/>
-                <TextBlock Grid.Column="4" Text="Piątek"       HorizontalAlignment="Center" Opacity="0.8"/>
-                <TextBlock Grid.Column="5" Text="Sobota"       HorizontalAlignment="Center" Opacity="0.6"/>
-                <TextBlock Grid.Column="6" Text="Niedziela"    HorizontalAlignment="Center" Opacity="0.6"/>
+                <TextBlock Grid.Column="1" Text="Wtorek" HorizontalAlignment="Center" Opacity="0.8"/>
+                <TextBlock Grid.Column="2" Text="Środa" HorizontalAlignment="Center" Opacity="0.8"/>
+                <TextBlock Grid.Column="3" Text="Czwartek" HorizontalAlignment="Center" Opacity="0.8"/>
+                <TextBlock Grid.Column="4" Text="Piątek" HorizontalAlignment="Center" Opacity="0.8"/>
+                <TextBlock Grid.Column="5" Text="Sobota" HorizontalAlignment="Center" Opacity="0.6"/>
+                <TextBlock Grid.Column="6" Text="Niedziela" HorizontalAlignment="Center" Opacity="0.6"/>
             </Grid>
 
-            <GridView Grid.Row="1"
-                      x:Name="CalendarGridView"
-                      ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}"
-                      SelectionMode="None"
-                      IsItemClickEnabled="False">
+            <GridView Grid.Row="1" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                
                 <GridView.ItemContainerStyle>
                     <Style TargetType="GridViewItem">
                         <Setter Property="Padding" Value="0"/>
@@ -8189,53 +8321,63 @@ namespace GrafikoMat.Views
                         <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                     </Style>
                 </GridView.ItemContainerStyle>
-
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
-                        <Border
-                            IsHitTestVisible="False"
-                            Background="{x:Bind EffectiveBackground, Mode=OneWay}"
-                            BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}"
-                            BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
-                            CornerRadius="4">
+                        <Border IsHitTestVisible="False" Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.5}"
+                                Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <Border Grid.Row="0"
-                                        Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}"
-                                        CornerRadius="4,4,0,0"/>
+                                <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="{x:Bind DayNumber}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{x:Bind DayNumberForeground}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{x:Bind HolidayName}"
-                                               Visibility="{x:Bind HolidayVisibility, Mode=OneWay}"
-                                               FontSize="11" Opacity="0.9"
-                                               HorizontalAlignment="Left" VerticalAlignment="Center"
-                                               Margin="6,0,0,0"/>
+                                    <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" FontSize="11" Opacity="0.9" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </Grid>
-                                <Grid Grid.Row="1">
-                                    <TextBlock Style="{StaticResource SymbolTextBlock}"
-                                               Text="{x:Bind SymbolFull, Mode=OneWay}"
-                                               Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                                <Grid Grid.Row="1" MinHeight="48">
+                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                                        <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"/>
+                                    </Grid>
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="*"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-                                        <Border BorderBrush="{ThemeResource CalendarCellBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Center"/>
+                                        <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                        </Viewbox>
+                                        <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                        </Viewbox>
+                                        <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
                                         <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
                                         <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
                                     </Grid>
+                                </Grid>
+
+                                <Border BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4"/>
+
+                                <Border BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="4"
+                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay}">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
+                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                    <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
+                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -8247,19 +8389,23 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (9468 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (16215 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Input; // dla InputKeyboardSource/CoreVirtualKeyStates
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
-using System.Linq;
+using System.ComponentModel;
+using System.Runtime.InteropServices; // P/Invoke GetKeyState
 using Windows.Foundation;
+using Windows.System;
 using Windows.UI;
+using Windows.UI.Core;
 
 namespace GrafikoMat.Views
 {
@@ -8272,8 +8418,26 @@ namespace GrafikoMat.Views
         public void OnDeclSaveAndCloseOnly() => SaveAndCloseRequested?.Invoke();
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
+
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
+        private SlotPart _dragStartSlotPart;
+        private SelectedSlot? _lastClickedSlot;
+
+        // Jednorazowe wytłumienie Tapped/DoubleTapped po Ctrl-toggle
+        private bool _suppressNextTapOnce = false;
+
+        // Lokalny stan klawiszy – plan C
+        private bool _ctrlDown = false;
+        private bool _shiftDown = false;
+
+        // P/Invoke: najpewniejsza detekcja stanu Ctrl/Shift na Desktop
+        [DllImport("user32.dll")]
+        private static extern short GetKeyState(int nVirtKey);
+        private const int VK_CONTROL = 0x11;
+        private const int VK_SHIFT = 0x10;
+        private static bool IsCtrlDownNative() => (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        private static bool IsShiftDownNative() => (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
         public DeclarationsView()
         {
@@ -8281,145 +8445,149 @@ namespace GrafikoMat.Views
             this.ActualThemeChanged += OnThemeChanged;
             this.Unloaded += OnDeclarationsViewUnloaded;
 
-            // Rejestrujemy obsługę zdarzeń myszy dla całej kontrolki GridView
-            // Użycie AddHandler z 'handledEventsToo = true' gwarantuje, że zdarzenia do nas dotrą
             this.Loaded += (_, __) =>
             {
-                CalendarGridView.AddHandler(PointerPressedEvent, new PointerEventHandler(Calendar_PointerPressed), true);
-                CalendarGridView.AddHandler(PointerMovedEvent, new PointerEventHandler(Calendar_PointerMoved), true);
-                CalendarGridView.AddHandler(PointerReleasedEvent, new PointerEventHandler(Calendar_PointerReleased), true);
-                CalendarGridView.AddHandler(PointerExitedEvent, new PointerEventHandler(Calendar_PointerExited), true);
-                CalendarGridView.AddHandler(RightTappedEvent, new RightTappedEventHandler(Calendar_RightTapped), true);
+                CalendarGridView.AddHandler(PointerPressedEvent, new PointerEventHandler(Calendar_PointerPressed), handledEventsToo: true);
+                CalendarGridView.AddHandler(PointerMovedEvent, new PointerEventHandler(Calendar_PointerMoved), handledEventsToo: true);
+                CalendarGridView.AddHandler(PointerReleasedEvent, new PointerEventHandler(Calendar_PointerReleased), handledEventsToo: true);
+                CalendarGridView.AddHandler(PointerExitedEvent, new PointerEventHandler(Calendar_PointerExited), handledEventsToo: true);
+                CalendarGridView.AddHandler(RightTappedEvent, new RightTappedEventHandler(Calendar_RightTapped), handledEventsToo: true);
+
+                // tłumienie pojedynczego wyboru po naszym togglu
+                CalendarGridView.AddHandler(TappedEvent, new TappedEventHandler(Calendar_Tapped), handledEventsToo: true);
+                CalendarGridView.AddHandler(DoubleTappedEvent, new DoubleTappedEventHandler(Calendar_DoubleTapped), handledEventsToo: true);
+
+                // stabilne śledzenie klawiszy na samej siatce
+                CalendarGridView.KeyDown += CalendarGridView_KeyDown;
+                CalendarGridView.KeyUp += CalendarGridView_KeyUp;
             };
         }
 
         public void AttachViewModel(DeclarationsViewModel vm)
         {
             this.DataContext = vm;
+            if (vm != null)
+            {
+                vm.PropertyChanged += Vm_PropertyChanged;
+            }
             UpdateAllCellBrushes();
         }
 
-        private void UpdateCellBrushes(DayCell cell)
+        private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
-            var borderSelected = Color.FromArgb(0xFF, 0x33, 0x99, 0xFF);
-
-            if (currentTheme == ElementTheme.Light)
+            if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
-                var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);
-                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);
-                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
-                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);
-                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);
-                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
-                var textMuted = Color.FromArgb(0x1A, 0, 0, 0);
-
-                Color bgColor, borderColor, numFgColor, headerBgColor;
-
-                if (cell.InMonth)
-                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
-                else
-                    bgColor = transparent;
-
-                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
-                borderColor = cell.InMonth ? borderLight : borderOther;
-                numFgColor = cell.InMonth ? textNormal : textMuted;
-
-                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
-                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
-                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
-                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
-            }
-            else // Dark Theme
-            {
-                var transparent = Colors.Transparent;
-                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
-                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);
-                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
-                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
-                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);
-                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);
-                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
-                var textMuted = Color.FromArgb(0x1A, 255, 255, 255);
-
-                Color bgColor, borderColor, numFgColor, headerBgColor;
-
-                if (cell.InMonth)
-                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
-                else
-                    bgColor = transparent;
-
-                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
-                borderColor = cell.InMonth ? borderLight : borderOther;
-                numFgColor = cell.InMonth ? textNormal : textMuted;
-
-                (cell.EffectiveBackground as SolidColorBrush).Color = bgColor;
-                (cell.EffectiveBorderBrush as SolidColorBrush).Color = cell.IsSelected ? borderSelected : borderColor;
-                (cell.DayNumberForeground as SolidColorBrush).Color = numFgColor;
-                (cell.EffectiveHeaderBackground as SolidColorBrush).Color = headerBgColor;
-            }
-
-            cell.NotifyBrushUpdate();
-        }
-
-        private void OnThemeChanged(FrameworkElement sender, object args)
-        {
-            UpdateAllCellBrushes();
-        }
-
-        private void UpdateAllCellBrushes()
-        {
-            if (ViewModel?.DayCells == null) return;
-            foreach (var cell in ViewModel.DayCells)
-            {
-                UpdateCellBrushes(cell);
+                _lastClickedSlot = null;
+                UpdateAllCellBrushes();
             }
         }
 
-        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        private (int index, SlotPart part) GetIndexAndSlotFromPoint(Point p)
         {
-            this.ActualThemeChanged -= OnThemeChanged;
-            this.Unloaded -= OnDeclarationsViewUnloaded;
-        }
-
-        private int GetIndexFromPoint(Point p)
-        {
-            if (ViewModel == null || ViewModel.DayCells.Count == 0 || p.X < 0 || p.Y < 0) return -1;
+            if (ViewModel == null || ViewModel.DayCells.Count == 0 || p.X < 0 || p.Y < 0)
+                return (-1, SlotPart.Full);
 
             var grid = CalendarGridView;
             for (int i = 0; i < ViewModel.DayCells.Count; i++)
             {
-                if (grid.ContainerFromIndex(i) is FrameworkElement container)
+                if (grid.ContainerFromIndex(i) is FrameworkElement container && container.ActualHeight > 0)
                 {
                     var transform = container.TransformToVisual(grid);
                     var bounds = transform.TransformBounds(new Rect(0, 0, container.ActualWidth, container.ActualHeight));
                     if (bounds.Contains(p))
                     {
-                        return i;
+                        var cellVM = ViewModel.DayCells[i];
+                        if (!cellVM.IsSplit)
+                        {
+                            return (i, SlotPart.Full);
+                        }
+                        else
+                        {
+                            var relativeY = p.Y - bounds.Top;
+                            var headerHeight = 24;
+                            var contentHeight = container.ActualHeight - headerHeight;
+                            if (relativeY < headerHeight) return (i, SlotPart.Day);
+                            var part = (relativeY < headerHeight + contentHeight / 2) ? SlotPart.Day : SlotPart.Night;
+                            return (i, part);
+                        }
                     }
                 }
             }
-            return -1;
+            return (-1, SlotPart.Full);
+        }
+
+        private static bool IsCtrlPressedCombined(VirtualKeyModifiers mods)
+        {
+            // 1) z eventu
+            bool byMods = (mods & VirtualKeyModifiers.Control) == VirtualKeyModifiers.Control;
+            // 2) globalnie (WinUI)
+            bool byWinUI = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down;
+            // 3) natywnie (user32)
+            bool byNative = IsCtrlDownNative();
+            return byMods || byWinUI || byNative;
+        }
+
+        private static bool IsShiftPressedCombined(VirtualKeyModifiers mods)
+        {
+            bool byMods = (mods & VirtualKeyModifiers.Shift) == VirtualKeyModifiers.Shift;
+            bool byWinUI = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down;
+            bool byNative = IsShiftDownNative();
+            return byMods || byWinUI || byNative;
         }
 
         private void Calendar_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (ViewModel == null) return;
-            var point = e.GetCurrentPoint(CalendarGridView).Position;
-            int index = GetIndexFromPoint(point);
 
-            if (index != -1 && ViewModel.DayCells[index].IsInteractive)
+            var pointInfo = e.GetCurrentPoint(CalendarGridView);
+            if (!pointInfo.Properties.IsLeftButtonPressed)
+                return;
+
+            // Fokus na siatkę – KeyDown/Up zaczną działać po pierwszym kliknięciu
+            CalendarGridView.Focus(FocusState.Pointer);
+
+            var (index, slotPart) = GetIndexAndSlotFromPoint(pointInfo.Position);
+            if (index == -1 || !ViewModel.DayCells[index].InMonth)
+                return;
+
+            var mods = e.KeyModifiers;
+
+            // Detekcja CTRL/SHIFT: 4 źródła (KeyModifiers, WinUI, native, lokalne flagi)
+            bool isCtrlPressed = IsCtrlPressedCombined(mods) || _ctrlDown;
+            bool isShiftPressed = IsShiftPressedCombined(mods) || _shiftDown;
+
+            e.Handled = true; // selekcją zarządzamy wyłącznie tutaj
+
+            // 1) CTRL – toggle (PRIORYTET). Zero drag, zero CapturePointer.
+            if (isCtrlPressed)
             {
-                _isDragging = true;
-                _dragStartIndex = index;
-                CalendarGridView.CapturePointer(e.Pointer);
+                _isDragging = false;
 
-                ViewModel.SelectSingle(index);
-                UpdateAllCellBrushes();
-                e.Handled = true;
+                ViewModel.ToggleSlotSelection(index, slotPart);
+                _lastClickedSlot = new SelectedSlot(index, slotPart);
+
+                // Jednorazowo tłumimy ewentualny Tapped/DoubleTapped z kontenera itemu
+                _suppressNextTapOnce = true;
+                return;
             }
+
+            // 2) SHIFT – zakres od ostatniego kliknięcia
+            if (isShiftPressed && _lastClickedSlot != null)
+            {
+                _isDragging = false;
+
+                ViewModel.SelectDragRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part, slotPart);
+                return;
+            }
+
+            // 3) Brak modyfikatorów – single + przygotowanie pod drag-select
+            _isDragging = true;
+            _dragStartIndex = index;
+            _dragStartSlotPart = slotPart;
+            CalendarGridView.CapturePointer(e.Pointer);
+
+            ViewModel.SelectSingleSlot(index, slotPart);
+            _lastClickedSlot = new SelectedSlot(index, slotPart);
         }
 
         private void Calendar_PointerMoved(object sender, PointerRoutedEventArgs e)
@@ -8427,12 +8595,11 @@ namespace GrafikoMat.Views
             if (ViewModel != null && _isDragging)
             {
                 var point = e.GetCurrentPoint(CalendarGridView).Position;
-                int index = GetIndexFromPoint(point);
+                var (currentIndex, currentPart) = GetIndexAndSlotFromPoint(point);
 
-                if (index != -1 && ViewModel.DayCells[index].IsInteractive)
+                if (currentIndex != -1 && ViewModel.DayCells[currentIndex].InMonth)
                 {
-                    ViewModel.SelectRange(_dragStartIndex, index);
-                    UpdateAllCellBrushes();
+                    ViewModel.SelectDragRange(_dragStartIndex, currentIndex, _dragStartSlotPart, currentPart);
                     e.Handled = true;
                 }
             }
@@ -8462,24 +8629,150 @@ namespace GrafikoMat.Views
         {
             if (ViewModel == null) return;
             var point = e.GetPosition(CalendarGridView);
-            int index = GetIndexFromPoint(point);
+            var (index, slotPart) = GetIndexAndSlotFromPoint(point);
 
             var tappedCell = (index >= 0 && index < ViewModel.DayCells.Count) ? ViewModel.DayCells[index] : null;
 
-            if (tappedCell != null && tappedCell.IsInteractive)
+            if (tappedCell != null && tappedCell.InMonth)
             {
-                if (!ViewModel.SelectedIndices.Contains(tappedCell.Index))
+                var currentSelection = new SelectedSlot(index, slotPart);
+                if (!ViewModel.SelectedSlots.Contains(currentSelection))
                 {
-                    ViewModel.SelectSingle(tappedCell.Index);
-                    UpdateAllCellBrushes();
+                    ViewModel.SelectSingleSlot(index, slotPart);
+                    _lastClickedSlot = currentSelection;
                 }
 
-                // TODO: Logika menu kontekstowego
+                // TODO: menu kontekstowe
                 e.Handled = true;
             }
         }
+
+        // Jednorazowe tłumienie po CTRL – chroni toggle przed nadpisaniem przez single-select w Tapped
+        private void Calendar_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (_suppressNextTapOnce)
+            {
+                _suppressNextTapOnce = false;
+                e.Handled = true;
+            }
+        }
+
+        private void Calendar_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (_suppressNextTapOnce)
+            {
+                _suppressNextTapOnce = false;
+                e.Handled = true;
+            }
+        }
+
+        private void CalendarGridView_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Control) _ctrlDown = true;
+            if (e.Key == VirtualKey.Shift) _shiftDown = true;
+        }
+
+        private void CalendarGridView_KeyUp(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Control) _ctrlDown = false;
+            if (e.Key == VirtualKey.Shift) _shiftDown = false;
+        }
+
+        private void OnThemeChanged(FrameworkElement sender, object args) => UpdateAllCellBrushes();
+
+        private void UpdateAllCellBrushes()
+        {
+            if (ViewModel?.DayCells == null) return;
+            foreach (var cell in ViewModel.DayCells)
+            {
+                UpdateCellBrushes(cell);
+            }
+        }
+
+        private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel != null) ViewModel.PropertyChanged -= Vm_PropertyChanged;
+            this.ActualThemeChanged -= OnThemeChanged;
+            this.Unloaded -= OnDeclarationsViewUnloaded;
+
+            CalendarGridView.KeyDown -= CalendarGridView_KeyDown;
+            CalendarGridView.KeyUp -= CalendarGridView_KeyUp;
+        }
+
+        private void UpdateCellBrushes(DayCell cell)
+        {
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+
+            if (currentTheme == ElementTheme.Light)
+            {
+                var transparent = Colors.Transparent;
+                var shadeActiveDay = Color.FromArgb(0x0D, 0, 0, 0);
+                var shadeDayOff = Color.FromArgb(0x26, 0, 0, 0);
+                var headerBgActive = Color.FromArgb(0x59, 0, 0, 0);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 0, 0, 0);
+                var borderLight = Color.FromArgb(0x4D, 0, 0, 0);
+                var borderOther = Color.FromArgb(0x0D, 0, 0, 0);
+                var textNormal = Color.FromArgb(0xBF, 0, 0, 0);
+                var textMuted = Color.FromArgb(0x66, 0, 0, 0);
+
+                Color bgColor, borderColor, numFgColor, headerBgColor;
+                if (cell.InMonth)
+                {
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
+                    borderColor = borderLight;
+                }
+                else
+                {
+                    bgColor = Color.FromArgb(0x05, 0, 0, 0);
+                    borderColor = borderOther;
+                }
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
+
+                (cell.EffectiveBackground as SolidColorBrush)!.Color = bgColor;
+                (cell.EffectiveBorderBrush as SolidColorBrush)!.Color = borderColor;
+                (cell.DayNumberForeground as SolidColorBrush)!.Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush)!.Color = headerBgColor;
+            }
+            else // Dark Theme
+            {
+                var transparent = Colors.Transparent;
+                var shadeActiveDay = Color.FromArgb(0x0D, 255, 255, 255);
+                var shadeDayOff = Color.FromArgb(0x26, 255, 255, 255);
+                var headerBgActive = Color.FromArgb(0x59, 255, 255, 255);
+                var headerBgOtherMonth = Color.FromArgb(0x0D, 255, 255, 255);
+                var borderLight = Color.FromArgb(0x4D, 255, 255, 255);
+                var borderOther = Color.FromArgb(0x0D, 255, 255, 255);
+                var textNormal = Color.FromArgb(0xE6, 255, 255, 255);
+                var textMuted = Color.FromArgb(0x66, 255, 255, 255);
+
+                Color bgColor, borderColor, numFgColor, headerBgColor;
+                if (cell.InMonth)
+                {
+                    bgColor = cell.IsDayOff ? shadeDayOff : shadeActiveDay;
+                    borderColor = borderLight;
+                }
+                else
+                {
+                    bgColor = Color.FromArgb(0x05, 255, 255, 255);
+                    borderColor = borderOther;
+                }
+
+                headerBgColor = cell.InMonth ? headerBgActive : headerBgOtherMonth;
+                numFgColor = cell.InMonth ? textNormal : textMuted;
+
+                (cell.EffectiveBackground as SolidColorBrush)!.Color = bgColor;
+                (cell.EffectiveBorderBrush as SolidColorBrush)!.Color = borderColor;
+                (cell.DayNumberForeground as SolidColorBrush)!.Color = numFgColor;
+                (cell.EffectiveHeaderBackground as SolidColorBrush)!.Color = headerBgColor;
+            }
+
+            cell.NotifyBrushUpdate();
+        }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\LoginView.xaml (1783 bytes)
@@ -9511,7 +9804,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (11331 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml.cs (12104 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
@@ -9527,6 +9820,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.System;
+// NOWE USINGI
+using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Models;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -9664,7 +9960,6 @@ namespace GrafikoMat.Views.Settings
         private async void ArchiveButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is not Unit selectedUnit || _unitRepository == null) return;
-
             var dialog = App.CreateThemedDialog();
             dialog.Title = "Potwierdź archiwizację";
             dialog.Content = $"Czy na pewno chcesz zarchiwizować jednostkę '{selectedUnit.Name}'?";
@@ -9706,7 +10001,6 @@ namespace GrafikoMat.Views.Settings
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowUnitDialogAsync(null);
-
         private async void EditButton_Click(object sender, RoutedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit) await ShowUnitDialogAsync(selectedUnit);
@@ -9718,18 +10012,20 @@ namespace GrafikoMat.Views.Settings
             bool isEditMode = existingUnit != null;
             _currentSuggestion = null;
             _isAutocompleteActive = true;
-
             var hospitalNameTextBox = new TextBox { Header = "Pełna nazwa szpitala", Text = existingUnit?.HospitalFullName ?? "" };
             var departmentNameTextBox = new TextBox { Header = "Nazwa oddziału/zakładu", Text = existingUnit?.DepartmentName ?? "" };
             var nameTextBox = new TextBox { Header = "Nazwa skrócona (np. Szpital Miejski)", Text = existingUnit?.Name ?? "" };
-
+            var use12hCheckBox = new CheckBox
+            {
+                Content = "Używaj domyślnie dyżurów 12-godzinnych (Dzień/Noc)",
+                IsChecked = existingUnit?.UseTwelveHourShiftsByDefault ?? false,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
             hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
             hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
             hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
             hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
-
-            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox }, Width = 650 };
-
+            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox, use12hCheckBox }, Width = 650 };
             var dialog = App.CreateThemedDialog();
             dialog.Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę";
             dialog.Content = panel;
@@ -9739,10 +10035,12 @@ namespace GrafikoMat.Views.Settings
 
             var result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary) return;
+
             var unitToSave = existingUnit ?? new Unit { Id = Guid.NewGuid() };
             unitToSave.Name = nameTextBox.Text;
             unitToSave.HospitalFullName = hospitalNameTextBox.Text;
             unitToSave.DepartmentName = departmentNameTextBox.Text;
+            unitToSave.UseTwelveHourShiftsByDefault = use12hCheckBox.IsChecked ?? false;
 
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
@@ -9754,7 +10052,12 @@ namespace GrafikoMat.Views.Settings
                 },
                 successMessage: isEditMode ? "Poprawnie zapisano zmiany w jednostce." : "Nowa jednostka została pomyślnie dodana.",
                 errorMessageTitle: "Błąd zapisu jednostki"
-             );
+            );
+
+            // ================== NOWA LINIA ==================
+            // Informujemy resztę aplikacji, że dane jednostek mogły się zmienić.
+            WeakReferenceMessenger.Default.Send(new UnitDataChangedMessage());
+            // ==============================================
         }
     }
 }

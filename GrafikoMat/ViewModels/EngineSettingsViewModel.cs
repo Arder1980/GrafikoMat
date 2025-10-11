@@ -8,6 +8,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -18,9 +19,54 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
         public ObservableCollection<EngineOption> EngineOptions { get; } = new();
+
         private EngineOption? _selectedEngine;
-        public EngineOption? SelectedEngine { get => _selectedEngine; set { if (SetProperty(ref _selectedEngine, value)) { foreach (var option in EngineOptions) { option.IsSelected = (option == value); } } } }
+        public EngineOption? SelectedEngine
+        {
+            get => _selectedEngine;
+            set
+            {
+                if (SetProperty(ref _selectedEngine, value))
+                {
+                    foreach (var option in EngineOptions) { option.IsSelected = (option == value); }
+                    OnPropertyChanged(nameof(HasConfigurableParameters)); // ZMIANA: Powiadom o zmianie
+                }
+            }
+        }
+
+        // ZMIANA: Nowa właściwość sterująca widocznością panelu ustawień
+        public bool HasConfigurableParameters =>
+            SelectedEngine?.Type is SolverType.SimulatedAnnealing or SolverType.Genetic or SolverType.AntColony or SolverType.TabuSearch;
+
+        private double _coolingRateValue;
+        public double CoolingRateValue { get => _coolingRateValue; set => SetProperty(ref _coolingRateValue, value); }
+
+        private int _geneticPopulationSizeValue;
+        public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set => SetProperty(ref _geneticPopulationSizeValue, value); }
+
+        private int _geneticGenerationsValue;
+        public int GeneticGenerationsValue { get => _geneticGenerationsValue; set => SetProperty(ref _geneticGenerationsValue, value); }
+
+        private int _antColonyAntsValue;
+        public int AntColonyAntsValue { get => _antColonyAntsValue; set => SetProperty(ref _antColonyAntsValue, value); }
+
+        private int _antColonyGenerationsValue;
+        public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set => SetProperty(ref _antColonyGenerationsValue, value); }
+
+        private int _tabuListSizeValue;
+        public int TabuListSizeValue { get => _tabuListSizeValue; set => SetProperty(ref _tabuListSizeValue, value); }
+
+        private int _tabuMaxIterationsValue;
+        public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set => SetProperty(ref _tabuMaxIterationsValue, value); }
+
         public IAsyncRelayCommand SaveCommand { get; }
+
+        // ================== NOWE KOMENDY ==================
+        public ICommand ResetSimulatedAnnealingCommand { get; }
+        public ICommand ResetGeneticCommand { get; }
+        public ICommand ResetAntColonyCommand { get; }
+        public ICommand ResetTabuSearchCommand { get; }
+        // ================================================
 
         public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings)
         {
@@ -28,30 +74,69 @@ namespace GrafikoMat.ViewModels
             _appSettings = appSettings;
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+
+            // ZMIANA: Inicjalizacja komend
+            ResetSimulatedAnnealingCommand = new RelayCommand(() => CoolingRateValue = 0.995);
+            ResetGeneticCommand = new RelayCommand(() =>
+            {
+                GeneticPopulationSizeValue = 100;
+                GeneticGenerationsValue = 300;
+            });
+            ResetAntColonyCommand = new RelayCommand(() =>
+            {
+                AntColonyAntsValue = 75;
+                AntColonyGenerationsValue = 300;
+            });
+            ResetTabuSearchCommand = new RelayCommand(() =>
+            {
+                TabuListSizeValue = 30;
+                TabuMaxIterationsValue = 500;
+            });
+
             LoadEngineData();
             LoadInitialSelection();
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
-
         private void LoadInitialSelection()
         {
             SelectedEngine = EngineOptions.FirstOrDefault(o => o.Type == _appSettings.SelectedSolver) ?? EngineOptions.FirstOrDefault();
+
+            CoolingRateValue = _appSettings.CoolingRate;
+            GeneticPopulationSizeValue = _appSettings.GeneticPopulationSize;
+            GeneticGenerationsValue = _appSettings.GeneticGenerations;
+            AntColonyAntsValue = _appSettings.AntColonyAnts;
+            AntColonyGenerationsValue = _appSettings.AntColonyGenerations;
+            TabuListSizeValue = _appSettings.TabuListSize;
+            TabuMaxIterationsValue = _appSettings.TabuMaxIterations;
         }
 
         private async Task SaveSettingsAsync()
         {
             if (_selectedEngine == null) return;
-            var newSettings = _appSettings with { SelectedSolver = _selectedEngine.Type };
+
+            var newSettings = _appSettings with
+            {
+                SelectedSolver = _selectedEngine.Type,
+                CoolingRate = this.CoolingRateValue,
+                GeneticPopulationSize = this.GeneticPopulationSizeValue,
+                GeneticGenerations = this.GeneticGenerationsValue,
+                AntColonyAnts = this.AntColonyAntsValue,
+                AntColonyGenerations = this.AntColonyGenerationsValue,
+                TabuListSize = this.TabuListSizeValue,
+                TabuMaxIterations = this.TabuMaxIterationsValue
+            };
             await _orchestrator.PerformActionAsync(
                 viewId: _viewId,
                 actionAsync: async () => await _settingsService.SaveSettingsAsync(newSettings),
                 verificationAsync: async () =>
                 {
                     var saved = await _settingsService.LoadSettingsAsync(forceReload: true);
-                    return saved.SelectedSolver == newSettings.SelectedSolver;
+                    return saved.SelectedSolver == newSettings.SelectedSolver &&
+                           saved.CoolingRate == newSettings.CoolingRate &&
+                           saved.GeneticPopulationSize == newSettings.GeneticPopulationSize;
                 },
-                successMessage: "Nowy silnik obliczeniowy został pomyślnie zapisany.",
+                successMessage: "Nowy silnik obliczeniowy i jego parametry zostały pomyślnie zapisane.",
                 errorMessageTitle: "Błąd zapisu ustawień"
             );
             _appSettings = newSettings;

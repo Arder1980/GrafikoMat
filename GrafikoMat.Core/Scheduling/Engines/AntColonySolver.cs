@@ -11,18 +11,14 @@ using System.Threading.Tasks;
 
 namespace GrafikoMat.Core.Scheduling.Engines
 {
-    /// <summary>
-    /// Implementacja silnika generującego grafik za pomocą algorytmu kolonii mrówek.
-    /// Wersja zaadaptowana z GrafikWPF.
-    /// </summary>
     public class AntColonySolver : IScheduleSolver
     {
         private readonly int _numAnts;
         private readonly int _maxGenerations;
-        private const double EvaporationRate = 0.5; // Współczynnik odparowywania feromonu
-        private const double Alpha = 1.0; // Wpływ feromonu
-        private const double Beta = 5.0;  // Wpływ heurystyki
-        private const double Q0 = 0.7;    // Prawdopodobieństwo wyboru najlepszej ścieżki
+        private const double EvaporationRate = 0.5;
+        private const double Alpha = 1.0;
+        private const double Beta = 5.0;
+        private const double Q0 = 0.7;
 
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
@@ -32,7 +28,13 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly Random _random = new();
         private Dictionary<DateTime, Dictionary<string, double>> _pheromoneMatrix = new();
 
-        public AntColonySolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        public AntColonySolver(
+            ScheduleInput scheduleInput,
+            List<SolverPriority> priorities,
+            int numAnts, // <-- NOWY PARAMETR
+            int maxGenerations, // <-- NOWY PARAMETR
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -40,8 +42,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
 
-            _numAnts = Math.Max(50, _scheduleInput.Doctors.Count * 3);
-            _maxGenerations = Math.Max(200, _scheduleInput.DaysInMonth.Count * 15);
+            _numAnts = numAnts;
+            _maxGenerations = maxGenerations;
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -49,7 +51,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             InitializePheromones();
             var bestSolution = new Dictionary<DateTime, DoctorProfile?>();
             double bestFitness = double.MinValue;
-
             for (int i = 0; i < _maxGenerations; i++)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
@@ -67,10 +68,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     var metrics = EvaluationAndScoringService.CalculateMetrics(s, _utility.CalculateWorkload(s), _scheduleInput);
                     return EvaluationAndScoringService.CalculateScore(metrics, _priorities, _scheduleInput);
                 }).First();
-
                 var bestMetricsInGeneration = EvaluationAndScoringService.CalculateMetrics(bestInGeneration, _utility.CalculateWorkload(bestInGeneration), _scheduleInput);
                 var bestFitnessInGeneration = EvaluationAndScoringService.CalculateScore(bestMetricsInGeneration, _priorities, _scheduleInput);
-
                 if (bestFitnessInGeneration > bestFitness)
                 {
                     bestFitness = bestFitnessInGeneration;
@@ -105,7 +104,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             var newSolution = new Dictionary<DateTime, DoctorProfile?>();
             var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
             var usedConditionals = new HashSet<string>();
-
             foreach (var day in _scheduleInput.DaysInMonth)
             {
                 var candidates = ConstraintValidationService.GetValidCandidatesForDay(day, _scheduleInput, newSolution, workload, usedConditionals);
@@ -119,7 +117,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     candidate => candidate,
                     candidate => Math.Pow(_pheromoneMatrix[day][candidate.Abbreviation], Alpha) * Math.Pow(GetHeuristicValue(day, candidate), Beta)
                 );
-
                 DoctorProfile? chosenDoctor;
                 if (_random.NextDouble() < Q0)
                 {

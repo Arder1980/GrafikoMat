@@ -151,7 +151,7 @@
                                     </Grid>
                                 </Grid>
 
-                                <Border BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4"/>
+                                <Border BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
 
                                 <Border BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="4"
                                         Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>

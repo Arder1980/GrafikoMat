@@ -5,128 +5,153 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:models="using:GrafikoMat.Core.Scheduling.Models"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <common:EnumToVisibilityConverter x:Key="EnumToVisibilityConverter"/>
+        <common:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+        <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
 
     <Grid Padding="20,20,20,0">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Wybór Silnika Obliczeniowego" FontSize="20" FontWeight="SemiBold"/>
+        <TextBlock Grid.Row="0" Text="Silnik Obliczeniowy" FontSize="20" FontWeight="SemiBold"/>
 
-        <StackPanel Grid.Row="1" Margin="0,20,0,12" Spacing="8">
-            <TextBlock Text="Charakterystyka wybranego silnika" FontWeight="SemiBold"/>
-            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue='Wybierz silnik z tabeli poniżej, aby zobaczyć jego szczegółowy opis.'}"
-                       TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify" Opacity="0.9"/>
-        </StackPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+            <StackPanel Spacing="16">
 
-        <ListView Grid.Row="2"
-          ItemsSource="{x:Bind ViewModel.EngineOptions}"
-          SelectionMode="None"
-          BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-          BorderThickness="1" CornerRadius="4">
-            <ListView.HeaderTemplate>
-                <DataTemplate>
-                    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.8*"/>
-                            <ColumnDefinition Width="1.8*"/>
-                            <ColumnDefinition Width="1.1*"/>
-                            <ColumnDefinition Width="1.5*"/>
-                            <ColumnDefinition Width="2.6*"/>
-                            <ColumnDefinition Width="1.2*"/>
-                        </Grid.ColumnDefinitions>
+                <TextBlock Text="Wybierz algorytm, który będzie używany do generowania grafików." TextWrapping="Wrap" Opacity="0.8"/>
 
-                        <TextBlock Grid.Column="0" Text="Nazwa silnika" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+                <ListView
+                  ItemsSource="{x:Bind ViewModel.EngineOptions}"
+                  SelectionMode="None"
+                  BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                  BorderThickness="1" CornerRadius="4"
+                  VerticalAlignment="Top">
+                    <ListView.HeaderTemplate>
+                        <DataTemplate>
+                            <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.8*"/>
+                                    <ColumnDefinition Width="1.8*"/>
+                                    <ColumnDefinition Width="1.1*"/>
+                                    <ColumnDefinition Width="1.5*"/>
+                                    <ColumnDefinition Width="2.6*"/>
+                                    <ColumnDefinition Width="1.2*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Nazwa silnika" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+                                <TextBlock Grid.Column="1" Text="Typ algorytmu" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="Rodzaj" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="Wielowątkowość" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="4" Text="Jakość wyniku" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="5" Text="Czas obliczeń" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.HeaderTemplate>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EngineOption">
+                            <Grid Padding="0,10,12,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.8*"/>
+                                    <ColumnDefinition Width="1.8*"/>
+                                    <ColumnDefinition Width="1.1*"/>
+                                    <ColumnDefinition Width="1.5*"/>
+                                    <ColumnDefinition Width="2.6*"/>
+                                    <ColumnDefinition Width="1.2*"/>
+                                </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="Typ algorytmu" FontWeight="SemiBold"/>
-                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
-                        <ToolTipService.ToolTip>
-                            <ToolTip MaxWidth="600">
-                                <TextBlock TextWrapping="Wrap">
-                                    <Run FontWeight="Bold">Algorytm przeszukiwania zupełnego:</Run><LineBreak/>
-                                    <Run>przeszukuje całą przestrzeń rozwiązań, gwarantując znalezienie optimum.</Run><LineBreak/><LineBreak/>
-                                    <Run FontWeight="Bold">Algorytm przeszukiwania heurystycznego:</Run><LineBreak/>
-                                    <Run>inteligentnie wybiera ścieżki, dążąc do optimum.</Run><LineBreak/><LineBreak/>
-                                    <Run FontWeight="Bold">Metaheurystyka:</Run><LineBreak/>
-                                    <Run>technika optymalizacji, która znajduje bardzo dobre rozwiązania w rozsądnym czasie, bez gwarancji optimum.</Run>
-                                </TextBlock>
-                            </ToolTip>
-                        </ToolTipService.ToolTip>
-                    </TextBlock>
-                        </StackPanel>
+                                <RadioButton Grid.Column="0" Content="{x:Bind Name}" GroupName="EngineSelection" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                             Checked="EngineRadioButton_Checked" VerticalAlignment="Center" Margin="6,0,0,0"/>
 
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="Rodzaj" FontWeight="SemiBold"/>
-                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
-                        <ToolTipService.ToolTip>
-                            <ToolTip MaxWidth="400">
-                                <TextBlock TextWrapping="Wrap">
-                                    <Run FontWeight="Bold">Deterministyczny:</Run><LineBreak/>
-                                    <Run>ten sam wynik dla tych samych danych wejściowych.</Run><LineBreak/><LineBreak/>
-                                    <Run FontWeight="Bold">Stochastyczny:</Run><LineBreak/>
-                                    <Run>zawiera element losowości.</Run>
-                                </TextBlock>
-                            </ToolTip>
-                        </ToolTipService.ToolTip>
-                    </TextBlock>
-                        </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="2" Text="{x:Bind Determinism}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="{x:Bind Multithreading}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="4" Text="{x:Bind QualityGuarantee}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="5" Text="{x:Bind TimeToResult}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
 
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Center">
-                            <TextBlock Text="Wielowątkowość" FontWeight="SemiBold"/>
-                            <TextBlock Text="[?]" FontWeight="Bold" Margin="4,0,0,0" VerticalAlignment="Center">
-                        <ToolTipService.ToolTip>
-                            <ToolTip MaxWidth="400">
-                                <TextBlock TextWrapping="Wrap">
-                                    <Run FontWeight="Bold">Tak:</Run><LineBreak/>
-                                    <Run>algorytm wykorzystuje wiele rdzeni procesora, co przyspiesza obliczenia.</Run><LineBreak/><LineBreak/>
-                                    <Run FontWeight="Bold">Nie:</Run><LineBreak/>
-                                    <Run>obliczenia są wykonywane sekwencyjnie na jednym rdzeniu.</Run>
-                                </TextBlock>
-                            </ToolTip>
-                        </ToolTipService.ToolTip>
-                    </TextBlock>
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="4" Text="Jakość wyniku" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                        <TextBlock Grid.Column="5" Text="Czas obliczeń" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <Border Visibility="{x:Bind ViewModel.SelectedEngine, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}">
+                    <Border.Transitions>
+                        <TransitionCollection>
+                            <EntranceThemeTransition/>
+                        </TransitionCollection>
+                    </Border.Transitions>
+                    <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8" CornerRadius="4,4,0,0">
+                            <TextBlock Text="Charakterystyka wybranego silnika" FontWeight="SemiBold"/>
+                        </Border>
+                        <TextBlock Grid.Row="1" Text="{x:Bind ViewModel.SelectedEngine.Description, Mode=OneWay, FallbackValue=''}"
+                                   TextWrapping="Wrap" LineHeight="22" TextAlignment="Justify" Opacity="0.9" Padding="12"/>
                     </Grid>
-                </DataTemplate>
-            </ListView.HeaderTemplate>
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:EngineOption">
-                    <Grid Padding="0,10,12,10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.8*"/>
-                            <ColumnDefinition Width="1.8*"/>
-                            <ColumnDefinition Width="1.1*"/>
-                            <ColumnDefinition Width="1.5*"/>
-                            <ColumnDefinition Width="2.6*"/>
-                            <ColumnDefinition Width="1.2*"/>
-                        </Grid.ColumnDefinitions>
+                </Border>
 
-                        <RadioButton Grid.Column="0"
-                             Content="{x:Bind Name}"
-                             GroupName="EngineSelection"
-                             IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                             Checked="EngineRadioButton_Checked"
-                             VerticalAlignment="Center"
-                             Margin="6,0,0,0"/>
+                <Border Visibility="{x:Bind ViewModel.HasConfigurableParameters, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Border.Transitions>
+                        <TransitionCollection>
+                            <EntranceThemeTransition IsStaggeringEnabled="True"/>
+                        </TransitionCollection>
+                    </Border.Transitions>
+                    <Grid BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12,8" CornerRadius="4,4,0,0">
+                            <TextBlock Text="Ustawienia wybranego silnika" FontWeight="SemiBold"/>
+                        </Border>
+                        <StackPanel Grid.Row="1" Spacing="16" Padding="12">
+                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=SimulatedAnnealing}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Szybciej" Opacity="0.8" VerticalAlignment="Center"/>
+                                    <Slider Grid.Column="1" Minimum="0.9" Maximum="0.999" SmallChange="0.001" StepFrequency="0.001" Header="Tempo schładzania" Value="{x:Bind ViewModel.CoolingRateValue, Mode=TwoWay}"/>
+                                    <TextBlock Grid.Column="2" Text="Dokładniej" Opacity="0.8" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetSimulatedAnnealingCommand}" HorizontalAlignment="Right"/>
+                            </StackPanel>
 
-                        <TextBlock Grid.Column="1" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                        <TextBlock Grid.Column="2" Text="{x:Bind Determinism}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                        <TextBlock Grid.Column="3" Text="{x:Bind Multithreading}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                        <TextBlock Grid.Column="4" Text="{x:Bind QualityGuarantee}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                        <TextBlock Grid.Column="5" Text="{x:Bind TimeToResult}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Genetic}">
+                                <Slider Minimum="20" Maximum="500" SmallChange="10" StepFrequency="10" Header="Rozmiar populacji" Value="{x:Bind ViewModel.GeneticPopulationSizeValue, Mode=TwoWay}"/>
+                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Header="Liczba generacji" Value="{x:Bind ViewModel.GeneticGenerationsValue, Mode=TwoWay}"/>
+                                <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetGeneticCommand}" HorizontalAlignment="Right"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=AntColony}">
+                                <Slider Minimum="10" Maximum="200" SmallChange="5" StepFrequency="5" Header="Liczba mrówek" Value="{x:Bind ViewModel.AntColonyAntsValue, Mode=TwoWay}"/>
+                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Header="Liczba generacji" Value="{x:Bind ViewModel.AntColonyGenerationsValue, Mode=TwoWay}"/>
+                                <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetAntColonyCommand}" HorizontalAlignment="Right"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=TabuSearch}">
+                                <Slider Minimum="10" Maximum="100" SmallChange="5" StepFrequency="5" Header="Rozmiar listy Tabu" Value="{x:Bind ViewModel.TabuListSizeValue, Mode=TwoWay}"/>
+                                <Slider Minimum="100" Maximum="2000" SmallChange="100" StepFrequency="100" Header="Maksymalna liczba iteracji" Value="{x:Bind ViewModel.TabuMaxIterationsValue, Mode=TwoWay}"/>
+                                <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetTabuSearchCommand}" HorizontalAlignment="Right"/>
+                            </StackPanel>
+                        </StackPanel>
                     </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-        <Button Grid.Row="3"
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Button Grid.Row="2"
                 Content="Zapisz ustawienia"
                 Style="{StaticResource AccentButtonStyle}"
                 Command="{x:Bind ViewModel.SaveCommand}"

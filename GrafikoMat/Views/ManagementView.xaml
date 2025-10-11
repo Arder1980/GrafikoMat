@@ -11,11 +11,13 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter"/>
+        <common:BooleanToOpacityConverter x:Key="ArchiveOpacityConverter" TrueValue="0.5" FalseValue="1.0" />
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <Style x:Key="CompactTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource DefaultTextBoxStyle}">
             <Setter Property="Margin" Value="0"/>
         </Style>
+        <common:NullToVisibilityConverter x:Key="NullToCollapsedConverter" Invert="True" />
+        <common:NullToVisibilityConverter x:Key="NullToVisibleConverter" Invert="False" />
     </UserControl.Resources>
 
     <Grid>
@@ -59,12 +61,12 @@
 
         <appcontrols:ActionContainer x:Name="ActionContainer" Grid.Column="1">
             <Grid Padding="24">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay, ConverterParameter=Inverse}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToCollapsedConverter}, Mode=OneWay}">
                     <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE77B;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
                     <TextBlock Text="Wybierz dyżurnego z listy lub dodaj nowego." Margin="0,12,0,0" Style="{ThemeResource BodyStrongTextBlockStyle}"/>
                 </StackPanel>
 
-                <Grid Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                <Grid Visibility="{x:Bind ViewModel.EditorViewModel, Converter={StaticResource NullToVisibleConverter}, Mode=OneWay}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>

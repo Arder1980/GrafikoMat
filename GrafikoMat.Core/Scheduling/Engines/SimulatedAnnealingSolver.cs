@@ -15,7 +15,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
     public class SimulatedAnnealingSolver : IScheduleSolver
     {
         private const double InitialTemperature = 1000.0;
-        private const double CoolingRate = 0.995;
+        private readonly double _coolingRate;
         private readonly int _iterationsPerTemperature;
 
         private readonly ScheduleInput _scheduleInput;
@@ -25,10 +25,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly Random _random = new();
         private readonly SolverUtility _utility;
 
-        public SimulatedAnnealingSolver(ScheduleInput scheduleInput, List<SolverPriority> priorities, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        public SimulatedAnnealingSolver(
+            ScheduleInput scheduleInput,
+            List<SolverPriority> priorities,
+            double coolingRate,
+            IProgress<double>? progress = null,
+            CancellationToken cancellationToken = default)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
+            _coolingRate = coolingRate;
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
@@ -46,7 +52,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             double currentFitness = bestFitness;
 
             double temperature = InitialTemperature;
-            int totalIterations = (int)Math.Log(0.1 / InitialTemperature, CoolingRate) * _iterationsPerTemperature;
+            int totalIterations = (int)Math.Log(0.1 / InitialTemperature, _coolingRate) * _iterationsPerTemperature;
             int currentIteration = 0;
 
             while (temperature > 0.1)
@@ -54,7 +60,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 for (int i = 0; i < _iterationsPerTemperature; i++)
                 {
                     _cancellationToken.ThrowIfCancellationRequested();
-
                     var newSolution = _utility.GenerateNeighbor(currentSolution);
                     Validation.ConstraintValidationService.RepairSchedule(newSolution, _scheduleInput);
 
@@ -74,8 +79,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                     currentIteration++;
                 }
-                temperature *= CoolingRate;
-
+                temperature *= _coolingRate;
                 if (totalIterations > 0)
                 {
                     _progressReporter?.Report((double)currentIteration / totalIterations);

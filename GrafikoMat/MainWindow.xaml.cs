@@ -56,9 +56,6 @@ namespace GrafikoMat
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
 
-        DesktopAcrylicController? _acrylicController;
-        SystemBackdropConfiguration? _backdropConfiguration;
-
         public MainWindow()
         {
             this.InitializeComponent();
@@ -84,10 +81,10 @@ namespace GrafikoMat
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
             if (_isClosing) return;
-            if (_backdropConfiguration != null)
-            {
-                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
-            }
+
+            // ZMIANA: To jest kluczowy fragment.
+            // Ustawiamy stan tła przy każdej aktywacji okna.
+            TrySetSystemBackdrop();
             ApplyTitleBarMenuStyling();
         }
 
@@ -314,11 +311,10 @@ namespace GrafikoMat
             BuildActionsForDashboard();
         }
 
-        // ================== ZMIENIONA METODA ==================
         private async void SwitchToDeclarations()
         {
             if (_isClosing || _isAnimating) return;
-            if (ViewModel.ActiveUnit == null) return; // Zabezpieczenie przed brakiem aktywnej jednostki
+            if (ViewModel.ActiveUnit == null) return;
 
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
@@ -355,13 +351,12 @@ namespace GrafikoMat
                 initialIndex,
                 ViewModel.Declarations,
                 ViewModel.IsCurrentUserAdmin,
-                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, // <-- DODANY BRAKUJĄCY ARGUMENT
+                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
                 () => {
                     ViewModel.RefreshDeclarationsForDashboard();
                 }
-            );
+             );
             var declarationsView = new DeclarationsView();
-
             void DeclCloseHandler() => SwitchToDashboard();
             void DeclSaveAndCloseHandler()
             {
@@ -376,7 +371,6 @@ namespace GrafikoMat
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
         }
-        // =======================================================
 
         private static void DetachFromParent(FrameworkElement el)
         {
@@ -533,7 +527,7 @@ namespace GrafikoMat
 
             try { ViewportNext.Content = null; } catch { }
             try { ViewportCurrent.Content = null; } catch { }
-            if (_acrylicController != null) { _acrylicController.Dispose(); _acrylicController = null; }
+
             this.SystemBackdrop = null;
         }
 
@@ -559,8 +553,10 @@ namespace GrafikoMat
             var isLightTheme = (this.Content as FrameworkElement)?.ActualTheme == ElementTheme.Light;
             var baseFgColor = isLightTheme ? Colors.Black : Colors.White;
             var bgHover = isLightTheme ? Color.FromArgb(20, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255);
-            var bgPressed = isLightTheme ? Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(40, 255, 255, 255);
-            var fgInactive = isLightTheme ? Color.FromArgb(0x99, 0, 0, 0) : Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF);
+            var bgPressed = isLightTheme ?
+            Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(40, 255, 255, 255);
+            var fgInactive = isLightTheme ?
+            Color.FromArgb(0x99, 0, 0, 0) : Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF);
 
             titleBar.ButtonForegroundColor = baseFgColor;
             titleBar.ButtonHoverForegroundColor = baseFgColor;
@@ -592,46 +588,41 @@ namespace GrafikoMat
         }
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
-            if (_backdropConfiguration != null) { TrySetSystemBackdrop(); }
+            // ZMIANA: Usunięto wywołanie TrySetSystemBackdrop(),
+            // ponieważ DesktopAcrylicBackdrop sam reaguje na zmianę motywu.
             ApplyTitleBarMenuStyling();
         }
+
         private void TrySetSystemBackdrop()
         {
-            if (_isClosing || !DesktopAcrylicController.IsSupported()) { return; }
-            if (_backdropConfiguration == null) { _backdropConfiguration = new SystemBackdropConfiguration(); }
-            if (this.Content is FrameworkElement rootElement)
+            if (DesktopAcrylicController.IsSupported())
             {
-                _backdropConfiguration.Theme = rootElement.ActualTheme switch
+                bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
+
+                if (!isMaximized)
                 {
-                    ElementTheme.Dark => SystemBackdropTheme.Dark,
-                    ElementTheme.Light => SystemBackdropTheme.Light,
-                    _ => SystemBackdropTheme.Default
-                };
-            }
-            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-            if (!isMaximized)
-            {
-                if (_acrylicController == null)
-                {
-                    _acrylicController = new DesktopAcrylicController();
-                    _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
-                    _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
+                    this.SystemBackdrop = new DesktopAcrylicBackdrop();
+                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
                 }
-                RootGrid.Background = new SolidColorBrush(Colors.Transparent);
+                else
+                {
+                    this.SystemBackdrop = null;
+                    RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
+                }
             }
             else
             {
-                if (_acrylicController != null)
-                {
-                    _acrylicController.Dispose();
-                    _acrylicController = null;
-                }
+                this.SystemBackdrop = null;
                 RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
             }
         }
+
         private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
-            if (args.DidPresenterChange && !_isClosing) { TrySetSystemBackdrop(); }
+            if (args.DidPresenterChange && !_isClosing)
+            {
+                TrySetSystemBackdrop();
+            }
             ApplyTitleBarMenuStyling();
         }
 

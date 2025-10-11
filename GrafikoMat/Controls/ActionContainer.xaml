@@ -4,28 +4,28 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:media="using:Microsoft.UI.Xaml.Media">
 
-	<Grid>
-		<ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
+    <Grid>
+        <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
 
-		<Grid x:Name="OverlayHost" Visibility="Collapsed">
+        <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
 
-			<Grid>
-				<Grid.Background>
-					<media:AcrylicBrush
+            <Grid>
+                <Grid.Background>
+                    <media:AcrylicBrush
                         TintOpacity="0.1"
                         TintColor="{ThemeResource SystemChromeAltLowColor}"/>
-				</Grid.Background>
-			</Grid>
+                </Grid.Background>
+            </Grid>
 
-			<ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
+            <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
-			<InfoBar x:Name="ActionInfoBar"
+            <InfoBar x:Name="ActionInfoBar"
                      IsOpen="False"
                      IsClosable="False"
                      HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      MinWidth="340"
                      MaxWidth="500"/>
-		</Grid>
-	</Grid>
+        </Grid>
+    </Grid>
 </UserControl>
