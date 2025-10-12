@@ -6,13 +6,14 @@ using System.Threading.Tasks;
 
 namespace GrafikoMat.Services
 {
-    public class UxActionOrchestrator : IUxActionOrchestrator
+    public class UxActionOrchestrator : IUxActionOrchestrator, IRecipient<HideOverlayExplicitlyMessage>
     {
         private readonly IMessenger _messenger;
 
         public UxActionOrchestrator(IMessenger messenger)
         {
             _messenger = messenger;
+            _messenger.Register<HideOverlayExplicitlyMessage>(this);
         }
 
         public async Task PerformActionAsync(
@@ -33,20 +34,18 @@ namespace GrafikoMat.Services
                     throw new Exception("Weryfikacja po zapisie zakończyła się niepowodzeniem.");
                 }
 
+                // Sukces: wyświetlamy i czekamy
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Sukces", successMessage, InfoBarSeverity.Success));
-                // Czekamy 3 sekundy, aby użytkownik zdążył przeczytać komunikat o sukcesie
                 await Task.Delay(3000);
+                _messenger.Send(new HideOverlayMessage(viewId));
             }
             catch (Exception ex)
             {
+                // Błąd: wyświetlamy i nie czekamy – komunikat zostanie na ekranie!
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, errorMessageTitle, ex.Message, InfoBarSeverity.Error));
-                // Czekamy 3 sekundy, aby użytkownik zdążył przeczytać komunikat o błędzie
-                await Task.Delay(3000);
-            }
-            finally
-            {
-                // Blok finally teraz tylko i wyłącznie ukrywa nakładkę, bez żadnego opóźnienia.
-                _messenger.Send(new HideOverlayMessage(viewId));
+
+                // Będziemy czekać na ręczne zamknięcie wiadomości przez użytkownika,
+                // co zostanie przekazane jako HideOverlayExplicitlyMessage
             }
         }
 
@@ -59,15 +58,21 @@ namespace GrafikoMat.Services
             }
             catch (Exception ex)
             {
+                // Jeśli ładowanie się nie powiedzie, pokaż błąd i schowaj nakładkę po 3s.
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Błąd ładowania danych", ex.Message, InfoBarSeverity.Error));
-                // Tutaj również czekamy, aby błąd był widoczny
-                await Task.Delay(3000);
+                await Task.Delay(3000); // Automatyczne zamykanie dla błędów ładowania (nie blokujemy UI)
             }
             finally
             {
                 // Zawsze na końcu ukryj nakładkę
                 _messenger.Send(new HideOverlayMessage(viewId));
             }
+        }
+
+        public void Receive(HideOverlayExplicitlyMessage message)
+        {
+            // Ta wiadomość jest ignorowana przez orkiestratora,
+            // ale musi być zaimplementowana, aby móc się zarejestrować
         }
     }
 }

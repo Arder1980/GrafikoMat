@@ -11,4 +11,7 @@ namespace GrafikoMat.Controls
 
     // Wiadomość nakazująca ukrycie nakładki
     public sealed record HideOverlayMessage(Guid ViewId);
+
+    // NOWA: Wiadomość rozsyłana przez ActionContainer po kliknięciu 'OK', by poinformować o ręcznym zamknięciu
+    public sealed record HideOverlayExplicitlyMessage(Guid ViewId);
 }
