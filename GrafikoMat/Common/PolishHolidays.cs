@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq; // DODANO
 
 namespace GrafikoMat.Common
 {
@@ -19,7 +20,7 @@ namespace GrafikoMat.Common
             { (12, 25), "Boże Narodzenie" },
             { (12, 26), "Boże Narodzenie" },
 
-            // Dni okolicznościowe i popularne
+            // Dni okolicznościowe i popularne (NIE SĄ WOLNE)
             { (1, 21), "Dzień Babci" },
             { (1, 22), "Dzień Dziadka" },
             { (2, 14), "Walentynki" },
@@ -34,12 +35,52 @@ namespace GrafikoMat.Common
             { (12, 6), "Mikołajki" },
             { (12, 31),"Sylwester" },
 
-            // Początki pór roku
+            // Początki pór roku (NIE SĄ WOLNE)
             { (3, 21), "Początek wiosny" },
             { (6, 22), "Początek lata" },
             { (9, 23), "Początek jesieni" },
             { (12, 22),"Początek zimy" }
         };
+
+        // NOWA KOLEKCJA: Lista kluczy dla świąt ustawowo wolnych (tylko te, które są dniami wolnymi)
+        private static readonly HashSet<(int Month, int Day)> _publicHolidays = new()
+        {
+            (1, 1), (1, 6), (5, 1), (5, 3), (8, 15), (11, 1), (11, 11), (12, 25), (12, 26)
+        };
+
+        /// <summary>
+        /// Zwraca true, jeśli data jest ustawowo wolnym od pracy świętem.
+        /// Używane do logicznego oznaczania DNI WOLNYCH w widokach.
+        /// </summary>
+        public static bool IsPublicHoliday(DateTime date)
+        {
+            // 1. Sprawdzenie świąt o stałej dacie
+            if (_publicHolidays.Contains((date.Month, date.Day)))
+            {
+                return true;
+            }
+
+            // 2. Obliczanie Wielkanocy i świąt ruchomych wolnych od pracy
+            int a = date.Year % 19;
+            int b = date.Year % 4;
+            int c = date.Year % 7;
+            int d = (19 * a + 24) % 30;
+            int e = (2 * b + 4 * c + 6 * d + 5) % 7;
+
+            var easterSunday = new DateTime(date.Year, 3, 22).AddDays(d + e);
+            if (d + e > 9)
+            {
+                easterSunday = new DateTime(date.Year, 4, d + e - 9);
+            }
+
+            // Ustawowo wolne święta zależne od Wielkanocy
+            if (date.Date == easterSunday.Date) return true; // Wielkanoc (Niedziela)
+            if (date.Date == easterSunday.AddDays(1).Date) return true; // Pon. Wielkanocny
+            if (date.Date == easterSunday.AddDays(49).Date) return true; // Zielone Świątki
+            if (date.Date == easterSunday.AddDays(60).Date) return true; // Boże Ciało
+
+            return false;
+        }
 
         public static string? GetHolidayName(DateTime date)
         {
@@ -68,7 +109,7 @@ namespace GrafikoMat.Common
             if (date.Date == easterSunday.AddDays(49).Date) return "Zielone Świątki";
             if (date.Date == easterSunday.AddDays(60).Date) return "Boże Ciało";
 
-            // ZMIANA: Dodatkowe dni ruchome
+            // ZMIANA: Dodatkowe dni ruchome (NIE SĄ WOLNE)
             if (date.Date == easterSunday.AddDays(-52).Date) return "Tłusty Czwartek";
             if (date.Date == easterSunday.AddDays(-46).Date) return "Środa Popielcowa";
             if (date.Date == easterSunday.AddDays(-7).Date) return "Niedziela Palmowa";
@@ -76,7 +117,7 @@ namespace GrafikoMat.Common
             if (date.Date == easterSunday.AddDays(-2).Date) return "Wielki Piątek";
             if (date.Date == easterSunday.AddDays(-1).Date) return "Wielka Sobota";
 
-            // 3. ZMIANA: Daty związane z rokiem szkolnym
+            // 3. ZMIANA: Daty związane z rokiem szkolnym (NIE SĄ WOLNE)
             if (date.Month == 6)
             {
                 var lastDayOfJune = new DateTime(date.Year, 6, 30);
