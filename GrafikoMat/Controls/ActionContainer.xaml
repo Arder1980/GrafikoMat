@@ -9,14 +9,8 @@
 
         <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
 
-            <Grid>
-                <Grid.Background>
-                    <media:AcrylicBrush
-                        TintOpacity="0.1"
-                        TintColor="{ThemeResource SystemChromeAltLowColor}"/>
-                </Grid.Background>
-            </Grid>
-
+			<Grid x:Name="BackgroundGrid" />
+			
             <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
             <InfoBar x:Name="ActionInfoBar"
