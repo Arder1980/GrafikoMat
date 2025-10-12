@@ -1,5 +1,4 @@
 ﻿using GrafikoMat.Core.Data;
-// Usunięto: using GrafikoMat.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -47,5 +46,13 @@ namespace GrafikoMat.Core.Repositories
         /// Usuwa flagę wymagającą zmiany hasła.
         /// </summary>
         Task ClearPasswordChangeFlagAsync(Guid doctorId);
+
+        // ================== NOWA METODA ==================
+        /// <summary>
+        /// Tworzy nowego użytkownika i powiązany z nim profil lekarza.
+        /// </summary>
+        /// <returns>ID nowo utworzonego użytkownika.</returns>
+        Task<Guid> CreateDoctorAsync(DoctorProfile profile, string password);
+        // ===============================================
     }
 }

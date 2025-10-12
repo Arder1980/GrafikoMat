@@ -34,14 +34,18 @@ namespace GrafikoMat.Services
                 }
 
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Sukces", successMessage, InfoBarSeverity.Success));
+                // Czekamy 3 sekundy, aby użytkownik zdążył przeczytać komunikat o sukcesie
+                await Task.Delay(3000);
             }
             catch (Exception ex)
             {
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, errorMessageTitle, ex.Message, InfoBarSeverity.Error));
+                // Czekamy 3 sekundy, aby użytkownik zdążył przeczytać komunikat o błędzie
+                await Task.Delay(3000);
             }
             finally
             {
-                await Task.Delay(3000);
+                // Blok finally teraz tylko i wyłącznie ukrywa nakładkę, bez żadnego opóźnienia.
                 _messenger.Send(new HideOverlayMessage(viewId));
             }
         }
@@ -55,8 +59,8 @@ namespace GrafikoMat.Services
             }
             catch (Exception ex)
             {
-                // Jeśli ładowanie się nie powiedzie, pokaż błąd i schowaj nakładkę
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Błąd ładowania danych", ex.Message, InfoBarSeverity.Error));
+                // Tutaj również czekamy, aby błąd był widoczny
                 await Task.Delay(3000);
             }
             finally

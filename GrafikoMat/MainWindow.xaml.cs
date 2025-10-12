@@ -81,9 +81,6 @@ namespace GrafikoMat
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
             if (_isClosing) return;
-
-            // ZMIANA: To jest kluczowy fragment.
-            // Ustawiamy stan tła przy każdej aktywacji okna.
             TrySetSystemBackdrop();
             ApplyTitleBarMenuStyling();
         }
@@ -195,9 +192,10 @@ namespace GrafikoMat
             {
                 _supabaseService.Initialize(_appSettings.SupabaseUrl, _appSettings.SupabaseAnonKey);
                 await _supabaseService.RestoreSessionIfAnyAsync();
+
                 if (_supabaseService.Client != null)
                 {
-                    _doctorRepository = new SupabaseDoctorRepository(_supabaseService.Client);
+                    _doctorRepository = new SupabaseDoctorRepository(_supabaseService);
                     _unitRepository = new SupabaseUnitRepository(_supabaseService.Client);
                     _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
                 }
@@ -588,8 +586,6 @@ namespace GrafikoMat
         }
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
-            // ZMIANA: Usunięto wywołanie TrySetSystemBackdrop(),
-            // ponieważ DesktopAcrylicBackdrop sam reaguje na zmianę motywu.
             ApplyTitleBarMenuStyling();
         }
 

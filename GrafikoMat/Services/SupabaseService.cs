@@ -2,8 +2,6 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading.Tasks;
-using GrafikoMat.Core.Repositories;
-using GrafikoMat.Repositories;
 using Supabase;
 using Supabase.Gotrue;
 using SbClient = Supabase.Client;
@@ -15,16 +13,22 @@ namespace GrafikoMat.Services
         private SbClient? _client;
         public SbClient? Client => _client;
 
-        public IDoctorRepository? Doctors { get; private set; }
+        // ================== NOWE WŁAŚCIWOŚCI ==================
+        public string? SupabaseUrl { get; private set; }
+        public string? SupabaseAnonKey { get; private set; }
+        // ======================================================
 
         public bool IsAuthenticated => _client?.Auth?.CurrentSession != null;
 
         public void Initialize(string url, string apiKey)
         {
+            // Zapamiętujemy dane do późniejszego użytku
+            this.SupabaseUrl = url;
+            this.SupabaseAnonKey = apiKey;
+
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
             {
                 _client = null;
-                Doctors = null;
                 Debug.WriteLine("[SupabaseService] Initialize: brak URL/Key – klient wyłączony.");
                 return;
             }
@@ -35,8 +39,6 @@ namespace GrafikoMat.Services
                 AutoConnectRealtime = true
             };
             _client = new SbClient(url, apiKey, options);
-
-            Doctors = new SupabaseDoctorRepository(_client);
             Debug.WriteLine("[SupabaseService] Initialize: klient utworzony.");
         }
 
@@ -61,7 +63,6 @@ namespace GrafikoMat.Services
 
             var auth = _client.Auth;
             var authType = auth.GetType();
-
             try
             {
                 var setSession3 = authType.GetMethod("SetSession", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string), typeof(string), typeof(bool) }, null);
@@ -151,7 +152,6 @@ namespace GrafikoMat.Services
         {
             if (Client is null || !IsAuthenticated)
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany.");
-
             var attributes = new UserAttributes { Password = newPassword };
             await Client.Auth.Update(attributes);
         }

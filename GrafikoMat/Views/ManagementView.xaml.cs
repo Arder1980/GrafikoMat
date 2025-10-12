@@ -5,6 +5,7 @@ using GrafikoMat.ViewModels; // <-- DODANA BRAKUJĄCA LINIA
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace GrafikoMat.Views
@@ -32,16 +33,34 @@ namespace GrafikoMat.Views
             await ViewModel.InitializeAsync();
         }
 
-        private void CopyPassword_Click(object sender, RoutedEventArgs e)
+        private async void CopyPassword_Click(object sender, RoutedEventArgs e)
         {
+            if (sender is not Button copyButton) return;
+
             if (ViewModel.EditorViewModel != null && !string.IsNullOrEmpty(ViewModel.EditorViewModel.Password))
             {
                 var dataPackage = new DataPackage();
                 dataPackage.SetText(ViewModel.EditorViewModel.Password);
                 Clipboard.SetContent(dataPackage);
+
+                var originalContent = copyButton.Content;
+                try
+                {
+                    // Tymczasowo wyłączamy przycisk i zmieniamy jego treść
+                    copyButton.IsEnabled = false;
+                    copyButton.Content = "Skopiowano!";
+
+                    // Czekamy 1.5 sekundy
+                    await Task.Delay(1500);
+                }
+                finally
+                {
+                    // Przywracamy pierwotny stan przycisku
+                    copyButton.Content = originalContent;
+                    copyButton.IsEnabled = true;
+                }
             }
         }
-
         private void NameTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
             if (ViewModel.EditorViewModel != null)

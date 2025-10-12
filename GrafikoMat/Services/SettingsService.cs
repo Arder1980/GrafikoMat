@@ -16,6 +16,10 @@ namespace GrafikoMat.Services
     {
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseAnonKey { get; init; } = string.Empty;
+
+        // ZMIANA: Usunięto niebezpieczną właściwość
+        // public string SupabaseServiceKey { get; init; } = string.Empty; 
+
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
         public AppTheme Theme { get; init; } = AppTheme.SystemDefault;
         public WindowSize LastWindowSize { get; init; } = new(1600, 1000);
@@ -25,7 +29,6 @@ namespace GrafikoMat.Services
 
         public List<PrioritySetting> Priorities { get; init; } = new();
 
-        // ================== NOWE WŁAŚCIWOŚCI ==================
         public double CoolingRate { get; init; } = 0.995;
         public int GeneticPopulationSize { get; init; } = 100;
         public int GeneticGenerations { get; init; } = 300;
@@ -33,7 +36,6 @@ namespace GrafikoMat.Services
         public int AntColonyGenerations { get; init; } = 300;
         public int TabuListSize { get; init; } = 30;
         public int TabuMaxIterations { get; init; } = 500;
-        // ======================================================
     }
 
     public record WindowSize(int Width, int Height);
