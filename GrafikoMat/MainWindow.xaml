@@ -25,17 +25,30 @@
             <Grid.RenderTransform>
                 <TranslateTransform Y="-20"/>
             </Grid.RenderTransform>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Button x:Name="PrevUnitButton" Grid.Column="0" Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}" ToolTipService.ToolTip="Poprzednia jednostka"/>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
-                <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Opacity="0.8" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0"/>
-            </StackPanel>
-            <Button x:Name="NextUnitButton" Grid.Column="2" Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToNextUnitCommand}" ToolTipService.ToolTip="Następna jednostka"/>
+
+            <Grid>
+                <Grid x:Name="UnitContextGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="PrevUnitButton" Grid.Column="0" Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToPreviousUnitCommand}" ToolTipService.ToolTip="Poprzednia jednostka"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="{x:Bind ViewModel.ActiveUnitHospitalName, Mode=OneWay}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Text="{x:Bind ViewModel.ActiveUnitDepartmentName, Mode=OneWay}" FontSize="18" FontWeight="SemiBold" Opacity="0.8" TextWrapping="Wrap" TextAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                    <Button x:Name="NextUnitButton" Grid.Column="2" Content="&#xE0E3;" FontFamily="Segoe MDL2 Assets" Style="{StaticResource SubtleButtonStyle}" VerticalAlignment="Center" Command="{x:Bind ViewModel.SwitchToNextUnitCommand}" ToolTipService.ToolTip="Następna jednostka"/>
+                </Grid>
+
+                <Grid x:Name="GlobalContextGrid" Opacity="0" IsHitTestVisible="False">
+                    <TextBlock Text="GrafikoMat Dyżurowy"
+                               FontSize="22"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Grid>
         </Grid>
 
         <Grid x:Name="MainContentPanel" Grid.Row="2" Padding="12,8,12,4" Opacity="0">

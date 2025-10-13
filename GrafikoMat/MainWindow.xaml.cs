@@ -98,7 +98,13 @@ namespace GrafikoMat
 
         private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
+            // ================== POCZĄTEK ZMIANY: Ręczna animacja zamiast VSM ==================
+            if (e.PropertyName == nameof(MainViewModel.IsUnitContextActive))
+            {
+                UpdateHeaderAnimation(ViewModel.IsUnitContextActive);
+            }
+            // =================================================================================
+            else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
                 await ViewModel.SaveCurrentUnitAsync();
                 await ViewModel.UpdateFooterFromSettingsAsync();
@@ -129,6 +135,7 @@ namespace GrafikoMat
             await ReloadSettingsAndServicesAsync();
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
+                ViewModel.IsUnitContextActive = false;
                 var setupView = new Views.Settings.ConnectionSettingsView();
                 setupView.Initialize(_settingsService, _appSettings ?? new AppSettings());
                 setupView.ReloadRequired += async () => { StartupOverlayContent.Content = null; await InitializeApplicationAsync(); };
@@ -139,6 +146,7 @@ namespace GrafikoMat
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
             if (!restored && !_supabaseService.IsAuthenticated)
             {
+                ViewModel.IsUnitContextActive = false;
                 bool loggedIn = await ShowLoginScreenAsync();
                 if (!loggedIn) { this.Close(); return; }
             }
@@ -149,6 +157,7 @@ namespace GrafikoMat
                     var profile = await _doctorRepository.GetCurrentDoctorProfileAsync();
                     if (profile != null && profile.RequiresPasswordChange)
                     {
+                        ViewModel.IsUnitContextActive = false;
                         bool passwordChanged = await ShowForcePasswordChangeAsync();
                         if (!passwordChanged) { await _supabaseService.SignOutAsync(); this.Close(); return; }
                         await _doctorRepository.ClearPasswordChangeFlagAsync(profile.Id);
@@ -254,6 +263,7 @@ namespace GrafikoMat
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ResetViewportState();
+            ViewModel.IsUnitContextActive = true;
         }
 
         private async void SwitchToSettings(bool forceRefresh = false)
@@ -264,6 +274,7 @@ namespace GrafikoMat
             _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
             if (!forceRefresh) { await AnimateToAsync(_settingsView, forward: true); } else { ViewportCurrent.Content = _settingsView; }
             BuildActionsForSettings();
+            ViewModel.IsUnitContextActive = false;
         }
 
         private async void SwitchToManagement()
@@ -273,6 +284,7 @@ namespace GrafikoMat
             _managementView = new ManagementView(_doctorRepository, _unitRepository, _assignmentRepository, _supabaseService, this.DispatcherQueue);
             await AnimateToAsync(_managementView, forward: true);
             BuildActionsForManage();
+            ViewModel.IsUnitContextActive = false;
         }
 
         private void BuildActionsForDashboard()
@@ -318,6 +330,7 @@ namespace GrafikoMat
             await ViewModel.UpdateFooterFromSettingsAsync();
             await AnimateToAsync(_dashboardView, false);
             BuildActionsForDashboard();
+            ViewModel.IsUnitContextActive = true;
         }
 
         private async void SwitchToDeclarations()
@@ -379,6 +392,7 @@ namespace GrafikoMat
             declarationsView.AttachViewModel(declarationsVm);
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
+            ViewModel.IsUnitContextActive = true;
         }
 
         private static void DetachFromParent(FrameworkElement el)
@@ -587,6 +601,38 @@ namespace GrafikoMat
             TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(bgPressed);
         }
 
+        // ================== NOWA METODA DO ANIMACJI ==================
+        private void UpdateHeaderAnimation(bool isUnitContextVisible)
+        {
+            var duration = new Duration(TimeSpan.FromMilliseconds(200));
+            var storyboard = new Storyboard();
+
+            var unitGridAnim = new DoubleAnimation
+            {
+                To = isUnitContextVisible ? 1 : 0,
+                Duration = duration
+            };
+            Storyboard.SetTarget(unitGridAnim, UnitContextGrid);
+            Storyboard.SetTargetProperty(unitGridAnim, "Opacity");
+
+            var globalGridAnim = new DoubleAnimation
+            {
+                To = isUnitContextVisible ? 0 : 1,
+                Duration = duration
+            };
+            Storyboard.SetTarget(globalGridAnim, GlobalContextGrid);
+            Storyboard.SetTargetProperty(globalGridAnim, "Opacity");
+
+            storyboard.Children.Add(unitGridAnim);
+            storyboard.Children.Add(globalGridAnim);
+
+            UnitContextGrid.IsHitTestVisible = isUnitContextVisible;
+            GlobalContextGrid.IsHitTestVisible = !isUnitContextVisible;
+
+            storyboard.Begin();
+        }
+        // =============================================================
+
         #region Window Setup and Win32 Interop
         private void InitAppWindow()
         {
@@ -605,8 +651,7 @@ namespace GrafikoMat
         {
             if (_backdropConfiguration != null)
             {
-                // ================== POPRAWKA BŁĘDU #1 ==================
-                _backdropConfiguration.Theme = (SystemBackdropTheme)((FrameworkElement)sender).ActualTheme;
+                _backdropConfiguration.Theme = (SystemBackdropTheme)sender.ActualTheme;
             }
             ApplyTitleBarMenuStyling();
         }
@@ -628,47 +673,17 @@ namespace GrafikoMat
                 };
 
                 _backdropConfiguration.IsInputActive = true;
-                // ================== POPRAWKA BŁĘDU #2 ==================
                 _backdropConfiguration.Theme = (SystemBackdropTheme)((FrameworkElement)this.Content).ActualTheme;
 
                 _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
-                // ================== POPRAWKA BŁĘDU #3 ==================
                 _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
-
                 return true;
             }
-
             return false;
-        }
-
-        private void TrySetSystemBackdrop()
-        {
-            if (_acrylicController == null) return;
-
-            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
-
-            if (isMaximized)
-            {
-                // Wyłączamy tło systemowe i ustawiamy stałe tło siatki
-                this.SystemBackdrop = null;
-                RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
-            }
-            else
-            {
-                // Włączamy ponownie tło systemowe (kontroler już jest skonfigurowany)
-                this.SystemBackdrop = new DesktopAcrylicBackdrop();
-                RootGrid.Background = new SolidColorBrush(Colors.Transparent);
-            }
         }
 
         private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
-            // Usunąłem stąd logikę, ponieważ powodowała problemy. Zostawiamy tylko styl paska tytułu.
-            if (args.DidPresenterChange && !_isClosing)
-            {
-                // Logika do przełączania tła przy maksymalizacji jest teraz niepotrzebna,
-                // ponieważ kontroler powinien to obsłużyć automatycznie.
-            }
             ApplyTitleBarMenuStyling();
         }
 
