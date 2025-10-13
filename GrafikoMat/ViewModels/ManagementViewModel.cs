@@ -32,6 +32,7 @@ namespace GrafikoMat.ViewModels
         private List<Unit> _allUnits = new();
 
         private Guid _currentUserId;
+        private int _currentUserLevel;
 
         private DoctorListItemViewModel? _selectedDoctor;
         public DoctorListItemViewModel? SelectedDoctor
@@ -52,18 +53,10 @@ namespace GrafikoMat.ViewModels
         }
 
         private string _searchText = string.Empty;
-        public string SearchText
-        {
-            get => _searchText;
-            set { if (SetProperty(ref _searchText, value)) { FilterDoctors(); } }
-        }
+        public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) { FilterDoctors(); } } }
 
         private bool _showArchived;
-        public bool ShowArchived
-        {
-            get => _showArchived;
-            set { if (SetProperty(ref _showArchived, value)) { FilterDoctors(); } }
-        }
+        public bool ShowArchived { get => _showArchived; set { if (SetProperty(ref _showArchived, value)) { FilterDoctors(); } } }
 
         public bool CanArchive => SelectedDoctor != null && !SelectedDoctor.IsArchived;
         public bool CanRestore => SelectedDoctor != null && SelectedDoctor.IsArchived;
@@ -130,11 +123,16 @@ namespace GrafikoMat.ViewModels
         private async Task LoadInitialDataAsync()
         {
             var previouslySelectedId = SelectedDoctor?.Id;
-            var doctors = await _doctorRepository.GetAllAsync();
-            _allUnits = await _unitRepository.GetAllAsync();
 
             var currentUserProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
-            _currentUserId = currentUserProfile?.Id ?? Guid.Empty;
+            if (currentUserProfile != null)
+            {
+                _currentUserId = currentUserProfile.Id;
+                _currentUserLevel = currentUserProfile.AdminLevel;
+            }
+
+            var doctors = await _doctorRepository.GetAllAsync();
+            _allUnits = await _unitRepository.GetAllAsync();
 
             _dispatcher?.TryEnqueue(() =>
             {
@@ -186,26 +184,32 @@ namespace GrafikoMat.ViewModels
                     }
                 });
             }
-            catch
-            {
-                return;
-            }
+            catch { return; }
 
             SelectedDoctor = null;
-            // ================== POPRAWKA 1 ==================
             EditorViewModel = new DoctorEditorViewModel(
                 new DoctorProfile { Id = Guid.Empty },
                 new List<Unit>(_allUnits),
                 new List<UnitDoctorAssignment>(),
                 _allDoctorsMasterList.Select(d => d.Abbreviation),
-                _currentUserId
+                _currentUserId,
+                _currentUserLevel
             );
-            // ==============================================
         }
 
         private async Task SaveDoctorAsync()
         {
             if (EditorViewModel == null || !EditorViewModel.IsValid) return;
+
+            var profile = EditorViewModel.Profile;
+            var isNew = EditorViewModel.IsNewDoctor;
+
+            if (!isNew && profile.Id == _currentUserId && profile.AdminLevel < 9)
+            {
+                await ShowInfo("Błąd zapisu", "Nie można odebrać sobie uprawnień Superadministratora.");
+                return;
+            }
+
             var newAssignments = EditorViewModel.Assignments.Where(a => a.IsAssigned && !a.IsPersisted).ToList();
             if (newAssignments.Any())
             {
@@ -216,16 +220,13 @@ namespace GrafikoMat.ViewModels
                 dialog.CloseButtonText = "Nie";
                 dialog.DefaultButton = ContentDialogButton.Close;
 
-                var result = await dialog.ShowAsync();
-                if (result != ContentDialogResult.Primary)
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 {
                     ResetNewUnitAssignments();
                     return;
                 }
             }
 
-            var isNew = EditorViewModel.IsNewDoctor;
-            var profile = EditorViewModel.Profile;
             var password = EditorViewModel.Password;
             var savedProfileId = profile.Id;
 
@@ -235,42 +236,26 @@ namespace GrafikoMat.ViewModels
                 {
                     if (isNew)
                     {
-                        if (_supabaseService.Client == null)
-                        {
-                            throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
-                        }
-
-                        var newUserIdString = await _supabaseService.Client.Rpc<string>("create_new_user", new
-                        {
-                            p_email = profile.Email,
-                            p_password = password,
-                            p_first_name = profile.FirstName,
-                            p_last_name = profile.LastName,
-                            p_abbreviation = profile.Abbreviation,
-                            p_is_admin = profile.IsAdmin
-                        });
-
-                        if (string.IsNullOrWhiteSpace(newUserIdString))
-                            throw new Exception("Nie udało się utworzyć użytkownika w Supabase (funkcja RPC nie zwróciła ID).");
-
-                        savedProfileId = Guid.Parse(newUserIdString);
-                        profile.Id = savedProfileId;
+                        // ================== ZMIANA: Wywołanie metody z repozytorium ==================
+                        savedProfileId = await _doctorRepository.CreateDoctorAsync(profile, password);
+                        profile.Id = savedProfileId; // Uaktualniamy ID w obiekcie profilu
 
                         var desiredAssignments = EditorViewModel.Assignments
                             .Where(a => a.IsAssigned)
                             .Select(a => new UnitDoctorAssignment { DoctorId = savedProfileId, UnitId = a.UnitId, IsActive = a.IsActive })
                             .ToList();
 
-                        if (desiredAssignments.Any())
+                        if (desiredAssignments.Any() && _supabaseService.Client != null)
                         {
                             await _supabaseService.Client.From<UnitDoctorAssignment>().Insert(desiredAssignments);
                         }
                     }
-                    else // Użytkownik już istnieje, więc edytujemy
+                    else
                     {
                         var desiredAssignments = EditorViewModel.Assignments
                             .Where(a => a.IsAssigned)
                             .Select(a => new UnitDoctorAssignment { DoctorId = profile.Id, UnitId = a.UnitId, IsActive = a.IsActive });
+
                         await _doctorRepository.SaveAsync(profile, desiredAssignments);
                     }
                 },
@@ -291,6 +276,43 @@ namespace GrafikoMat.ViewModels
             });
         }
 
+        private async void LoadEditorFor(DoctorProfile? doctorProfile)
+        {
+            if (doctorProfile == null)
+            {
+                if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
+                {
+                    EditorViewModel = null;
+                }
+                return;
+            }
+
+            await EnsureUnitsLoadedAsync();
+            if (!_allUnits.Any()) return;
+
+            var existingAbbreviations = _allDoctorsMasterList
+                .Where(d => d.Id != doctorProfile.Id)
+                .Select(d => d.Abbreviation);
+            var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
+
+            EditorViewModel = new DoctorEditorViewModel(
+                (DoctorProfile)doctorProfile.Clone(),
+                new List<Unit>(_allUnits),
+                currentAssignments,
+                existingAbbreviations,
+                _currentUserId,
+                _currentUserLevel
+            );
+        }
+
+        private async Task ShowInfo(string title, string message)
+        {
+            var dlg = App.CreateThemedDialog();
+            dlg.Title = title;
+            dlg.Content = message;
+            dlg.PrimaryButtonText = "OK";
+            await dlg.ShowAsync();
+        }
         private void ResetNewUnitAssignments()
         {
             if (EditorViewModel?.Assignments != null)
@@ -304,7 +326,6 @@ namespace GrafikoMat.ViewModels
                 }
             }
         }
-
         private async Task ArchiveDoctorAsync()
         {
             if (SelectedDoctor == null) return;
@@ -334,7 +355,6 @@ namespace GrafikoMat.ViewModels
             );
             SelectedDoctor = null;
         }
-
         private async Task RestoreDoctorAsync()
         {
             if (SelectedDoctor == null) return;
@@ -354,7 +374,6 @@ namespace GrafikoMat.ViewModels
             );
             SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == restoredDoctorId);
         }
-
         private async Task ResetPasswordAsync()
         {
             if (SelectedDoctor == null || EditorViewModel == null) return;
@@ -386,39 +405,6 @@ namespace GrafikoMat.ViewModels
                 errorMessageTitle: "Błąd resetowania hasła"
             );
             EditorViewModel.SetNewGeneratedPassword(newPassword);
-        }
-
-        private async void LoadEditorFor(DoctorProfile? doctorProfile)
-        {
-            if (doctorProfile == null)
-            {
-                if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
-                {
-                    EditorViewModel = null;
-                }
-                return;
-            }
-
-            await EnsureUnitsLoadedAsync();
-            if (!_allUnits.Any())
-            {
-                return;
-            }
-
-            var existingAbbreviations = _allDoctorsMasterList
-                .Where(d => d.Id != doctorProfile.Id)
-                .Select(d => d.Abbreviation);
-            var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
-
-            // ================== POPRAWKA 2 ==================
-            EditorViewModel = new DoctorEditorViewModel(
-                (DoctorProfile)doctorProfile.Clone(),
-                new List<Unit>(_allUnits),
-                currentAssignments,
-                existingAbbreviations,
-                _currentUserId
-            );
-            // ==============================================
         }
     }
 }

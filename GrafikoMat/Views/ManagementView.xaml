@@ -128,7 +128,22 @@
                                 <Button Content="Resetuj hasło użytkownika..." Command="{x:Bind ViewModel.ResetPasswordCommand}" Visibility="{x:Bind ViewModel.EditorViewModel.ShowResetButton, Mode=OneWay}" HorizontalAlignment="Left"/>
                             </Grid>
                         </Grid>
-                        <CheckBox Content="Administrator Systemu" IsChecked="{x:Bind ViewModel.EditorViewModel.Profile.IsAdmin, Mode=TwoWay}" Margin="0,12,0,0"/>
+
+                        <CheckBox Content="Administrator Systemu" 
+                                  IsChecked="{x:Bind ViewModel.EditorViewModel.IsAdminToggleChecked, Mode=TwoWay}"
+                                  Visibility="{x:Bind ViewModel.EditorViewModel.ShowAdminToggle, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                  Margin="0,12,0,0"/>
+
+                        <Border Background="{ThemeResource ControlStrongFillColorDefaultBrush}"
+                                CornerRadius="4"
+                                Padding="8,4"
+                                Visibility="{x:Bind ViewModel.EditorViewModel.ShowSuperAdminLabel, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Left">
+                            <TextBlock Text="Superadministrator"
+                                       FontWeight="SemiBold"
+                                       Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                        </Border>
                     </StackPanel>
 
                     <Grid Grid.Row="1" Margin="0,24,0,0">

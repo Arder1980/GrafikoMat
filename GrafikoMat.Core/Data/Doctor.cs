@@ -23,8 +23,13 @@ namespace GrafikoMat.Core.Data
         [Column("email")]
         public string Email { get; set; } = string.Empty;
 
-        [Column("is_admin")]
-        public bool IsAdmin { get; set; } = false;
+        // ================== ZMIANA: Zastąpienie IsAdmin przez AdminLevel ==================
+        [Column("admin_level")]
+        public int AdminLevel { get; set; } = 0;
+
+        [JsonIgnore]
+        public bool IsAdmin => AdminLevel > 0;
+        // =================================================================================
 
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
@@ -44,10 +49,6 @@ namespace GrafikoMat.Core.Data
         }
     }
 
-    /// <summary>
-    /// Klasa DTO (Data Transfer Object) używana wyłącznie do aktualizacji podzbioru danych lekarza w bazie.
-    /// Zapobiega to nadpisywaniu przez pomyłkę kolumn zarządzanych przez bazę danych (np. created_at).
-    /// </summary>
     [Table("doctors")]
     public class DoctorForUpdate : BaseModel
     {
@@ -66,8 +67,10 @@ namespace GrafikoMat.Core.Data
         [Column("email")]
         public string Email { get; set; } = string.Empty;
 
-        [Column("is_admin")]
-        public bool IsAdmin { get; set; }
+        // ================== ZMIANA: Zastąpienie IsAdmin przez AdminLevel ==================
+        [Column("admin_level")]
+        public int AdminLevel { get; set; }
+        // =================================================================================
 
         [Column("is_archived")]
         public bool IsArchived { get; set; }

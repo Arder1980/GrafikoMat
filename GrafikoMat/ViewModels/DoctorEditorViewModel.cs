@@ -15,10 +15,27 @@ namespace GrafikoMat.ViewModels
         private readonly HashSet<string> _existingAbbreviations;
         public bool IsNewDoctor => Profile.Id == Guid.Empty;
 
-        // ================== NOWE WŁAŚCIWOŚCI ==================
         public Guid CurrentUserId { get; }
-        public bool IsCurrentlyLoggedInUser => !IsNewDoctor && Profile.Id == CurrentUserId;
-        // ======================================================
+        public int CurrentUserLevel { get; }
+
+        // ================== NOWE WŁAŚCIWOŚCI STERUJĄCE UI ==================
+        public bool ShowAdminToggle { get; }
+        public bool ShowSuperAdminLabel { get; }
+
+        private bool _isAdminToggleChecked;
+        public bool IsAdminToggleChecked
+        {
+            get => _isAdminToggleChecked;
+            set
+            {
+                if (SetProperty(ref _isAdminToggleChecked, value))
+                {
+                    // Ustawiamy poziom uprawnień na 1 lub 0, nigdy na 9.
+                    Profile.AdminLevel = value ? 1 : 0;
+                }
+            }
+        }
+        // =================================================================
 
         private bool _showPasswordSection;
         public bool ShowPasswordSection { get => _showPasswordSection; set => SetProperty(ref _showPasswordSection, value); }
@@ -26,8 +43,7 @@ namespace GrafikoMat.ViewModels
         private bool _showResetButton;
         public bool ShowResetButton { get => _showResetButton; set => SetProperty(ref _showResetButton, value); }
 
-        #region Właściwości-opakowania z logiką
-
+        #region Właściwości-opakowania
         public string FirstName
         {
             get => Profile.FirstName;
@@ -42,7 +58,7 @@ namespace GrafikoMat.ViewModels
                 }
             }
         }
-
+        // Pozostałe właściwości-opakowania bez zmian...
         public string LastName
         {
             get => Profile.LastName;
@@ -97,21 +113,8 @@ namespace GrafikoMat.ViewModels
         public string Password { get => _password; set => SetProperty(ref _password, value); }
         #endregion
 
-        #region Właściwości dla komunikatów o błędach
-
-        public string NameErrorMessage
-        {
-            get
-            {
-                var validNameRegex = new Regex(@"^[\p{L}\s-]*$");
-                if (!validNameRegex.IsMatch(FirstName) || !validNameRegex.IsMatch(LastName))
-                {
-                    return "Imię i nazwisko mogą zawierać tylko litery, spacje i myślniki.";
-                }
-                return string.Empty;
-            }
-        }
-
+        #region Komunikaty o błędach
+        public string NameErrorMessage => !new Regex(@"^[\p{L}\s-]*$").IsMatch(FirstName) || !new Regex(@"^[\p{L}\s-]*$").IsMatch(LastName) ? "Imię i nazwisko mogą zawierać tylko litery, spacje i myślniki." : string.Empty;
         public string AbbreviationErrorMessage
         {
             get
@@ -122,7 +125,6 @@ namespace GrafikoMat.ViewModels
                 return string.Empty;
             }
         }
-
         public string EmailErrorMessage
         {
             get
@@ -134,12 +136,26 @@ namespace GrafikoMat.ViewModels
         }
         #endregion
 
-        // ================== ZMIANA W KONSTRUKTORZE ==================
-        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations, Guid currentUserId)
+        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations, Guid currentUserId, int currentUserLevel)
         {
             Profile = profile;
-            CurrentUserId = currentUserId; // <-- Przypisanie ID
+            CurrentUserId = currentUserId;
+            CurrentUserLevel = currentUserLevel;
             _existingAbbreviations = new HashSet<string>(existingAbbreviations, StringComparer.OrdinalIgnoreCase);
+
+            // ================== NOWA LOGIKA WIDOCZNOŚCI KONTROLEK ==================
+            bool isEditingSelf = profile.Id == currentUserId;
+            bool isCurrentUserSuperAdmin = currentUserLevel >= 9;
+
+            // Pokaż checkbox tylko, gdy Superadmin edytuje kogoś innego
+            ShowAdminToggle = isCurrentUserSuperAdmin && !isEditingSelf;
+
+            // Pokaż etykietę "Superadministrator" tylko, gdy edytowany jest Superadmin
+            ShowSuperAdminLabel = profile.AdminLevel >= 9;
+
+            // Zainicjuj stan checkboxa
+            _isAdminToggleChecked = profile.AdminLevel == 1;
+            // ====================================================================
 
             if (IsNewDoctor)
             {
@@ -156,11 +172,7 @@ namespace GrafikoMat.ViewModels
             foreach (var unit in allUnits.OrderBy(u => u.Name))
             {
                 var assignment = currentAssignments.FirstOrDefault(a => a.UnitId == unit.Id);
-
-                Assignments.Add(new UnitAssignmentViewModel(unit,
-                    isAssigned: assignment != null,
-                    isActive: assignment?.IsActive ?? true,
-                    isPersisted: assignment != null));
+                Assignments.Add(new UnitAssignmentViewModel(unit, isAssigned: assignment != null, isActive: assignment?.IsActive ?? true, isPersisted: assignment != null));
             }
         }
 
@@ -196,29 +208,11 @@ namespace GrafikoMat.ViewModels
         {
             if (string.IsNullOrWhiteSpace(LastName)) return;
             var baseName = LastName.Split(new[] { ' ', '-' })[0];
-            string newAbbreviation;
-            if (baseName.Length >= 3)
-            {
-                newAbbreviation = baseName.Substring(0, 3).ToUpper();
-            }
-            else
-            {
-                newAbbreviation = baseName.ToUpper().PadRight(3, 'X');
-            }
+            string newAbbreviation = (baseName.Length >= 3) ? baseName.Substring(0, 3).ToUpper() : baseName.ToUpper().PadRight(3, 'X');
             Abbreviation = newAbbreviation;
         }
 
-        public bool IsValid
-        {
-            get
-            {
-                return !string.IsNullOrWhiteSpace(FirstName)
-                    && !string.IsNullOrWhiteSpace(LastName)
-                    && string.IsNullOrEmpty(NameErrorMessage)
-                    && string.IsNullOrEmpty(AbbreviationErrorMessage)
-                    && string.IsNullOrEmpty(EmailErrorMessage);
-            }
-        }
+        public bool IsValid => !string.IsNullOrWhiteSpace(FirstName) && !string.IsNullOrWhiteSpace(LastName) && string.IsNullOrEmpty(NameErrorMessage) && string.IsNullOrEmpty(AbbreviationErrorMessage) && string.IsNullOrEmpty(EmailErrorMessage);
 
         private bool IsValidEmail(string email)
         {
@@ -229,10 +223,7 @@ namespace GrafikoMat.ViewModels
                     @"^(?!\.)(""([^""\r\\]|\\[""\r\\])*""|([-a-z0-9!#$%&'*+/=?^_`{|}~]|(?<!\.)\.)*)(?<!\.)@[a-z0-9][\w\.-]*[a-z0-9]\.[a-z][a-z\.]*[a-z]$",
                     RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
             }
-            catch (RegexMatchTimeoutException)
-            {
-                return false;
-            }
+            catch (RegexMatchTimeoutException) { return false; }
         }
     }
 }

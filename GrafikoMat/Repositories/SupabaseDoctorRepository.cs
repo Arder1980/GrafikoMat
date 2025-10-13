@@ -2,15 +2,14 @@
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using Supabase;
+using Supabase.Functions;
 using Supabase.Gotrue;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using static Supabase.Functions.Client;
 using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Repositories
@@ -41,29 +40,55 @@ namespace GrafikoMat.Repositories
             return response.Models ?? new List<DoctorProfile>();
         }
 
+        // ================== NOWA METODA: Implementacja tworzenia użytkownika ==================
+        public async Task<Guid> CreateDoctorAsync(DoctorProfile profile, string password)
+        {
+            if (_supabaseService.Client == null)
+            {
+                throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
+            }
+
+            var rpcParams = new
+            {
+                p_email = profile.Email,
+                p_password = password,
+                p_first_name = profile.FirstName,
+                p_last_name = profile.LastName,
+                p_abbreviation = profile.Abbreviation,
+                p_admin_level = profile.AdminLevel
+            };
+
+            var newUserIdString = await _supabaseService.Client.Rpc<string>("create_new_user", rpcParams);
+
+            if (string.IsNullOrWhiteSpace(newUserIdString))
+                throw new Exception("Nie udało się utworzyć użytkownika w Supabase (funkcja RPC nie zwróciła ID).");
+
+            return Guid.Parse(newUserIdString);
+        }
+        // ======================================================================================
+
         public async Task SaveAsync(DoctorProfile profile, IEnumerable<UnitDoctorAssignment> desiredAssignments)
         {
+            // Zmieniamy logikę: ta metoda służy już tylko do aktualizacji, nie do tworzenia
             if (profile.Id == Guid.Empty)
             {
-                throw new NotImplementedException("Tworzenie nowych użytkowników odbywa się poprzez dedykowaną funkcję RPC w ManagementViewModel.");
+                throw new InvalidOperationException("Do tworzenia nowych użytkowników należy używać metody CreateDoctorAsync.");
             }
-            else
+
+            var doctorDataForUpdate = new DoctorForUpdate
             {
-                var doctorDataForUpdate = new DoctorForUpdate
-                {
-                    Id = profile.Id,
-                    FirstName = profile.FirstName,
-                    LastName = profile.LastName,
-                    Abbreviation = profile.Abbreviation,
-                    Email = profile.Email,
-                    IsAdmin = profile.IsAdmin,
-                    IsArchived = profile.IsArchived,
-                    RequiresPasswordChange = profile.RequiresPasswordChange
-                };
-                await _supabase.From<DoctorForUpdate>()
-                    .Where(d => d.Id == profile.Id)
-                    .Update(doctorDataForUpdate);
-            }
+                Id = profile.Id,
+                FirstName = profile.FirstName,
+                LastName = profile.LastName,
+                Abbreviation = profile.Abbreviation,
+                Email = profile.Email,
+                AdminLevel = profile.AdminLevel,
+                IsArchived = profile.IsArchived,
+                RequiresPasswordChange = profile.RequiresPasswordChange
+            };
+            await _supabase.From<DoctorForUpdate>()
+                .Where(d => d.Id == profile.Id)
+                .Update(doctorDataForUpdate);
 
             var assignmentRepo = new SupabaseAssignmentRepository(_supabase);
             var currentAssignments = await assignmentRepo.GetForDoctorAsync(profile.Id);
@@ -95,19 +120,8 @@ namespace GrafikoMat.Repositories
             var session = _supabase.Auth.CurrentSession;
             if (session?.AccessToken == null)
             {
-                throw new InvalidOperationException("Brak aktywnej sesji administratora. Nie można zresetować hasła.");
+                throw new InvalidOperationException("Brak aktywnej sesji użytkownika. Nie można wywołać funkcji chronionej.");
             }
-
-            if (string.IsNullOrEmpty(_supabaseService.SupabaseUrl) || string.IsNullOrEmpty(_supabaseService.SupabaseAnonKey))
-            {
-                throw new InvalidOperationException("Klient Supabase nie jest poprawnie zainicjalizowany (brak URL lub klucza).");
-            }
-
-            using var client = new HttpClient();
-            var functionUrl = $"{_supabaseService.SupabaseUrl}/functions/v1/admin-reset-user-password";
-
-            client.DefaultRequestHeaders.Add("apikey", _supabaseService.SupabaseAnonKey);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
 
             var parameters = new
             {
@@ -115,10 +129,16 @@ namespace GrafikoMat.Repositories
                 password_to_set = newPassword
             };
             var jsonPayload = JsonSerializer.Serialize(parameters);
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-            var response = await client.PostAsync(functionUrl, content);
-            response.EnsureSuccessStatusCode();
+            var options = new InvokeFunctionOptions
+            {
+                Headers = new Dictionary<string, string>
+                {
+                    { "Authorization", $"Bearer {session.AccessToken}" }
+                }
+            };
+
+            await _supabase.Functions.Invoke("admin-reset-user-password", jsonPayload, options);
         }
 
         public async Task SetPasswordChangeFlagAsync(Guid doctorId, bool requiresChange)
@@ -136,59 +156,5 @@ namespace GrafikoMat.Repositories
                 .Set(d => d.RequiresPasswordChange, false)
                 .Update();
         }
-
-        // ================== NOWA IMPLEMENTACJA ==================
-        public async Task<Guid> CreateDoctorAsync(DoctorProfile profile, string password)
-        {
-            var session = _supabase.Auth.CurrentSession;
-            if (session?.AccessToken == null)
-            {
-                throw new InvalidOperationException("Brak aktywnej sesji administratora. Nie można utworzyć użytkownika.");
-            }
-
-            if (string.IsNullOrEmpty(_supabaseService.SupabaseUrl) || string.IsNullOrEmpty(_supabaseService.SupabaseAnonKey))
-            {
-                throw new InvalidOperationException("Klient Supabase nie jest poprawnie zainicjalizowany (brak URL lub klucza).");
-            }
-
-            using var client = new HttpClient();
-            var functionUrl = $"{_supabaseService.SupabaseUrl}/functions/v1/admin-create-user";
-
-            // Ustawiamy wymagane nagłówki
-            client.DefaultRequestHeaders.Add("apikey", _supabaseService.SupabaseAnonKey);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
-
-            var parameters = new
-            {
-                p_email = profile.Email,
-                p_password = password,
-                p_first_name = profile.FirstName,
-                p_last_name = profile.LastName,
-                p_abbreviation = profile.Abbreviation,
-                p_is_admin = profile.IsAdmin
-            };
-
-            var jsonPayload = JsonSerializer.Serialize(parameters);
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-            var response = await client.PostAsync(functionUrl, content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                throw new Exception($"Błąd wywołania funkcji Edge: {response.StatusCode}. Treść: {errorContent}");
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            var newUserId = JsonSerializer.Deserialize<string>(responseContent);
-
-            if (string.IsNullOrEmpty(newUserId))
-            {
-                throw new Exception("Funkcja Edge nie zwróciła ID nowego użytkownika.");
-            }
-
-            return Guid.Parse(newUserId);
-        }
-        // ========================================================
     }
 }
