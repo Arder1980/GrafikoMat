@@ -49,6 +49,9 @@ namespace GrafikoMat
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
 
+        private DesktopAcrylicController? _acrylicController;
+        private SystemBackdropConfiguration? _backdropConfiguration;
+
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
         private AppSettings? _appSettings;
@@ -70,6 +73,9 @@ namespace GrafikoMat
             this.SetTitleBar(DragBar);
             InitAppWindow();
             ApplyTitleBarMenuStyling();
+
+            TryInitializeBackdropController();
+
             RootGrid.Loaded += async (s, e) => await InitializeApplicationAsync();
             _dashboardView.Attach(ViewModel);
 
@@ -81,7 +87,12 @@ namespace GrafikoMat
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
             if (_isClosing) return;
-            TrySetSystemBackdrop();
+
+            if (_backdropConfiguration != null)
+            {
+                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
+            }
+
             ApplyTitleBarMenuStyling();
         }
 
@@ -495,6 +506,12 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
+            if (_acrylicController != null)
+            {
+                _acrylicController.Dispose();
+                _acrylicController = null;
+            }
+
             if (_oldWndProc != IntPtr.Zero)
             {
                 SetWindowLongPtr(WindowNative.GetWindowHandle(this), -4, _oldWndProc);
@@ -586,38 +603,71 @@ namespace GrafikoMat
         }
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
+            if (_backdropConfiguration != null)
+            {
+                // ================== POPRAWKA BŁĘDU #1 ==================
+                _backdropConfiguration.Theme = (SystemBackdropTheme)((FrameworkElement)sender).ActualTheme;
+            }
             ApplyTitleBarMenuStyling();
+        }
+
+        private bool TryInitializeBackdropController()
+        {
+            if (DesktopAcrylicController.IsSupported())
+            {
+                _acrylicController = new DesktopAcrylicController();
+                _backdropConfiguration = new SystemBackdropConfiguration();
+
+                this.Closed += (s, e) =>
+                {
+                    if (_acrylicController != null)
+                    {
+                        _acrylicController.Dispose();
+                        _acrylicController = null;
+                    }
+                };
+
+                _backdropConfiguration.IsInputActive = true;
+                // ================== POPRAWKA BŁĘDU #2 ==================
+                _backdropConfiguration.Theme = (SystemBackdropTheme)((FrameworkElement)this.Content).ActualTheme;
+
+                _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
+                // ================== POPRAWKA BŁĘDU #3 ==================
+                _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
+
+                return true;
+            }
+
+            return false;
         }
 
         private void TrySetSystemBackdrop()
         {
-            if (DesktopAcrylicController.IsSupported())
-            {
-                bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
+            if (_acrylicController == null) return;
 
-                if (!isMaximized)
-                {
-                    this.SystemBackdrop = new DesktopAcrylicBackdrop();
-                    RootGrid.Background = new SolidColorBrush(Colors.Transparent);
-                }
-                else
-                {
-                    this.SystemBackdrop = null;
-                    RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
-                }
+            bool isMaximized = _appWindow?.Presenter is OverlappedPresenter p && p.State == OverlappedPresenterState.Maximized;
+
+            if (isMaximized)
+            {
+                // Wyłączamy tło systemowe i ustawiamy stałe tło siatki
+                this.SystemBackdrop = null;
+                RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
             }
             else
             {
-                this.SystemBackdrop = null;
-                RootGrid.Background = (Brush)Application.Current.Resources["ApplicationPageBackgroundThemeBrush"];
+                // Włączamy ponownie tło systemowe (kontroler już jest skonfigurowany)
+                this.SystemBackdrop = new DesktopAcrylicBackdrop();
+                RootGrid.Background = new SolidColorBrush(Colors.Transparent);
             }
         }
 
         private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
+            // Usunąłem stąd logikę, ponieważ powodowała problemy. Zostawiamy tylko styl paska tytułu.
             if (args.DidPresenterChange && !_isClosing)
             {
-                TrySetSystemBackdrop();
+                // Logika do przełączania tła przy maksymalizacji jest teraz niepotrzebna,
+                // ponieważ kontroler powinien to obsłużyć automatycznie.
             }
             ApplyTitleBarMenuStyling();
         }
