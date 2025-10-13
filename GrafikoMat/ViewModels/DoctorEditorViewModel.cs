@@ -15,6 +15,11 @@ namespace GrafikoMat.ViewModels
         private readonly HashSet<string> _existingAbbreviations;
         public bool IsNewDoctor => Profile.Id == Guid.Empty;
 
+        // ================== NOWE WŁAŚCIWOŚCI ==================
+        public Guid CurrentUserId { get; }
+        public bool IsCurrentlyLoggedInUser => !IsNewDoctor && Profile.Id == CurrentUserId;
+        // ======================================================
+
         private bool _showPasswordSection;
         public bool ShowPasswordSection { get => _showPasswordSection; set => SetProperty(ref _showPasswordSection, value); }
 
@@ -129,9 +134,11 @@ namespace GrafikoMat.ViewModels
         }
         #endregion
 
-        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations)
+        // ================== ZMIANA W KONSTRUKTORZE ==================
+        public DoctorEditorViewModel(DoctorProfile profile, List<Unit> allUnits, List<UnitDoctorAssignment> currentAssignments, IEnumerable<string> existingAbbreviations, Guid currentUserId)
         {
             Profile = profile;
+            CurrentUserId = currentUserId; // <-- Przypisanie ID
             _existingAbbreviations = new HashSet<string>(existingAbbreviations, StringComparer.OrdinalIgnoreCase);
 
             if (IsNewDoctor)
@@ -150,8 +157,6 @@ namespace GrafikoMat.ViewModels
             {
                 var assignment = currentAssignments.FirstOrDefault(a => a.UnitId == unit.Id);
 
-                // ZMIANA: Przekazujemy 'assignment != null' jako informację,
-                // że powiązanie już istnieje w bazie danych.
                 Assignments.Add(new UnitAssignmentViewModel(unit,
                     isAssigned: assignment != null,
                     isActive: assignment?.IsActive ?? true,

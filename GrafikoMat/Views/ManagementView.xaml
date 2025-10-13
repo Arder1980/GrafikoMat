@@ -47,11 +47,29 @@
             <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DoctorListItemViewModel">
-                        <TextBlock Margin="12,10" 
-                                   Style="{ThemeResource BaseTextBlockStyle}" 
-                                   FontWeight="SemiBold" 
-                                   Text="{x:Bind DisplayName}" 
-                                   Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
+                        <Grid Margin="12,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Style="{ThemeResource BaseTextBlockStyle}"
+                                       FontWeight="SemiBold"
+                                       Text="{x:Bind DisplayName}"
+                                       Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
+                            <Border Grid.Column="1"
+                                    Padding="6,2"
+                                    Margin="8,0,0,0"
+                                    Background="{ThemeResource SystemAccentColor}"
+                                    CornerRadius="4"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind IsCurrentUser, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                <TextBlock Text="JA"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{ThemeResource TextOnAccentFillColorPrimary}"/>
+                            </Border>
+                        </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>

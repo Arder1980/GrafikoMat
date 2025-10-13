@@ -14,12 +14,21 @@ namespace GrafikoMat.ViewModels
         public bool IsArchived => Profile.IsArchived;
         public Guid Id => Profile.Id;
 
+        // ================== NOWA WŁAŚCIWOŚĆ ==================
+        /// <summary>
+        /// Prawda, jeśli ten element listy reprezentuje aktualnie zalogowanego użytkownika.
+        /// </summary>
+        public bool IsCurrentUser { get; }
+        // ======================================================
+
         // Pomocnicza właściwość do sortowania
         public string SortableName => $"{Profile.LastName} {Profile.FirstName}";
 
-        public DoctorListItemViewModel(DoctorProfile profile, bool needsDifferentiator)
+        // ================== ZMIANA W KONSTRUKTORZE ==================
+        public DoctorListItemViewModel(DoctorProfile profile, bool needsDifferentiator, bool isCurrentUser)
         {
             Profile = profile;
+            IsCurrentUser = isCurrentUser; // <-- Zapamiętujemy informację
 
             DisplayName = needsDifferentiator
                 ? $"{profile.LastName} {profile.FirstName} ({profile.Abbreviation})"
