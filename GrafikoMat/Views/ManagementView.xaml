@@ -47,29 +47,20 @@
             <ListView Grid.Row="2" BorderThickness="0,1,1,0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" ItemsSource="{x:Bind ViewModel.FilteredDoctors}" SelectedItem="{x:Bind ViewModel.SelectedDoctor, Mode=TwoWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DoctorListItemViewModel">
-                        <Grid Margin="12,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Style="{ThemeResource BaseTextBlockStyle}"
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,10">
+                            <TextBlock Style="{ThemeResource BaseTextBlockStyle}"
                                        FontWeight="SemiBold"
                                        Text="{x:Bind DisplayName}"
-                                       Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"/>
-                            <Border Grid.Column="1"
-                                    Padding="6,2"
-                                    Margin="8,0,0,0"
-                                    Background="{ThemeResource SystemAccentColor}"
-                                    CornerRadius="4"
-                                    VerticalAlignment="Center"
-                                    Visibility="{x:Bind IsCurrentUser, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                <TextBlock Text="JA"
-                                           FontSize="10"
-                                           FontWeight="Bold"
-                                           Foreground="{ThemeResource TextOnAccentFillColorPrimary}"/>
-                            </Border>
-                        </Grid>
+                                       Opacity="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource ArchiveOpacityConverter}}"
+                                       VerticalAlignment="Center"/>
+                            <FontIcon FontFamily="Segoe MDL2 Assets"
+                                      Glyph="&#xE77B;"
+                                      FontSize="16"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource SystemAccentColor}"
+                                      ToolTipService.ToolTip="Zalogowany użytkownik"
+                                      Visibility="{x:Bind IsCurrentUser, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        </StackPanel>
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
