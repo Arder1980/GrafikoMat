@@ -1,9 +1,9 @@
 ﻿using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System;
-using System.Threading.Tasks;
-using Windows.ApplicationModel.DataTransfer; // DODANO DLA CLIPBOARD
+using Microsoft.UI; // <-- Ta linia została dodana
 
 namespace GrafikoMat.Controls
 {
@@ -46,7 +46,6 @@ namespace GrafikoMat.Controls
             {
                 ActionProgressRing.IsActive = true;
                 ActionInfoBar.IsOpen = false;
-                ErrorActionGrid.Visibility = Visibility.Collapsed; // NOWA LINIA
                 OverlayHost.Visibility = Visibility.Visible;
             });
         }
@@ -60,20 +59,29 @@ namespace GrafikoMat.Controls
                 ActionInfoBar.Title = message.Title;
                 ActionInfoBar.Message = message.Message;
                 ActionInfoBar.Severity = message.Severity;
+
+                // ================== ZMIANA: Użycie nowego pędzla ==================
+                var foregroundBrush = new SolidColorBrush(Colors.White);
+
+                switch (message.Severity)
+                {
+                    case InfoBarSeverity.Success:
+                        ActionInfoBar.Background = (Brush)this.Resources["SuccessBrush"];
+                        ActionInfoBar.Foreground = foregroundBrush;
+                        break;
+                    case InfoBarSeverity.Error:
+                        ActionInfoBar.Background = (Brush)this.Resources["ErrorBrush"];
+                        ActionInfoBar.Foreground = foregroundBrush;
+                        break;
+                    default:
+                        // Dla innych typów (Warning, Informational) wracamy do domyślnych kolorów motywu
+                        ActionInfoBar.ClearValue(Control.BackgroundProperty);
+                        ActionInfoBar.ClearValue(Control.ForegroundProperty);
+                        break;
+                }
+                // =================== KONIEC ZMIANY ===================
+
                 ActionInfoBar.IsOpen = true;
-
-                // NOWA LOGIKA: Pokaż przyciski tylko w przypadku błędu
-                if (message.Severity == InfoBarSeverity.Error)
-                {
-                    ErrorActionGrid.Visibility = Visibility.Visible;
-                    ActionInfoBar.IsClosable = false; // Ręczne zamykanie
-                }
-                else
-                {
-                    ErrorActionGrid.Visibility = Visibility.Collapsed;
-                    ActionInfoBar.IsClosable = true; // Automatyczne zamykanie
-                }
-
                 OverlayHost.Visibility = Visibility.Visible;
             });
         }
@@ -86,38 +94,7 @@ namespace GrafikoMat.Controls
                 OverlayHost.Visibility = Visibility.Collapsed;
                 ActionInfoBar.IsOpen = false;
                 ActionProgressRing.IsActive = false;
-                ErrorActionGrid.Visibility = Visibility.Collapsed; // NOWA LINIA
             });
-        }
-
-        // NOWA METODA: Obsługa kliknięcia przycisku OK
-        private void OkButton_Click(object sender, RoutedEventArgs e)
-        {
-            // Wysłanie komunikatu do orkiestratora (dla ewentualnej przyszłej logiki)
-            WeakReferenceMessenger.Default.Send(new HideOverlayExplicitlyMessage(_viewId));
-
-            // Ręczne zamknięcie nakładki
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                OverlayHost.Visibility = Visibility.Collapsed;
-                ActionInfoBar.IsOpen = false;
-            });
-        }
-
-        // NOWA METODA: Obsługa kopiowania
-        private async void CopyButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (ActionInfoBar.Severity == InfoBarSeverity.Error && !string.IsNullOrEmpty(ActionInfoBar.Message))
-            {
-                var dataPackage = new DataPackage();
-                dataPackage.SetText(ActionInfoBar.Title + ": " + ActionInfoBar.Message);
-                Clipboard.SetContent(dataPackage);
-
-                // Opcjonalnie: Zmiana tekstu na przycisku na "Skopiowano" na chwilę
-                CopyButton.Content = "Skopiowano!";
-                await Task.Delay(1000);
-                CopyButton.Content = "Kopiuj treść błędu";
-            }
         }
 
         public Guid GetViewId() => _viewId;
