@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-14 18:17:53
+# Data:       2025-10-14 23:21:20
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -41,7 +41,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 156
+## FILES (liczba): 157
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
@@ -77,6 +77,7 @@ FILE GrafikoMat.Core\Scheduling\Validation\ConstraintValidationService.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
+FILE GrafikoMat\Common\CalendarBrushConverters.cs
 FILE GrafikoMat\Common\Converters.cs
 FILE GrafikoMat\Common\ObservableObject.cs
 FILE GrafikoMat\Common\PasswordGenerator.cs
@@ -3436,6 +3437,93 @@ namespace GrafikoMat
 }
 ----- END -----
 
+===== FILE: GrafikoMat\Common\CalendarBrushConverters.cs (3255 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media;
+using GrafikoMat.ViewModels;
+
+namespace GrafikoMat.Common
+{
+    internal static class CalendarBrushKeys
+    {
+        public const string CellBgActive = "Cal_CellBgActive";
+        public const string CellBgDayOff = "Cal_CellBgDayOff";
+        public const string CellBgOther = "Cal_CellBgOther";
+        public const string HeaderBgActive = "Cal_HeaderBgActive";
+        public const string HeaderBgOther = "Cal_HeaderBgOther";
+        public const string BorderActive = "Cal_BorderActive";
+        public const string BorderOther = "Cal_BorderOther";
+        public const string TextNormal = "Cal_TextNormal";
+        public const string TextMuted = "Cal_TextMuted";
+    }
+
+    public sealed class CellBackgroundConverter : IValueConverter
+    {
+        public object Convert(object value, System.Type targetType, object parameter, string language)
+        {
+            if (value is DayCell c)
+            {
+                var key = c.InMonth
+                    ? (c.IsDayOff ? CalendarBrushKeys.CellBgDayOff : CalendarBrushKeys.CellBgActive)
+                    : CalendarBrushKeys.CellBgOther;
+                return (Brush)Application.Current.Resources[key];
+            }
+            return null!;
+        }
+
+        public object ConvertBack(object value, System.Type targetType, object parameter, string language) => null!;
+    }
+
+    public sealed class CellHeaderBackgroundConverter : IValueConverter
+    {
+        public object Convert(object value, System.Type targetType, object parameter, string language)
+        {
+            if (value is DayCell c)
+            {
+                var key = c.InMonth ? CalendarBrushKeys.HeaderBgActive : CalendarBrushKeys.HeaderBgOther;
+                return (Brush)Application.Current.Resources[key];
+            }
+            return null!;
+        }
+
+        public object ConvertBack(object value, System.Type targetType, object parameter, string language) => null!;
+    }
+
+    public sealed class CellBorderConverter : IValueConverter
+    {
+        public object Convert(object value, System.Type targetType, object parameter, string language)
+        {
+            if (value is DayCell c)
+            {
+                var key = c.InMonth ? CalendarBrushKeys.BorderActive : CalendarBrushKeys.BorderOther;
+                return (Brush)Application.Current.Resources[key];
+            }
+            return null!;
+        }
+
+        public object ConvertBack(object value, System.Type targetType, object parameter, string language) => null!;
+    }
+
+    public sealed class DayNumberForegroundConverter : IValueConverter
+    {
+        public object Convert(object value, System.Type targetType, object parameter, string language)
+        {
+            if (value is DayCell c)
+            {
+                var key = c.InMonth ? CalendarBrushKeys.TextNormal : CalendarBrushKeys.TextMuted;
+                return (Brush)Application.Current.Resources[key];
+            }
+            return null!;
+        }
+
+        public object ConvertBack(object value, System.Type targetType, object parameter, string language) => null!;
+    }
+}
+
+----- END -----
+
 ===== FILE: GrafikoMat\Common\Converters.cs (6126 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
@@ -3672,17 +3760,16 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Common\PolishHolidays.cs (6424 bytes)
+===== FILE: GrafikoMat\Common\PolishHolidays.cs (5749 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Generic;
-using System.Linq; // DODANO
+using System.Linq;
 
 namespace GrafikoMat.Common
 {
     public static class PolishHolidays
     {
-        // ZMIANA: Rozbudowano słownik o dodatkowe święta i dni okolicznościowe
         private static readonly Dictionary<(int Month, int Day), string> _fixedHolidays = new()
         {
             // Święta państwowe (wolne)
@@ -3702,13 +3789,18 @@ namespace GrafikoMat.Common
             { (2, 14), "Walentynki" },
             { (3, 8),  "Dzień Kobiet" },
             { (4, 1),  "Prima Aprilis" },
+            { (5, 2),  "Dzień Flagi RP" }, // NOWY
             { (5, 26), "Dzień Matki" },
             { (6, 1),  "Dzień Dziecka" },
             { (6, 23), "Dzień Ojca" },
+            { (9, 30), "Dzień Chłopaka" },
+            { (10, 14),"Dzień Edukacji Narodowej" },
             { (10, 31),"Halloween" },
             { (11, 2), "Zaduszki" },
+            // { (11, 20),"Międzynarodowy Dzień Praw Dziecka" }, // USUNIĘTY
             { (11, 30),"Andrzejki" },
             { (12, 6), "Mikołajki" },
+            { (12, 24),"Wigilia" },
             { (12, 31),"Sylwester" },
 
             // Początki pór roku (NIE SĄ WOLNE)
@@ -3718,25 +3810,18 @@ namespace GrafikoMat.Common
             { (12, 22),"Początek zimy" }
         };
 
-        // NOWA KOLEKCJA: Lista kluczy dla świąt ustawowo wolnych (tylko te, które są dniami wolnymi)
         private static readonly HashSet<(int Month, int Day)> _publicHolidays = new()
         {
             (1, 1), (1, 6), (5, 1), (5, 3), (8, 15), (11, 1), (11, 11), (12, 25), (12, 26)
         };
 
-        /// <summary>
-        /// Zwraca true, jeśli data jest ustawowo wolnym od pracy świętem.
-        /// Używane do logicznego oznaczania DNI WOLNYCH w widokach.
-        /// </summary>
         public static bool IsPublicHoliday(DateTime date)
         {
-            // 1. Sprawdzenie świąt o stałej dacie
             if (_publicHolidays.Contains((date.Month, date.Day)))
             {
                 return true;
             }
 
-            // 2. Obliczanie Wielkanocy i świąt ruchomych wolnych od pracy
             int a = date.Year % 19;
             int b = date.Year % 4;
             int c = date.Year % 7;
@@ -3749,24 +3834,21 @@ namespace GrafikoMat.Common
                 easterSunday = new DateTime(date.Year, 4, d + e - 9);
             }
 
-            // Ustawowo wolne święta zależne od Wielkanocy
-            if (date.Date == easterSunday.Date) return true; // Wielkanoc (Niedziela)
-            if (date.Date == easterSunday.AddDays(1).Date) return true; // Pon. Wielkanocny
-            if (date.Date == easterSunday.AddDays(49).Date) return true; // Zielone Świątki
-            if (date.Date == easterSunday.AddDays(60).Date) return true; // Boże Ciało
+            if (date.Date == easterSunday.Date) return true;
+            if (date.Date == easterSunday.AddDays(1).Date) return true;
+            if (date.Date == easterSunday.AddDays(49).Date) return true;
+            if (date.Date == easterSunday.AddDays(60).Date) return true;
 
             return false;
         }
 
         public static string? GetHolidayName(DateTime date)
         {
-            // 1. Sprawdzenie świąt o stałej dacie
             if (_fixedHolidays.TryGetValue((date.Month, date.Day), out var holidayName))
             {
                 return holidayName;
             }
 
-            // 2. Obliczanie Wielkanocy (algorytm Gaussa) i świąt ruchomych
             int a = date.Year % 19;
             int b = date.Year % 4;
             int c = date.Year % 7;
@@ -3779,21 +3861,19 @@ namespace GrafikoMat.Common
                 easterSunday = new DateTime(date.Year, 4, d + e - 9);
             }
 
-            // Święta wolne zależne od Wielkanocy
             if (date.Date == easterSunday.Date) return "Wielkanoc";
             if (date.Date == easterSunday.AddDays(1).Date) return "Pon. Wielkanocny";
             if (date.Date == easterSunday.AddDays(49).Date) return "Zielone Świątki";
             if (date.Date == easterSunday.AddDays(60).Date) return "Boże Ciało";
 
-            // ZMIANA: Dodatkowe dni ruchome (NIE SĄ WOLNE)
             if (date.Date == easterSunday.AddDays(-52).Date) return "Tłusty Czwartek";
+            if (date.Date == easterSunday.AddDays(-47).Date) return "Ostatki";
             if (date.Date == easterSunday.AddDays(-46).Date) return "Środa Popielcowa";
             if (date.Date == easterSunday.AddDays(-7).Date) return "Niedziela Palmowa";
             if (date.Date == easterSunday.AddDays(-3).Date) return "Wielki Czwartek";
             if (date.Date == easterSunday.AddDays(-2).Date) return "Wielki Piątek";
             if (date.Date == easterSunday.AddDays(-1).Date) return "Wielka Sobota";
 
-            // 3. ZMIANA: Daty związane z rokiem szkolnym (NIE SĄ WOLNE)
             if (date.Month == 6)
             {
                 var lastDayOfJune = new DateTime(date.Year, 6, 30);
@@ -3817,7 +3897,7 @@ namespace GrafikoMat.Common
                 if (date.Date == schoolStarts.Date) return "Rozpoczęcie roku szkolnego";
             }
 
-            return null; // To nie jest święto
+            return null;
         }
     }
 }
@@ -6404,7 +6484,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (17652 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (17735 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -6477,7 +6557,6 @@ namespace GrafikoMat.ViewModels
         public DoctorProfile? SelectedDoctor =>
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
             Doctors[_selectedDoctorIndex].Profile : null;
-
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
         public ICommand SelectNextDoctorCommand { get; }
@@ -6535,7 +6614,8 @@ namespace GrafikoMat.ViewModels
                 var date = startDate.AddDays(i);
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
-                    !string.IsNullOrEmpty(PolishHolidays.GetHolidayName(date)),
+                    // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                    PolishHolidays.IsPublicHoliday(date),
                     PolishHolidays.GetHolidayName(date));
 
                 if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
@@ -6679,7 +6759,7 @@ namespace GrafikoMat.ViewModels
 
             bool expandToFullDays = (startPart != endPart) &&
                                      (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
-                                    (endPart == SlotPart.Day || endPart == SlotPart.Night);
+                                     (endPart == SlotPart.Day || endPart == SlotPart.Night);
 
             for (int i = start; i <= end; i++)
             {
@@ -7376,7 +7456,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (17834 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (17978 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -7624,8 +7704,10 @@ namespace GrafikoMat.ViewModels
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
                 string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
 
+                // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
                 bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
-                date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                                date.DayOfWeek == DayOfWeek.Sunday ||
+                                PolishHolidays.IsPublicHoliday(date);
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }
@@ -8551,7 +8633,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml (5816 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml (5840 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DashboardView"
@@ -8630,25 +8712,25 @@ namespace GrafikoMat.Views
 
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RosterRow">
-                                <Grid ColumnSpacing="12" Padding="8,0"
-                                      BorderBrush="{Binding ElementName=DashboardViewRoot, Path=DynamicBorderBrush, Mode=OneWay}"
+                                <Grid BorderBrush="{Binding ElementName=DashboardViewRoot, Path=DynamicBorderBrush, Mode=OneWay}"
                                       BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="130"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            Visibility="{x:Bind IsDayOff, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" 
-                                            Visibility="{x:Bind IsDayOff, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                            Grid.ColumnSpan="2"/>
+                                    <Grid ColumnSpacing="12" Padding="8,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
-                                               FontSize="14"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
-                                               FontSize="14"
-                                               VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
+                                                   FontSize="14"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
+                                                   FontSize="14"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -8660,7 +8742,7 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (9967 bytes)
+===== FILE: GrafikoMat\Views\DashboardView.xaml.cs (10161 bytes)
 ----- BEGIN -----
 using System;
 using System.Collections.Specialized;
@@ -8800,7 +8882,8 @@ namespace GrafikoMat.Views
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
                 bool isLastColumn = (d == daysInMonth);
                 var cell = new Border
                 {
@@ -8828,7 +8911,8 @@ namespace GrafikoMat.Views
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                    // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
                     bool isLastColumn = (d == daysInMonth);
                     var cell = new Border
                     {
@@ -9443,7 +9527,7 @@ namespace GrafikoMat.Views
 
 ----- END -----
 
-===== FILE: GrafikoMat\Views\LoginView.xaml (1783 bytes)
+===== FILE: GrafikoMat\Views\LoginView.xaml (2150 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.LoginView"
@@ -9453,51 +9537,58 @@ namespace GrafikoMat.Views
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
-	<Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-		<StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="320">
-			<TextBlock Text="GrafikoMat Dyżurowy"
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="320">
+            <TextBlock Text="GrafikoMat Dyżurowy"
                        FontSize="24"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center"/>
-			<TextBlock Text="Logowanie do systemu"
+            <TextBlock Text="Logowanie do systemu"
                        Opacity="0.8"
                        HorizontalAlignment="Center"
                        Margin="0,0,0,12"/>
 
-			<TextBox x:Name="EmailTextBox" Header="Adres e-mail"/>
-			<PasswordBox x:Name="PasswordBox" Header="Hasło"/>
+            <TextBox x:Name="EmailTextBox" Header="Adres e-mail"/>
+            <PasswordBox x:Name="PasswordBox" Header="Hasło" KeyDown="PasswordBox_KeyDown"/>
 
-			<Grid ColumnDefinitions="*,*" ColumnSpacing="8" Margin="0,12,0,0">
-				<Button Grid.Column="0"
-                        Content="Wstecz"
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8" Margin="0,12,0,0">
+                <Button Grid.Column="0"
+                        Content="Wyjdź"
                         HorizontalAlignment="Stretch"
                         Click="CancelButton_Click"/>
-				<Button Grid.Column="1"
+                <Button Grid.Column="1"
                         Content="Zaloguj"
                         Style="{StaticResource AccentButtonStyle}"
                         HorizontalAlignment="Stretch"
                         Click="LoginButton_Click"/>
-			</Grid>
+            </Grid>
 
-			<InfoBar x:Name="ErrorBar"
+            <HyperlinkButton Content="Zapomniałem hasła..."
+                             HorizontalAlignment="Center"
+                             Margin="0,8,0,0"
+                             Click="ForgotPassword_Click"/>
+
+            <InfoBar x:Name="ErrorBar"
                      IsOpen="False"
                      Opacity="0"
                      IsClosable="True"
                      Severity="Error"
                      MinHeight="72"/>
-		</StackPanel>
-	</Grid>
+        </StackPanel>
+    </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\LoginView.xaml.cs (2443 bytes)
+===== FILE: GrafikoMat\Views\LoginView.xaml.cs (3284 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
 using System.Threading.Tasks;
+using Windows.System;
 
 namespace GrafikoMat.Views
 {
@@ -9569,6 +9660,25 @@ namespace GrafikoMat.Views
                 ErrorBar.IsOpen = true;
                 ErrorBar.Opacity = 1;
             }
+        }
+
+        private void PasswordBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Enter)
+            {
+                e.Handled = true;
+                LoginButton_Click(this, new RoutedEventArgs());
+            }
+        }
+
+        // ZMIANA: Dodano nową metodę
+        private async void ForgotPassword_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Resetowanie hasła";
+            dialog.Content = "Funkcja resetowania hasła jest dostępna w aplikacji webowej. Administrator może również zresetować Twoje hasło w panelu zarządzania.";
+            dialog.PrimaryButtonText = "OK";
+            await dialog.ShowAsync();
         }
     }
 }

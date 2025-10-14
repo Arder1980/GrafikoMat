@@ -1,6 +1,7 @@
 ﻿using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Linq;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -14,13 +15,11 @@ namespace GrafikoMat.Views.Settings
             ViewModel = viewModel;
         }
 
-        // ZMIANA: Dodano brakującą metodę obsługi zdarzenia DropCompleted.
-        // To naprawia problem z brakiem aktualizacji wskaźników rangi po przeciągnięciu.
-        private void ActivePrioritiesListView_DropCompleted(UIElement sender, DropCompletedEventArgs args)
+        private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
-            // Po operacji przeciągnij-i-upuść, nakazujemy ViewModelowi odświeżenie
-            // numerów porządkowych i stanu przycisków.
-            ViewModel.RefreshListState();
+            // Po operacji przeciągnij-i-upuść, która automatycznie zmienia kolejność w kolekcji,
+            // po prostu nakazujemy ViewModelowi odświeżenie stanu (rang i przycisku zapisu).
+            ViewModel.RefreshListState(markAsDirty: true);
         }
     }
 }

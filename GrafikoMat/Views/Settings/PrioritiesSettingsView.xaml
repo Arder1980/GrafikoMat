@@ -39,7 +39,7 @@
                   CanReorderItems="True"
                   AllowDrop="True"
                   SelectionMode="None"
-                  DropCompleted="ActivePrioritiesListView_DropCompleted">
+                  DragItemsCompleted="ActivePrioritiesListView_DragItemsCompleted">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0,0,0,8"/>
@@ -52,15 +52,28 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <Grid MinHeight="64">
+                        <Grid MinHeight="64" Padding="0,0,12,0">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="64"/>
-                                <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <CheckBox Grid.Column="0" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
+                                <Button VerticalAlignment="Top"
+                                        Command="{x:Bind MoveUpCommand}"
+                                        Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                    <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                </Button>
+                                <Button VerticalAlignment="Bottom"
+                                        Command="{x:Bind MoveDownCommand}"
+                                        Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                    <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                </Button>
+                            </Grid>
 
                             <Border Grid.Column="1"
                                     Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
@@ -79,25 +92,13 @@
                                 </TextBlock>
                             </Border>
 
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
 
-                            <Grid Grid.Column="3" VerticalAlignment="Stretch" Margin="0,0,12,0">
-                                <Button VerticalAlignment="Top"
-                                        Command="{x:Bind MoveUpCommand}"
-                                        Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70E;" FontSize="12"/>
-                                </Button>
-                                <Button VerticalAlignment="Bottom"
-                                        Command="{x:Bind MoveDownCommand}"
-                                        Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                                </Button>
-                            </Grid>
+                            <CheckBox Grid.Column="3" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -121,20 +122,18 @@
                             BorderThickness="1"
                             CornerRadius="4"
                             Opacity="0.5">
-                        <Grid MinHeight="64">
+                        <Grid MinHeight="64" Padding="12,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="64"/>
-                                <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="48"/>
+                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <CheckBox Grid.Column="0" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
+
+                            <CheckBox Grid.Column="1" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Grid>
                     </Border>
                 </DataTemplate>

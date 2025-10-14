@@ -23,6 +23,9 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
 
+        // ================== ZMIANA: Dodanie flagi śledzącej zmiany ==================
+        private bool _isDirty = false;
+
         public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; } = new();
         public ObservableCollection<PriorityOptionViewModel> InactivePriorities { get; } = new();
 
@@ -39,7 +42,8 @@ namespace GrafikoMat.ViewModels
 
             MoveUpCommand = new RelayCommand<PriorityOptionViewModel>(MoveUp);
             MoveDownCommand = new RelayCommand<PriorityOptionViewModel>(MoveDown);
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            // ================== ZMIANA: Dodanie warunku CanExecute do komendy ==================
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             LoadPriorities();
         }
@@ -54,7 +58,6 @@ namespace GrafikoMat.ViewModels
 
             foreach (var setting in _appSettings.Priorities.OrderBy(p => p.Priority.ToString()))
             {
-                // ZMIANA: Dodano brakujący argument 'this' do konstruktora
                 var vm = new PriorityOptionViewModel(
                     setting.Priority,
                     descriptions[setting.Priority].Name,
@@ -106,7 +109,8 @@ namespace GrafikoMat.ViewModels
                         sortedInactive.ForEach(p => InactivePriorities.Add(p));
                     }
                 }
-                RefreshListState();
+                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
+                RefreshListState(markAsDirty: true);
             }
         }
 
@@ -117,7 +121,8 @@ namespace GrafikoMat.ViewModels
             if (index > 0)
             {
                 ActivePriorities.Move(index, index - 1);
-                _dispatcher?.TryEnqueue(RefreshListState);
+                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
+                _dispatcher?.TryEnqueue(() => RefreshListState(markAsDirty: true));
             }
         }
 
@@ -128,12 +133,20 @@ namespace GrafikoMat.ViewModels
             if (index < ActivePriorities.Count - 1)
             {
                 ActivePriorities.Move(index, index + 1);
-                _dispatcher?.TryEnqueue(RefreshListState);
+                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
+                _dispatcher?.TryEnqueue(() => RefreshListState(markAsDirty: true));
             }
         }
 
-        public void RefreshListState()
+        // ================== ZMIANA: Dodano parametr `markAsDirty` ==================
+        public void RefreshListState(bool markAsDirty = false)
         {
+            if (markAsDirty)
+            {
+                _isDirty = true;
+                SaveCommand.NotifyCanExecuteChanged();
+            }
+
             for (int i = 0; i < ActivePriorities.Count; i++)
             {
                 var item = ActivePriorities[i];
@@ -169,6 +182,10 @@ namespace GrafikoMat.ViewModels
                 errorMessageTitle: "Błąd zapisu ustawień"
             );
             _appSettings = newSettings;
+
+            // ================== ZMIANA: Reset flagi i dezaktywacja przycisku po zapisie ==================
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
 
             WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
