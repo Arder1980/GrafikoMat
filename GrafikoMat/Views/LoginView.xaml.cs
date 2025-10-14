@@ -1,8 +1,10 @@
 ﻿using GrafikoMat.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
 using System.Threading.Tasks;
+using Windows.System;
 
 namespace GrafikoMat.Views
 {
@@ -74,6 +76,25 @@ namespace GrafikoMat.Views
                 ErrorBar.IsOpen = true;
                 ErrorBar.Opacity = 1;
             }
+        }
+
+        private void PasswordBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == VirtualKey.Enter)
+            {
+                e.Handled = true;
+                LoginButton_Click(this, new RoutedEventArgs());
+            }
+        }
+
+        // ZMIANA: Dodano nową metodę
+        private async void ForgotPassword_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Resetowanie hasła";
+            dialog.Content = "Funkcja resetowania hasła jest dostępna w aplikacji webowej. Administrator może również zresetować Twoje hasło w panelu zarządzania.";
+            dialog.PrimaryButtonText = "OK";
+            await dialog.ShowAsync();
         }
     }
 }

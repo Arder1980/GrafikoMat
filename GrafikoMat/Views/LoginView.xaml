@@ -6,39 +6,44 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
 
-	<Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-		<StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="320">
-			<TextBlock Text="GrafikoMat Dyżurowy"
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12" Width="320">
+            <TextBlock Text="GrafikoMat Dyżurowy"
                        FontSize="24"
                        FontWeight="SemiBold"
                        HorizontalAlignment="Center"/>
-			<TextBlock Text="Logowanie do systemu"
+            <TextBlock Text="Logowanie do systemu"
                        Opacity="0.8"
                        HorizontalAlignment="Center"
                        Margin="0,0,0,12"/>
 
-			<TextBox x:Name="EmailTextBox" Header="Adres e-mail"/>
-			<PasswordBox x:Name="PasswordBox" Header="Hasło"/>
+            <TextBox x:Name="EmailTextBox" Header="Adres e-mail"/>
+            <PasswordBox x:Name="PasswordBox" Header="Hasło" KeyDown="PasswordBox_KeyDown"/>
 
-			<Grid ColumnDefinitions="*,*" ColumnSpacing="8" Margin="0,12,0,0">
-				<Button Grid.Column="0"
-                        Content="Wstecz"
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8" Margin="0,12,0,0">
+                <Button Grid.Column="0"
+                        Content="Wyjdź"
                         HorizontalAlignment="Stretch"
                         Click="CancelButton_Click"/>
-				<Button Grid.Column="1"
+                <Button Grid.Column="1"
                         Content="Zaloguj"
                         Style="{StaticResource AccentButtonStyle}"
                         HorizontalAlignment="Stretch"
                         Click="LoginButton_Click"/>
-			</Grid>
+            </Grid>
 
-			<InfoBar x:Name="ErrorBar"
+            <HyperlinkButton Content="Zapomniałem hasła..."
+                             HorizontalAlignment="Center"
+                             Margin="0,8,0,0"
+                             Click="ForgotPassword_Click"/>
+
+            <InfoBar x:Name="ErrorBar"
                      IsOpen="False"
                      Opacity="0"
                      IsClosable="True"
                      Severity="Error"
                      MinHeight="72"/>
-		</StackPanel>
-	</Grid>
+        </StackPanel>
+    </Grid>
 </UserControl>
