@@ -69,7 +69,6 @@ namespace GrafikoMat.ViewModels
         public DoctorProfile? SelectedDoctor =>
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
             Doctors[_selectedDoctorIndex].Profile : null;
-
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
         public ICommand SelectNextDoctorCommand { get; }
@@ -127,7 +126,8 @@ namespace GrafikoMat.ViewModels
                 var date = startDate.AddDays(i);
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
-                    !string.IsNullOrEmpty(PolishHolidays.GetHolidayName(date)),
+                    // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                    PolishHolidays.IsPublicHoliday(date),
                     PolishHolidays.GetHolidayName(date));
 
                 if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
@@ -271,7 +271,7 @@ namespace GrafikoMat.ViewModels
 
             bool expandToFullDays = (startPart != endPart) &&
                                      (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
-                                    (endPart == SlotPart.Day || endPart == SlotPart.Night);
+                                     (endPart == SlotPart.Day || endPart == SlotPart.Night);
 
             for (int i = start; i <= end; i++)
             {

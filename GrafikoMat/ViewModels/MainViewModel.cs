@@ -244,8 +244,10 @@ namespace GrafikoMat.ViewModels
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
                 string dateLabel = $"{date:dd.MM} ({PolishDayOfWeek(date.DayOfWeek)})";
 
+                // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
                 bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday ||
-                date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                                date.DayOfWeek == DayOfWeek.Sunday ||
+                                PolishHolidays.IsPublicHoliday(date);
                 bool isLast = (day == daysInMonth);
                 RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
             }

@@ -136,7 +136,8 @@ namespace GrafikoMat.Views
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(year, month, d);
-                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
                 bool isLastColumn = (d == daysInMonth);
                 var cell = new Border
                 {
@@ -164,7 +165,8 @@ namespace GrafikoMat.Views
                 for (int d = 1; d <= daysInMonth; d++)
                 {
                     var date = new DateTime(year, month, d);
-                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.GetHolidayName(date) != null;
+                    // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
+                    bool isDayOff = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
                     bool isLastColumn = (d == daysInMonth);
                     var cell = new Border
                     {

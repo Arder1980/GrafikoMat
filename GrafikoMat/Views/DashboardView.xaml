@@ -75,25 +75,25 @@
 
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RosterRow">
-                                <Grid ColumnSpacing="12" Padding="8,0"
-                                      BorderBrush="{Binding ElementName=DashboardViewRoot, Path=DynamicBorderBrush, Mode=OneWay}"
+                                <Grid BorderBrush="{Binding ElementName=DashboardViewRoot, Path=DynamicBorderBrush, Mode=OneWay}"
                                       BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="130"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            Visibility="{x:Bind IsDayOff, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" 
-                                            Visibility="{x:Bind IsDayOff, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                            Grid.ColumnSpan="2"/>
+                                    <Grid ColumnSpacing="12" Padding="8,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
-                                               FontSize="14"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
-                                               FontSize="14"
-                                               VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
+                                                   FontSize="14"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{x:Bind DutyLabel}"
+                                                   FontSize="14"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
