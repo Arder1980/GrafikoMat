@@ -21,10 +21,22 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
+    // ================== POCZĄTEK ZMIANY: Dodanie dziedziczenia i metody SetProperty ==================
+    public class MainViewModel : ObservableObject, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        // Ta metoda była wcześniej w klasie bazowej, dodajemy ją bezpośrednio tutaj.
+        protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
+        {
+            if (EqualityComparer<T>.Default.Equals(backingStore, value))
+            {
+                return false;
+            }
+
+            backingStore = value;
+            OnPropertyChanged(propertyName);
+            return true;
+        }
+        // =================== KONIEC ZMIANY ===================
 
         private IDoctorRepository? _doctorRepository;
         private IUnitRepository? _unitRepository;
@@ -38,10 +50,15 @@ namespace GrafikoMat.ViewModels
 
         public bool IsCurrentUserAdmin { get; private set; }
 
-        // ================== NOWA WŁAŚCIWOŚĆ ==================
         private bool _isUnitContextActive = true;
-        public bool IsUnitContextActive { get => _isUnitContextActive; set { if (_isUnitContextActive != value) { _isUnitContextActive = value; OnPropertyChanged(); } } }
-        // ======================================================
+        public bool IsUnitContextActive { get => _isUnitContextActive; set => SetProperty(ref _isUnitContextActive, value); }
+
+        private string _currentViewTitle = string.Empty;
+        public string CurrentViewTitle
+        {
+            get => _currentViewTitle;
+            set => SetProperty(ref _currentViewTitle, value);
+        }
 
         [JsonIgnore]
         public XamlRoot? XamlRoot { get; set; }

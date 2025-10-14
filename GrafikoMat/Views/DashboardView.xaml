@@ -7,7 +7,8 @@
     xmlns:vm="using:GrafikoMat.ViewModels"
     xmlns:controls="using:GrafikoMat.Controls"
     xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    x:Name="DashboardViewRoot">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -51,7 +52,7 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Text="Zestawienie deklaracji dyżurowych" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-                <Border Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                <Border Grid.Row="1" BorderBrush="{x:Bind DynamicBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="6">
                     <Grid x:Name="DeclarationsGrid"/>
                 </Border>
             </Grid>
@@ -63,7 +64,7 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="Wygenerowany grafik" FontWeight="SemiBold" FontSize="16" Margin="0,0,0,6"/>
-                <Border x:Name="RosterContainer" Grid.Row="1" BorderBrush="#1A000000" BorderThickness="1" CornerRadius="6">
+                <Border x:Name="RosterContainer" Grid.Row="1" BorderBrush="{x:Bind DynamicBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="6">
                     <ItemsControl ItemsSource="{Binding RosterRows}">
 
                         <ItemsControl.ItemsPanel>
@@ -75,13 +76,17 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:RosterRow">
                                 <Grid ColumnSpacing="12" Padding="8,0"
-                                      Background="{x:Bind IsDayOff, Converter={StaticResource BooleanToBrushConverter_DayOff}}"
-                                      BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                      BorderBrush="{Binding ElementName=DashboardViewRoot, Path=DynamicBorderBrush, Mode=OneWay}"
                                       BorderThickness="{x:Bind IsLast, Converter={StaticResource LastItemBorderConverter}, Mode=OneWay}">
+
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="130"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
+
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" 
+                                            Visibility="{x:Bind IsDayOff, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Grid.ColumnSpan="2"/>
 
                                     <TextBlock Grid.Column="0" Text="{x:Bind DateLabel}" FontWeight="SemiBold"
                                                FontSize="14"

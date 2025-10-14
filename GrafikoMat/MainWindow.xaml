@@ -42,11 +42,16 @@
                 </Grid>
 
                 <Grid x:Name="GlobalContextGrid" Opacity="0" IsHitTestVisible="False">
-                    <TextBlock Text="GrafikoMat Dyżurowy"
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="GrafikoMat Dyżurowy"
+                                   FontSize="22"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{x:Bind ViewModel.CurrentViewTitle, Mode=OneWay}"
+                                   FontSize="16"
+                                   FontWeight="Normal"
+                                   Opacity="0.8"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Grid>

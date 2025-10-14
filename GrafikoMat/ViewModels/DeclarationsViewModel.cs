@@ -12,6 +12,24 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
+    // ================== NOWA KLASA POMOCNICZA ==================
+    /// <summary>
+    /// Reprezentuje pojedynczego lekarza na liście wyboru w widoku deklaracji.
+    /// Przechowuje profil oraz nazwę wyświetlaną (potencjalnie ze skrótem).
+    /// </summary>
+    public class DoctorDeclarationViewModel
+    {
+        public DoctorProfile Profile { get; }
+        public string DisplayName { get; }
+
+        public DoctorDeclarationViewModel(DoctorProfile profile, string displayName)
+        {
+            Profile = profile;
+            DisplayName = displayName;
+        }
+    }
+    // ==========================================================
+
     public enum SlotPart { Full, Day, Night }
     public record SelectedSlot(int Index, SlotPart Part);
 
@@ -21,12 +39,12 @@ namespace GrafikoMat.ViewModels
         private readonly Action _onSaveCallback;
         private readonly bool _use12hShiftsByDefault;
 
-        public int
-            Year
-        { get; }
+        public int Year { get; }
         public int MonthIndex { get; }
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
-        public ObservableCollection<DoctorProfile> Doctors { get; } = new();
+
+        // ================== ZMIANA TYPU KOLEKCJI ==================
+        public ObservableCollection<DoctorDeclarationViewModel> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
 
         public HashSet<SelectedSlot> SelectedSlots { get; } = new();
@@ -47,12 +65,12 @@ namespace GrafikoMat.ViewModels
             }
         }
 
+        // Zaktualizowana właściwość zwracająca czysty profil
         public DoctorProfile? SelectedDoctor =>
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
-            Doctors[_selectedDoctorIndex] : null;
+            Doctors[_selectedDoctorIndex].Profile : null;
 
-        public ICommand SaveCommand
-        { get; }
+        public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
         public ICommand SelectNextDoctorCommand { get; }
         public ICommand SelectPrevDoctorCommand { get; }
@@ -69,14 +87,28 @@ namespace GrafikoMat.ViewModels
             _onSaveCallback = onSaveCallback;
             _use12hShiftsByDefault = use12hShifts;
 
-            doctors.ForEach(d => Doctors.Add(d));
+            // ================== NOWA LOGIKA GENEROWANIA NAZW WYŚWIETLANYCH ==================
+            var duplicateFullNames = doctors
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doc in doctors)
+            {
+                string displayName = duplicateFullNames.Contains(doc.FullName)
+                    ? $"{doc.FullName} ({doc.Abbreviation})"
+                    : doc.FullName;
+                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
+            }
+            // =============================================================================
+
             _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
             SaveCommand = new RelayCommand(() => { CommitChangesToSharedState(); _onSaveCallback?.Invoke(); });
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
-            SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () =>
-                CanSwitchDoctors && Doctors.Count > 1);
+            SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
 
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
@@ -144,8 +176,7 @@ namespace GrafikoMat.ViewModels
                 Days = Enumerable.Range(0, daysInMonth).Select(_ => new DayDeclaration()).ToArray()
             };
 
-            foreach (var cell
-                in DayCells.Where(c => c.InMonth))
+            foreach (var cell in DayCells.Where(c => c.InMonth))
             {
                 int dayIdx = cell.Date.Day - 1;
                 if (dayIdx < 0 || dayIdx >= result.Days.Length) continue;
@@ -153,8 +184,7 @@ namespace GrafikoMat.ViewModels
                 if (!cell.IsSplit)
                 {
                     result.Days[dayIdx].Mode = DayMode.Full24;
-                    result.Days[dayIdx].Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null :
-                        cell.SymbolFull;
+                    result.Days[dayIdx].Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
                 }
                 else
                 {
@@ -174,8 +204,7 @@ namespace GrafikoMat.ViewModels
 
         private void SelectPrevDoctor()
         {
-            if
-                (Doctors.Count > 1)
+            if (Doctors.Count > 1)
                 SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
         }
 
@@ -184,7 +213,6 @@ namespace GrafikoMat.ViewModels
             SelectedSlots.Clear();
             if (index >= 0 && index < DayCells.Count)
             {
-
                 SelectedSlots.Add(new SelectedSlot(index, part));
             }
             UpdateSelectionVisuals();
@@ -197,7 +225,6 @@ namespace GrafikoMat.ViewModels
             var slotToToggle = new SelectedSlot(index, part);
             if (SelectedSlots.Contains(slotToToggle))
             {
-
                 SelectedSlots.Remove(slotToToggle);
             }
             else
@@ -220,7 +247,6 @@ namespace GrafikoMat.ViewModels
 
                 if (cell.IsSplit)
                 {
-
                     if (partToSelect == SlotPart.Day || partToSelect == SlotPart.Night)
                     {
                         SelectedSlots.Add(new SelectedSlot(i, partToSelect));
@@ -244,7 +270,7 @@ namespace GrafikoMat.ViewModels
             int end = Math.Max(startIndex, endIndex);
 
             bool expandToFullDays = (startPart != endPart) &&
-                                    (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
+                                     (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
                                     (endPart == SlotPart.Day || endPart == SlotPart.Night);
 
             for (int i = start; i <= end; i++)
@@ -312,9 +338,7 @@ namespace GrafikoMat.ViewModels
         public string DayNumber => Date.Day.ToString("00");
         public bool IsWeekend { get; }
         public bool IsHoliday { get; }
-
-        // ZMIANA LOGIKI: IsDayOff zależy tylko od weekendu LUB ustawowego święta (zdefiniowanego w PolishHolidays)
-        public bool IsDayOff => IsWeekend || PolishHolidays.IsPublicHoliday(Date);
+        public bool IsDayOff => IsHoliday || IsWeekend;
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
@@ -324,8 +348,7 @@ namespace GrafikoMat.ViewModels
         public Brush EffectiveHeaderBackground { get; set; }
 
         private bool _isSplit;
-        public bool IsSplit
-        { get => _isSplit; set => SetProperty(ref _isSplit, value); }
+        public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
 
         private string _symbolFull = "";
         public string SymbolFull { get => _symbolFull; set => SetProperty(ref _symbolFull, value); }
@@ -335,7 +358,6 @@ namespace GrafikoMat.ViewModels
 
         private string _symbolNight = "";
         public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
-
 
         private bool _isFullSelected;
         public bool IsFullSelected { get => _isFullSelected; private set => SetProperty(ref _isFullSelected, value); }
@@ -349,7 +371,6 @@ namespace GrafikoMat.ViewModels
         private Thickness _daySelectionBorderThickness = new Thickness(0);
         public Thickness DaySelectionBorderThickness { get => _daySelectionBorderThickness; private set => SetProperty(ref _daySelectionBorderThickness, value); }
 
-
         private Thickness _nightSelectionBorderThickness = new Thickness(0);
         public Thickness NightSelectionBorderThickness { get => _nightSelectionBorderThickness; private set => SetProperty(ref _nightSelectionBorderThickness, value); }
 
@@ -361,7 +382,6 @@ namespace GrafikoMat.ViewModels
 
             if (IsDaySelected && IsNightSelected)
             {
-
                 DaySelectionBorderThickness = new Thickness(4, 4, 4, 2);
                 NightSelectionBorderThickness = new Thickness(4, 2, 4, 4);
             }
@@ -382,8 +402,7 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        public
-            void ClearData()
+        public void ClearData()
         {
             SymbolFull = "";
             SymbolDay = "";

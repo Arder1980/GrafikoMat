@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging; // <-- Upewniamy się, że ten using jest obecny
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
@@ -29,7 +30,8 @@ using WinRT.Interop;
 
 namespace GrafikoMat
 {
-    public sealed partial class MainWindow : Window
+    // ================== ZMIANA: Implementacja interfejsu IRecipient ==================
+    public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>
     {
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
@@ -82,7 +84,22 @@ namespace GrafikoMat
             this.Activated += OnWindowActivated;
             this.Closed += OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
+
+            // ================== ZMIANA: Rejestracja na odbiór wiadomości ==================
+            WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
+
+        // ================== NOWA METODA: Obsługa wiadomości o zmianie ustawień ==================
+        public async void Receive(SettingsHaveChangedMessage message)
+        {
+            // Gdy ustawienia się zmienią, wymuś ponowne załadowanie ich do pamięci MainWindow.
+            // Dzięki temu przy zamykaniu okna, zapisana zostanie aktualna wersja.
+            if (_settingsService != null)
+            {
+                _appSettings = await _settingsService.LoadSettingsAsync(forceReload: true);
+            }
+        }
+        // ====================================================================================
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
@@ -98,12 +115,10 @@ namespace GrafikoMat
 
         private async void OnMainViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // ================== POCZĄTEK ZMIANY: Ręczna animacja zamiast VSM ==================
             if (e.PropertyName == nameof(MainViewModel.IsUnitContextActive))
             {
                 UpdateHeaderAnimation(ViewModel.IsUnitContextActive);
             }
-            // =================================================================================
             else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
                 await ViewModel.SaveCurrentUnitAsync();
@@ -136,6 +151,7 @@ namespace GrafikoMat
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
                 ViewModel.IsUnitContextActive = false;
+                ViewModel.CurrentViewTitle = "Konfiguracja Połączenia";
                 var setupView = new Views.Settings.ConnectionSettingsView();
                 setupView.Initialize(_settingsService, _appSettings ?? new AppSettings());
                 setupView.ReloadRequired += async () => { StartupOverlayContent.Content = null; await InitializeApplicationAsync(); };
@@ -147,6 +163,7 @@ namespace GrafikoMat
             if (!restored && !_supabaseService.IsAuthenticated)
             {
                 ViewModel.IsUnitContextActive = false;
+                ViewModel.CurrentViewTitle = "Logowanie";
                 bool loggedIn = await ShowLoginScreenAsync();
                 if (!loggedIn) { this.Close(); return; }
             }
@@ -158,6 +175,7 @@ namespace GrafikoMat
                     if (profile != null && profile.RequiresPasswordChange)
                     {
                         ViewModel.IsUnitContextActive = false;
+                        ViewModel.CurrentViewTitle = "Wymagana zmiana hasła";
                         bool passwordChanged = await ShowForcePasswordChangeAsync();
                         if (!passwordChanged) { await _supabaseService.SignOutAsync(); this.Close(); return; }
                         await _doctorRepository.ClearPasswordChangeFlagAsync(profile.Id);
@@ -264,6 +282,7 @@ namespace GrafikoMat
             BuildActionsForDashboard();
             ResetViewportState();
             ViewModel.IsUnitContextActive = true;
+            ViewModel.CurrentViewTitle = string.Empty;
         }
 
         private async void SwitchToSettings(bool forceRefresh = false)
@@ -275,6 +294,7 @@ namespace GrafikoMat
             if (!forceRefresh) { await AnimateToAsync(_settingsView, forward: true); } else { ViewportCurrent.Content = _settingsView; }
             BuildActionsForSettings();
             ViewModel.IsUnitContextActive = false;
+            ViewModel.CurrentViewTitle = "Ustawienia";
         }
 
         private async void SwitchToManagement()
@@ -285,6 +305,7 @@ namespace GrafikoMat
             await AnimateToAsync(_managementView, forward: true);
             BuildActionsForManage();
             ViewModel.IsUnitContextActive = false;
+            ViewModel.CurrentViewTitle = "Zarządzanie dyżurnymi";
         }
 
         private void BuildActionsForDashboard()
@@ -331,6 +352,7 @@ namespace GrafikoMat
             await AnimateToAsync(_dashboardView, false);
             BuildActionsForDashboard();
             ViewModel.IsUnitContextActive = true;
+            ViewModel.CurrentViewTitle = string.Empty;
         }
 
         private async void SwitchToDeclarations()
@@ -393,6 +415,7 @@ namespace GrafikoMat
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
             ViewModel.IsUnitContextActive = true;
+            ViewModel.CurrentViewTitle = "Edycja deklaracji";
         }
 
         private static void DetachFromParent(FrameworkElement el)
@@ -558,6 +581,8 @@ namespace GrafikoMat
             try { ViewportCurrent.Content = null; } catch { }
 
             this.SystemBackdrop = null;
+
+            WeakReferenceMessenger.Default.UnregisterAll(this);
         }
 
         private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
@@ -601,7 +626,6 @@ namespace GrafikoMat
             TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(bgPressed);
         }
 
-        // ================== NOWA METODA DO ANIMACJI ==================
         private void UpdateHeaderAnimation(bool isUnitContextVisible)
         {
             var duration = new Duration(TimeSpan.FromMilliseconds(200));
@@ -631,7 +655,6 @@ namespace GrafikoMat
 
             storyboard.Begin();
         }
-        // =============================================================
 
         #region Window Setup and Win32 Interop
         private void InitAppWindow()

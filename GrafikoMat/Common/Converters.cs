@@ -39,13 +39,10 @@ namespace GrafikoMat.Common
         }
     }
 
-    public class BooleanToBrushConverter_DayOff : IValueConverter
-    {
-        public Brush DayOffBrush { get; set; } = new SolidColorBrush(Color.FromArgb(0x0A, 0x00, 0x00, 0x00));
-        public Brush WorkDayBrush { get; set; } = new SolidColorBrush(Colors.Transparent);
-        public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? DayOffBrush : WorkDayBrush;
-        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
-    }
+    // ================== USUNIĘTA KLASA ==================
+    // public class BooleanToBrushConverter_DayOff : IValueConverter
+    // { ... }
+    // ====================================================
 
     public class BooleanToThicknessConverter_LastItemBorder : IValueConverter
     {
@@ -135,11 +132,6 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
     }
 
-    // ================== NOWY, WYMAGANY KONWERTER ==================
-    /// <summary>
-    /// Konwertuje wartość typu Enum na Visibility. Zwraca Visible, jeśli wartość
-    /// jest równa wartości podanej w parametrze, w przeciwnym razie Collapsed.
-    /// </summary>
     public class EnumToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
@@ -158,5 +150,4 @@ namespace GrafikoMat.Common
             throw new NotImplementedException();
         }
     }
-    // =============================================================
 }
