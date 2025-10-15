@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-14 23:21:20
+# Data:       2025-10-15 20:08:02
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -29,11 +29,13 @@ DIR  grafikomat-web
 DIR  grafikomat-web\.next
 DIR  grafikomat-web\.next\cache
 DIR  grafikomat-web\.next\server
+DIR  grafikomat-web\.next\server\app\auth\callback\route
 DIR  grafikomat-web\.next\server\app\auth\logout\route
 DIR  grafikomat-web\.next\server\app\favicon.ico\route
 DIR  grafikomat-web\.next\server\app\logowanie\page
 DIR  grafikomat-web\.next\server\app\page
 DIR  grafikomat-web\.next\server\app\zapomnialem-hasla\page
+DIR  grafikomat-web\.next\server\app\zmien-haslo\page
 DIR  grafikomat-web\.next\server\middleware
 DIR  grafikomat-web\.next\server\pages\_app
 DIR  grafikomat-web\.next\server\pages\_document
@@ -41,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 157
+## FILES (liczba): 167
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
 FILE GrafikoMat.Core\Data\Unit.cs
@@ -148,6 +150,10 @@ FILE grafikomat-web\.next\fallback-build-manifest.json
 FILE grafikomat-web\.next\package.json
 FILE grafikomat-web\.next\prerender-manifest.json
 FILE grafikomat-web\.next\routes-manifest.json
+FILE grafikomat-web\.next\server\app\auth\callback\route\app-build-manifest.json
+FILE grafikomat-web\.next\server\app\auth\callback\route\app-paths-manifest.json
+FILE grafikomat-web\.next\server\app\auth\callback\route\build-manifest.json
+FILE grafikomat-web\.next\server\app\auth\callback\route\server-reference-manifest.json
 FILE grafikomat-web\.next\server\app\auth\logout\route\app-build-manifest.json
 FILE grafikomat-web\.next\server\app\auth\logout\route\app-paths-manifest.json
 FILE grafikomat-web\.next\server\app\auth\logout\route\build-manifest.json
@@ -173,6 +179,12 @@ FILE grafikomat-web\.next\server\app\zapomnialem-hasla\page\build-manifest.json
 FILE grafikomat-web\.next\server\app\zapomnialem-hasla\page\next-font-manifest.json
 FILE grafikomat-web\.next\server\app\zapomnialem-hasla\page\react-loadable-manifest.json
 FILE grafikomat-web\.next\server\app\zapomnialem-hasla\page\server-reference-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\app-build-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\app-paths-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\build-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\next-font-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\react-loadable-manifest.json
+FILE grafikomat-web\.next\server\app\zmien-haslo\page\server-reference-manifest.json
 FILE grafikomat-web\.next\server\app-paths-manifest.json
 FILE grafikomat-web\.next\server\middleware\middleware-manifest.json
 FILE grafikomat-web\.next\server\middleware-manifest.json
@@ -8242,7 +8254,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (8573 bytes)
+===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (9527 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -8269,6 +8281,8 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
 
+        private bool _isDirty = false;
+
         public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; } = new();
         public ObservableCollection<PriorityOptionViewModel> InactivePriorities { get; } = new();
 
@@ -8285,7 +8299,7 @@ namespace GrafikoMat.ViewModels
 
             MoveUpCommand = new RelayCommand<PriorityOptionViewModel>(MoveUp);
             MoveDownCommand = new RelayCommand<PriorityOptionViewModel>(MoveDown);
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             LoadPriorities();
         }
@@ -8300,7 +8314,6 @@ namespace GrafikoMat.ViewModels
 
             foreach (var setting in _appSettings.Priorities.OrderBy(p => p.Priority.ToString()))
             {
-                // ZMIANA: Dodano brakujący argument 'this' do konstruktora
                 var vm = new PriorityOptionViewModel(
                     setting.Priority,
                     descriptions[setting.Priority].Name,
@@ -8352,10 +8365,11 @@ namespace GrafikoMat.ViewModels
                         sortedInactive.ForEach(p => InactivePriorities.Add(p));
                     }
                 }
-                RefreshListState();
+                RefreshListState(markAsDirty: true);
             }
         }
 
+        // ================== ZMIANA: Uproszczona logika bez Dispatchera ==================
         private void MoveUp(PriorityOptionViewModel? priority)
         {
             if (priority == null) return;
@@ -8363,7 +8377,7 @@ namespace GrafikoMat.ViewModels
             if (index > 0)
             {
                 ActivePriorities.Move(index, index - 1);
-                _dispatcher?.TryEnqueue(RefreshListState);
+                RefreshListState(markAsDirty: true);
             }
         }
 
@@ -8374,12 +8388,18 @@ namespace GrafikoMat.ViewModels
             if (index < ActivePriorities.Count - 1)
             {
                 ActivePriorities.Move(index, index + 1);
-                _dispatcher?.TryEnqueue(RefreshListState);
+                RefreshListState(markAsDirty: true);
             }
         }
 
-        public void RefreshListState()
+        public void RefreshListState(bool markAsDirty = false)
         {
+            if (markAsDirty)
+            {
+                _isDirty = true;
+                SaveCommand.NotifyCanExecuteChanged();
+            }
+
             for (int i = 0; i < ActivePriorities.Count; i++)
             {
                 var item = ActivePriorities[i];
@@ -8392,6 +8412,19 @@ namespace GrafikoMat.ViewModels
             {
                 item.Rank = 0;
             }
+        }
+
+        // ================== NOWA METODA: Do obsługi przeciągania w widoku ==================
+        public void UpdateOrderFromView(IEnumerable<PriorityOptionViewModel> newOrder)
+        {
+            // Tworzymy tymczasową listę, aby uniknąć problemów z modyfikacją kolekcji, po której iterujemy
+            var currentItems = new List<PriorityOptionViewModel>(newOrder);
+            ActivePriorities.Clear();
+            foreach (var item in currentItems)
+            {
+                ActivePriorities.Add(item);
+            }
+            RefreshListState(markAsDirty: true);
         }
 
         private async Task SaveSettingsAsync()
@@ -8415,6 +8448,9 @@ namespace GrafikoMat.ViewModels
                 errorMessageTitle: "Błąd zapisu ustawień"
             );
             _appSettings = newSettings;
+
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
 
             WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
@@ -10629,7 +10665,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (8554 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (8999 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.PrioritiesSettingsView"
@@ -10672,65 +10708,75 @@ namespace GrafikoMat.Views.Settings
                   CanReorderItems="True"
                   AllowDrop="True"
                   SelectionMode="None"
-                  DropCompleted="ActivePrioritiesListView_DropCompleted">
+                  DragItemsCompleted="ActivePrioritiesListView_DragItemsCompleted">
+
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0,0,0,8"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 </Style>
             </ListView.ItemContainerStyle>
+
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:PriorityOptionViewModel">
                     <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <Grid MinHeight="64">
+                        <Grid MinHeight="64" Background="Red">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="64"/>
-                                <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="60"/>
                             </Grid.ColumnDefinitions>
 
-                            <CheckBox Grid.Column="0" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            <Grid Grid.Column="0" Background="Blue">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="64"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
 
-                            <Border Grid.Column="1"
-                                    Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                    Height="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                    Background="{x:Bind Rank, Converter={StaticResource RankToBrushConverter}}"
-                                    CornerRadius="100"
-                                    VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="{x:Bind Rank}"
-                                           Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center">
-                                    <TextBlock.RenderTransform>
-                                        <TranslateTransform Y="-0.5"/>
-                                    </TextBlock.RenderTransform>
-                                </TextBlock>
-                            </Border>
+                                <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
+                                    <Button VerticalAlignment="Top"
+                                            Command="{x:Bind MoveUpCommand}"
+                                            Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                        <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                    </Button>
+                                    <Button VerticalAlignment="Bottom"
+                                            Command="{x:Bind MoveDownCommand}"
+                                            Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                        <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                    </Button>
+                                </Grid>
 
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
-                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
-                            </StackPanel>
+                                <Border Grid.Column="1"
+                                        Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
+                                        Height="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
+                                        Background="{x:Bind Rank, Converter={StaticResource RankToBrushConverter}}"
+                                        CornerRadius="100"
+                                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Rank}"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.RenderTransform>
+                                            <TranslateTransform Y="-0.5"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                </Border>
 
-                            <Grid Grid.Column="3" VerticalAlignment="Stretch" Margin="0,0,12,0">
-                                <Button VerticalAlignment="Top"
-                                        Command="{x:Bind MoveUpCommand}"
-                                        Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70E;" FontSize="12"/>
-                                </Button>
-                                <Button VerticalAlignment="Bottom"
-                                        Command="{x:Bind MoveDownCommand}"
-                                        Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                                </Button>
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </Grid>
+
+                            <Border Grid.Column="1" Background="Gold">
+                                <CheckBox IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Border>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -10741,12 +10787,14 @@ namespace GrafikoMat.Views.Settings
         <ListView Grid.Row="5"
                   ItemsSource="{x:Bind ViewModel.InactivePriorities}"
                   SelectionMode="None">
+
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0,0,0,8"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 </Style>
             </ListView.ItemContainerStyle>
+
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:PriorityOptionViewModel">
                     <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -10756,18 +10804,16 @@ namespace GrafikoMat.Views.Settings
                             Opacity="0.5">
                         <Grid MinHeight="64">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="64"/>
-                                <ColumnDefinition Width="56"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="48"/>
+                                <ColumnDefinition Width="60"/>
                             </Grid.ColumnDefinitions>
 
-                            <CheckBox Grid.Column="0" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
+
+                            <CheckBox Grid.Column="1" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -10784,11 +10830,12 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (964 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (961 bytes)
 ----- BEGIN -----
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Linq;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -10802,13 +10849,12 @@ namespace GrafikoMat.Views.Settings
             ViewModel = viewModel;
         }
 
-        // ZMIANA: Dodano brakującą metodę obsługi zdarzenia DropCompleted.
-        // To naprawia problem z brakiem aktualizacji wskaźników rangi po przeciągnięciu.
-        private void ActivePrioritiesListView_DropCompleted(UIElement sender, DropCompletedEventArgs args)
+        private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
-            // Po operacji przeciągnij-i-upuść, nakazujemy ViewModelowi odświeżenie
-            // numerów porządkowych i stanu przycisków.
-            ViewModel.RefreshListState();
+            // Po tym, jak kontrolka ListView sama zaktualizowała swoją wewnętrzną kolejność,
+            // pobieramy tę nową kolejność i przekazujemy ją do ViewModelu w celu synchronizacji.
+            var newOrder = sender.Items.Cast<PriorityOptionViewModel>();
+            ViewModel.UpdateOrderFromView(newOrder);
         }
     }
 }
@@ -11338,7 +11384,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: grafikomat-web\.next\app-build-manifest.json (3418 bytes)
+===== FILE: grafikomat-web\.next\app-build-manifest.json (2419 bytes)
 ----- BEGIN -----
 {
   "pages": {
@@ -11362,32 +11408,16 @@ namespace GrafikoMat.Views
       "static/chunks/_a0ff3932._.js",
       "static/chunks/turbopack-_cdba956c._.js"
     ],
-    "/page": [
-      "static/chunks/node_modules_next_dist_8db7fb1f._.js",
-      "static/chunks/src_app_favicon_ico_mjs_243aa161._.js",
-      "static/chunks/[root-of-the-server]__0f0ba101._.css",
-      "static/chunks/src_app_layout_tsx_0a548d63._.js",
-      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_f8fdd2d5.js",
-      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
-      "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
-      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
-      "static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
-      "static/chunks/node_modules_next_dist_client_cf1d9188._.js",
-      "static/chunks/node_modules_next_dist_b0daae9a._.js",
-      "static/chunks/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
-      "static/chunks/_a0ff3932._.js",
-      "static/chunks/turbopack-_cdba956c._.js"
-    ],
-    "/zapomnialem-hasla/page": [
+    "/zmien-haslo/page": [
       "static/chunks/node_modules_next_dist_8db7fb1f._.js",
       "static/chunks/src_app_favicon_ico_mjs_243aa161._.js",
       "static/chunks/[root-of-the-server]__0f0ba101._.css",
       "static/chunks/src_app_layout_tsx_0a548d63._.js",
       "static/chunks/node_modules_next_dist_client_components_builtin_global-error_f8fdd2d5.js",
       "static/chunks/node_modules_@supabase_node-fetch_browser_ebbd8575.js",
-      "static/chunks/node_modules_6b2f5c5f._.js",
-      "static/chunks/src_app_zapomnialem-hasla_page_tsx_68a311d6._.js",
-      "static/chunks/src_app_zapomnialem-hasla_page_tsx_f8fdd2d5._.js",
+      "static/chunks/node_modules_77a75b17._.js",
+      "static/chunks/src_04e02629._.js",
+      "static/chunks/src_app_zmien-haslo_page_tsx_f8fdd2d5._.js",
       "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
       "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
       "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
@@ -11468,9 +11498,9 @@ namespace GrafikoMat.Views
   "dynamicRoutes": {},
   "notFoundRoutes": [],
   "preview": {
-    "previewModeId": "01152222dd8d6b16c3763ac5aae14f90",
-    "previewModeSigningKey": "1d67382d6e3c83fc46a41c82f13fcbe1fdfa239353647412860afb7c1e52f642",
-    "previewModeEncryptionKey": "58e7970eb745df16c4be0bc6def0c3664565fd0fe7813cb46aac20d8d3b8c44b"
+    "previewModeId": "207c9aba12f42eaa28d8d9261a28dd09",
+    "previewModeSigningKey": "d3e122c483f00a8ae810c552a779266481d344832851b048850c9164560faff8",
+    "previewModeEncryptionKey": "7c43b20d51d0bc37c7de707cbf7b0cd9f6dd9c386aa7fc7f51d70c8ff5f8d003"
   }
 }
 ----- END -----
@@ -11478,6 +11508,65 @@ namespace GrafikoMat.Views
 ===== FILE: grafikomat-web\.next\routes-manifest.json (272 bytes)
 ----- BEGIN -----
 {"version":3,"caseSensitive":false,"basePath":"","rewrites":{"beforeFiles":[],"afterFiles":[],"fallback":[]},"redirects":[{"source":"/:path+/","destination":"/:path+","permanent":true,"internal":true,"regex":"^(?:\\/((?:[^\\/]+?)(?:\\/(?:[^\\/]+?))*))\\/$"}],"headers":[]}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\auth\callback\route\app-build-manifest.json (656 bytes)
+----- BEGIN -----
+{
+  "pages": {
+    "/auth/callback/route": [
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
+      "static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+      "static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+      "static/chunks/node_modules_next_dist_b0daae9a._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+      "static/chunks/_a0ff3932._.js",
+      "static/chunks/turbopack-_cdba956c._.js"
+    ]
+  }
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\auth\callback\route\app-paths-manifest.json (58 bytes)
+----- BEGIN -----
+{
+  "/auth/callback/route": "app/auth/callback/route.js"
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\auth\callback\route\build-manifest.json (819 bytes)
+----- BEGIN -----
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
+    "static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+    "static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+    "static/chunks/node_modules_next_dist_b0daae9a._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+    "static/chunks/_a0ff3932._.js",
+    "static/chunks/turbopack-_cdba956c._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\auth\callback\route\server-reference-manifest.json (30 bytes)
+----- BEGIN -----
+{
+  "node": {},
+  "edge": {}
+}
 ----- END -----
 
 ===== FILE: grafikomat-web\.next\server\app\auth\logout\route\app-build-manifest.json (654 bytes)
@@ -11850,13 +11939,100 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: grafikomat-web\.next\server\app-paths-manifest.json (188 bytes)
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\app-build-manifest.json (1221 bytes)
 ----- BEGIN -----
 {
-  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "pages": {
+    "/zmien-haslo/page": [
+      "static/chunks/node_modules_next_dist_8db7fb1f._.js",
+      "static/chunks/src_app_favicon_ico_mjs_243aa161._.js",
+      "static/chunks/[root-of-the-server]__0f0ba101._.css",
+      "static/chunks/src_app_layout_tsx_0a548d63._.js",
+      "static/chunks/node_modules_next_dist_client_components_builtin_global-error_f8fdd2d5.js",
+      "static/chunks/node_modules_@supabase_node-fetch_browser_ebbd8575.js",
+      "static/chunks/node_modules_77a75b17._.js",
+      "static/chunks/src_04e02629._.js",
+      "static/chunks/src_app_zmien-haslo_page_tsx_f8fdd2d5._.js",
+      "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+      "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
+      "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
+      "static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+      "static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+      "static/chunks/node_modules_next_dist_b0daae9a._.js",
+      "static/chunks/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+      "static/chunks/_a0ff3932._.js",
+      "static/chunks/turbopack-_cdba956c._.js"
+    ]
+  }
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\app-paths-manifest.json (52 bytes)
+----- BEGIN -----
+{
+  "/zmien-haslo/page": "app/zmien-haslo/page.js"
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\build-manifest.json (819 bytes)
+----- BEGIN -----
+{
+  "devFiles": [],
+  "ampDevFiles": [],
+  "polyfillFiles": [
+    "static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_57d40746._.js",
+    "static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js",
+    "static/chunks/node_modules_next_dist_compiled_next-devtools_index_a9cb0712.js",
+    "static/chunks/node_modules_next_dist_compiled_5150ccfd._.js",
+    "static/chunks/node_modules_next_dist_client_cf1d9188._.js",
+    "static/chunks/node_modules_next_dist_b0daae9a._.js",
+    "static/chunks/node_modules_@swc_helpers_cjs_b3dc30d6._.js",
+    "static/chunks/_a0ff3932._.js",
+    "static/chunks/turbopack-_cdba956c._.js"
+  ],
+  "pages": {},
+  "ampFirstPages": []
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\next-font-manifest.json (261 bytes)
+----- BEGIN -----
+{
+  "pages": {},
+  "app": {
+    "[project]/src/app/zmien-haslo/page": [
+      "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
+      "static/media/797e433ab948586e-s.p.dbea232f.woff2"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pagesUsingSizeAdjust": false
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\react-loadable-manifest.json (2 bytes)
+----- BEGIN -----
+{}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app\zmien-haslo\page\server-reference-manifest.json (30 bytes)
+----- BEGIN -----
+{
+  "node": {},
+  "edge": {}
+}
+----- END -----
+
+===== FILE: grafikomat-web\.next\server\app-paths-manifest.json (154 bytes)
+----- BEGIN -----
+{
+  "/auth/callback/route": "app/auth/callback/route.js",
   "/logowanie/page": "app/logowanie/page.js",
-  "/page": "app/page.js",
-  "/zapomnialem-hasla/page": "app/zapomnialem-hasla/page.js"
+  "/zmien-haslo/page": "app/zmien-haslo/page.js"
 }
 ----- END -----
 
@@ -11884,9 +12060,9 @@ namespace GrafikoMat.Views
       "env": {
         "__NEXT_BUILD_ID": "development",
         "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "T+MXDE0j3wSmIoDY2hP4MV+FMZthUq34yuRNObH+6Kc=",
-        "__NEXT_PREVIEW_MODE_ID": "01152222dd8d6b16c3763ac5aae14f90",
-        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "58e7970eb745df16c4be0bc6def0c3664565fd0fe7813cb46aac20d8d3b8c44b",
-        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "1d67382d6e3c83fc46a41c82f13fcbe1fdfa239353647412860afb7c1e52f642"
+        "__NEXT_PREVIEW_MODE_ID": "207c9aba12f42eaa28d8d9261a28dd09",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "7c43b20d51d0bc37c7de707cbf7b0cd9f6dd9c386aa7fc7f51d70c8ff5f8d003",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "d3e122c483f00a8ae810c552a779266481d344832851b048850c9164560faff8"
       }
     }
   },
@@ -11919,9 +12095,9 @@ namespace GrafikoMat.Views
       "env": {
         "__NEXT_BUILD_ID": "development",
         "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "T+MXDE0j3wSmIoDY2hP4MV+FMZthUq34yuRNObH+6Kc=",
-        "__NEXT_PREVIEW_MODE_ID": "01152222dd8d6b16c3763ac5aae14f90",
-        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "58e7970eb745df16c4be0bc6def0c3664565fd0fe7813cb46aac20d8d3b8c44b",
-        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "1d67382d6e3c83fc46a41c82f13fcbe1fdfa239353647412860afb7c1e52f642"
+        "__NEXT_PREVIEW_MODE_ID": "207c9aba12f42eaa28d8d9261a28dd09",
+        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "7c43b20d51d0bc37c7de707cbf7b0cd9f6dd9c386aa7fc7f51d70c8ff5f8d003",
+        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "d3e122c483f00a8ae810c552a779266481d344832851b048850c9164560faff8"
       }
     }
   },
@@ -11932,7 +12108,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: grafikomat-web\.next\server\next-font-manifest.json (585 bytes)
+===== FILE: grafikomat-web\.next\server\next-font-manifest.json (425 bytes)
 ----- BEGIN -----
 {
   "app": {
@@ -11940,11 +12116,7 @@ namespace GrafikoMat.Views
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ],
-    "[project]/src/app/page": [
-      "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
-      "static/media/797e433ab948586e-s.p.dbea232f.woff2"
-    ],
-    "[project]/src/app/zapomnialem-hasla/page": [
+    "[project]/src/app/zmien-haslo/page": [
       "static/media/caa3a2e1cccd8315-s.p.853070df.woff2",
       "static/media/797e433ab948586e-s.p.dbea232f.woff2"
     ]

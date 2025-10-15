@@ -40,65 +40,74 @@
                   AllowDrop="True"
                   SelectionMode="None"
                   DragItemsCompleted="ActivePrioritiesListView_DragItemsCompleted">
+
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0,0,0,8"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 </Style>
             </ListView.ItemContainerStyle>
+
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:PriorityOptionViewModel">
                     <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <Grid MinHeight="64" Padding="0,0,12,0">
+                        <Grid MinHeight="64" Background="Red">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="64"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="60"/>
                             </Grid.ColumnDefinitions>
 
-                            <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
-                                <Button VerticalAlignment="Top"
-                                        Command="{x:Bind MoveUpCommand}"
-                                        Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70E;" FontSize="12"/>
-                                </Button>
-                                <Button VerticalAlignment="Bottom"
-                                        Command="{x:Bind MoveDownCommand}"
-                                        Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                        Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                    <FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                                </Button>
+                            <Grid Grid.Column="0" Background="Blue">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="64"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
+                                    <Button VerticalAlignment="Top"
+                                            Command="{x:Bind MoveUpCommand}"
+                                            Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                        <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                    </Button>
+                                    <Button VerticalAlignment="Bottom"
+                                            Command="{x:Bind MoveDownCommand}"
+                                            Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                            Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
+                                        <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                    </Button>
+                                </Grid>
+
+                                <Border Grid.Column="1"
+                                        Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
+                                        Height="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
+                                        Background="{x:Bind Rank, Converter={StaticResource RankToBrushConverter}}"
+                                        CornerRadius="100"
+                                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="{x:Bind Rank}"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center">
+                                        <TextBlock.RenderTransform>
+                                            <TranslateTransform Y="-0.5"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                </Border>
+
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                </StackPanel>
                             </Grid>
 
-                            <Border Grid.Column="1"
-                                    Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                    Height="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                    Background="{x:Bind Rank, Converter={StaticResource RankToBrushConverter}}"
-                                    CornerRadius="100"
-                                    VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="{x:Bind Rank}"
-                                           Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
-                                           FontWeight="SemiBold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center">
-                                    <TextBlock.RenderTransform>
-                                        <TranslateTransform Y="-0.5"/>
-                                    </TextBlock.RenderTransform>
-                                </TextBlock>
+                            <Border Grid.Column="1" Background="Gold">
+                                <CheckBox IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                             </Border>
-
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
-                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
-                            </StackPanel>
-
-                            <CheckBox Grid.Column="3" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -109,12 +118,14 @@
         <ListView Grid.Row="5"
                   ItemsSource="{x:Bind ViewModel.InactivePriorities}"
                   SelectionMode="None">
+
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0,0,0,8"/>
                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                 </Style>
             </ListView.ItemContainerStyle>
+
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:PriorityOptionViewModel">
                     <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -122,13 +133,13 @@
                             BorderThickness="1"
                             CornerRadius="4"
                             Opacity="0.5">
-                        <Grid MinHeight="64" Padding="12,0">
+                        <Grid MinHeight="64">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="60"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>

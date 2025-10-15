@@ -17,9 +17,10 @@ namespace GrafikoMat.Views.Settings
 
         private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
-            // Po operacji przeciągnij-i-upuść, która automatycznie zmienia kolejność w kolekcji,
-            // po prostu nakazujemy ViewModelowi odświeżenie stanu (rang i przycisku zapisu).
-            ViewModel.RefreshListState(markAsDirty: true);
+            // Po tym, jak kontrolka ListView sama zaktualizowała swoją wewnętrzną kolejność,
+            // pobieramy tę nową kolejność i przekazujemy ją do ViewModelu w celu synchronizacji.
+            var newOrder = sender.Items.Cast<PriorityOptionViewModel>();
+            ViewModel.UpdateOrderFromView(newOrder);
         }
     }
 }

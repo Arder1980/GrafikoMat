@@ -23,7 +23,6 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
 
-        // ================== ZMIANA: Dodanie flagi śledzącej zmiany ==================
         private bool _isDirty = false;
 
         public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; } = new();
@@ -42,7 +41,6 @@ namespace GrafikoMat.ViewModels
 
             MoveUpCommand = new RelayCommand<PriorityOptionViewModel>(MoveUp);
             MoveDownCommand = new RelayCommand<PriorityOptionViewModel>(MoveDown);
-            // ================== ZMIANA: Dodanie warunku CanExecute do komendy ==================
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             LoadPriorities();
@@ -109,11 +107,11 @@ namespace GrafikoMat.ViewModels
                         sortedInactive.ForEach(p => InactivePriorities.Add(p));
                     }
                 }
-                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
                 RefreshListState(markAsDirty: true);
             }
         }
 
+        // ================== ZMIANA: Uproszczona logika bez Dispatchera ==================
         private void MoveUp(PriorityOptionViewModel? priority)
         {
             if (priority == null) return;
@@ -121,8 +119,7 @@ namespace GrafikoMat.ViewModels
             if (index > 0)
             {
                 ActivePriorities.Move(index, index - 1);
-                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
-                _dispatcher?.TryEnqueue(() => RefreshListState(markAsDirty: true));
+                RefreshListState(markAsDirty: true);
             }
         }
 
@@ -133,12 +130,10 @@ namespace GrafikoMat.ViewModels
             if (index < ActivePriorities.Count - 1)
             {
                 ActivePriorities.Move(index, index + 1);
-                // ================== ZMIANA: Oznaczamy, że dokonano zmiany ==================
-                _dispatcher?.TryEnqueue(() => RefreshListState(markAsDirty: true));
+                RefreshListState(markAsDirty: true);
             }
         }
 
-        // ================== ZMIANA: Dodano parametr `markAsDirty` ==================
         public void RefreshListState(bool markAsDirty = false)
         {
             if (markAsDirty)
@@ -159,6 +154,19 @@ namespace GrafikoMat.ViewModels
             {
                 item.Rank = 0;
             }
+        }
+
+        // ================== NOWA METODA: Do obsługi przeciągania w widoku ==================
+        public void UpdateOrderFromView(IEnumerable<PriorityOptionViewModel> newOrder)
+        {
+            // Tworzymy tymczasową listę, aby uniknąć problemów z modyfikacją kolekcji, po której iterujemy
+            var currentItems = new List<PriorityOptionViewModel>(newOrder);
+            ActivePriorities.Clear();
+            foreach (var item in currentItems)
+            {
+                ActivePriorities.Add(item);
+            }
+            RefreshListState(markAsDirty: true);
         }
 
         private async Task SaveSettingsAsync()
@@ -183,7 +191,6 @@ namespace GrafikoMat.ViewModels
             );
             _appSettings = newSettings;
 
-            // ================== ZMIANA: Reset flagi i dezaktywacja przycisku po zapisie ==================
             _isDirty = false;
             SaveCommand.NotifyCanExecuteChanged();
 
