@@ -14,15 +14,23 @@
         <common:RankToBrushConverter x:Key="RankToBrushConverter"/>
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
-        <Style x:Key="PriorityCellCheckBox" TargetType="CheckBox">
+        <!-- ZMIANA: Minimalny override dla CheckBox zamiast pełnego custom stylu -->
+        <Style x:Key="CompactCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
+            <!-- Usuń domyślne marginesy i paddingi -->
             <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
+
+            <!-- Wycentruj kontrolkę -->
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+
+            <!-- Wymuś rozmiar całej kontrolki (bez contentu - brak labela) -->
             <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
-            <Setter Property="UseSystemFocusVisuals" Value="True"/>
         </Style>
     </UserControl.Resources>
 
@@ -45,7 +53,6 @@
 
         <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
 
-        <!-- ZMIANA: Usunięto DragItemsCompleted="ActivePrioritiesListView_DragItemsCompleted" -->
         <ListView x:Name="ActivePrioritiesListView" 
                   Grid.Row="3"
                   ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
@@ -120,11 +127,10 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- CheckBox aktywności -->
-                            <Border Grid.Column="1">
-                                <CheckBox Style="{StaticResource PriorityCellCheckBox}"
-                                          IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                            </Border>
+                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -161,8 +167,9 @@
                                 <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
 
+                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
                             <CheckBox Grid.Column="1"
-                                      Style="{StaticResource PriorityCellCheckBox}"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
                                       IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                         </Grid>
                     </Border>
