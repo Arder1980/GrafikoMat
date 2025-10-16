@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-16 19:07:29
+# Data:       2025-10-17 00:11:29
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -8254,7 +8254,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (9849 bytes)
+===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (10962 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -8266,6 +8266,7 @@ using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8282,8 +8283,9 @@ namespace GrafikoMat.ViewModels
         private Guid _viewId;
 
         private bool _isDirty = false;
+        private bool _isInternalUpdate = false; // Flaga zapobiegająca nieskończonej pętli
 
-        public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; } = new();
+        public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; }
         public ObservableCollection<PriorityOptionViewModel> InactivePriorities { get; } = new();
 
         public IRelayCommand<PriorityOptionViewModel> MoveUpCommand { get; }
@@ -8297,6 +8299,10 @@ namespace GrafikoMat.ViewModels
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             _dispatcher = dispatcher;
 
+            // ZMIANA: Inicjalizuj kolekcję i nasłuchuj zmian
+            ActivePriorities = new ObservableCollection<PriorityOptionViewModel>();
+            ActivePriorities.CollectionChanged += ActivePriorities_CollectionChanged;
+
             MoveUpCommand = new RelayCommand<PriorityOptionViewModel>(MoveUp);
             MoveDownCommand = new RelayCommand<PriorityOptionViewModel>(MoveDown);
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
@@ -8306,8 +8312,26 @@ namespace GrafikoMat.ViewModels
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
 
+        // ZMIANA: Event handler reagujący na zmiany w kolekcji (np. drag & drop)
+        private void ActivePriorities_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Ignoruj zmiany wywołane przez nas samych (np. w LoadPriorities)
+            if (_isInternalUpdate) return;
+
+            // Drag & drop wywołuje event Move
+            if (e.Action == NotifyCollectionChangedAction.Move ||
+                e.Action == NotifyCollectionChangedAction.Remove ||
+                e.Action == NotifyCollectionChangedAction.Add)
+            {
+                // Odśwież rangi i oznacz jako dirty
+                RefreshListState(markAsDirty: true);
+            }
+        }
+
         private void LoadPriorities()
         {
+            _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas ładowania
+
             ActivePriorities.Clear();
             InactivePriorities.Clear();
             var descriptions = GetPriorityDescriptions();
@@ -8333,13 +8357,19 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
+            // Uporządkuj według zapisanej kolejności
             var orderedActive = _appSettings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => ActivePriorities.First(vm => vm.PriorityType == p.Priority))
                 .ToList();
 
             ActivePriorities.Clear();
-            orderedActive.ForEach(p => ActivePriorities.Add(p));
+            foreach (var p in orderedActive)
+            {
+                ActivePriorities.Add(p);
+            }
+
+            _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
 
             RefreshListState();
         }
@@ -8348,6 +8378,8 @@ namespace GrafikoMat.ViewModels
         {
             if (e.PropertyName == nameof(PriorityOptionViewModel.IsActive) && sender is PriorityOptionViewModel changedPriority)
             {
+                _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas przenoszenia między listami
+
                 if (changedPriority.IsActive)
                 {
                     if (InactivePriorities.Remove(changedPriority))
@@ -8365,6 +8397,8 @@ namespace GrafikoMat.ViewModels
                         sortedInactive.ForEach(p => InactivePriorities.Add(p));
                     }
                 }
+
+                _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
                 RefreshListState(markAsDirty: true);
             }
         }
@@ -8375,11 +8409,12 @@ namespace GrafikoMat.ViewModels
             int index = ActivePriorities.IndexOf(priority);
             if (index > 0)
             {
-                var newList = new List<PriorityOptionViewModel>(ActivePriorities);
-                var item = newList[index];
-                newList.RemoveAt(index);
-                newList.Insert(index - 1, item);
-                UpdateOrderFromView(newList);
+                _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas ręcznej zmiany
+
+                ActivePriorities.Move(index, index - 1); // ObservableCollection.Move() jest bardziej efektywne
+
+                _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
+                RefreshListState(markAsDirty: true);
             }
         }
 
@@ -8389,11 +8424,12 @@ namespace GrafikoMat.ViewModels
             int index = ActivePriorities.IndexOf(priority);
             if (index < ActivePriorities.Count - 1)
             {
-                var newList = new List<PriorityOptionViewModel>(ActivePriorities);
-                var item = newList[index];
-                newList.RemoveAt(index);
-                newList.Insert(index + 1, item);
-                UpdateOrderFromView(newList);
+                _isInternalUpdate = true;
+
+                ActivePriorities.Move(index, index + 1);
+
+                _isInternalUpdate = false;
+                RefreshListState(markAsDirty: true);
             }
         }
 
@@ -8405,6 +8441,7 @@ namespace GrafikoMat.ViewModels
                 SaveCommand.NotifyCanExecuteChanged();
             }
 
+            // Zawsze odśwież rangi dla aktywnych priorytetów
             for (int i = 0; i < ActivePriorities.Count; i++)
             {
                 var item = ActivePriorities[i];
@@ -8419,28 +8456,8 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        public void UpdateOrderFromView(IEnumerable<PriorityOptionViewModel> newOrder)
-        {
-            var newList = newOrder.ToList();
-            if (newList.Count != ActivePriorities.Count)
-                return;
-
-            bool changed = false;
-            for (int i = 0; i < newList.Count; i++)
-            {
-                if (!ReferenceEquals(newList[i], ActivePriorities[i]))
-                {
-                    changed = true;
-                    break;
-                }
-            }
-
-            ActivePriorities.Clear();
-            foreach (var item in newList)
-                ActivePriorities.Add(item);
-
-            RefreshListState(markAsDirty: changed);
-        }
+        // ZMIANA: Ta metoda nie jest już potrzebna (usunięta), bo CollectionChanged obsługuje drag & drop
+        // Została zastąpiona przez ActivePriorities_CollectionChanged
 
         private async Task SaveSettingsAsync()
         {
@@ -10680,7 +10697,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (9964 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (10415 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.PrioritiesSettingsView"
@@ -10698,15 +10715,23 @@ namespace GrafikoMat.Views.Settings
         <common:RankToBrushConverter x:Key="RankToBrushConverter"/>
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
-        <Style x:Key="PriorityCellCheckBox" TargetType="CheckBox">
+        <!-- ZMIANA: Minimalny override dla CheckBox zamiast pełnego custom stylu -->
+        <Style x:Key="CompactCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource DefaultCheckBoxStyle}">
+            <!-- Usuń domyślne marginesy i paddingi -->
             <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Margin" Value="0"/>
+
+            <!-- Wycentruj kontrolkę -->
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+
+            <!-- Wymuś rozmiar całej kontrolki (bez contentu - brak labela) -->
             <Setter Property="Width" Value="32"/>
             <Setter Property="Height" Value="32"/>
-            <Setter Property="UseSystemFocusVisuals" Value="True"/>
         </Style>
     </UserControl.Resources>
 
@@ -10728,13 +10753,13 @@ namespace GrafikoMat.Views.Settings
         </TextBlock>
 
         <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
+
         <ListView x:Name="ActivePrioritiesListView" 
                   Grid.Row="3"
                   ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
                   CanReorderItems="True"
                   AllowDrop="True"
-                  SelectionMode="None"
-                  DragItemsCompleted="ActivePrioritiesListView_DragItemsCompleted">
+                  SelectionMode="None">
 
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
@@ -10803,11 +10828,10 @@ namespace GrafikoMat.Views.Settings
                                 </StackPanel>
                             </Grid>
 
-                            <!-- CheckBox aktywności -->
-                            <Border Grid.Column="1">
-                                <CheckBox Style="{StaticResource PriorityCellCheckBox}"
-                                          IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                            </Border>
+                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -10844,8 +10868,9 @@ namespace GrafikoMat.Views.Settings
                                 <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
 
+                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
                             <CheckBox Grid.Column="1"
-                                      Style="{StaticResource PriorityCellCheckBox}"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
                                       IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                         </Grid>
                     </Border>
@@ -10861,15 +10886,12 @@ namespace GrafikoMat.Views.Settings
                 Margin="0,20,0,0"/>
     </Grid>
 </UserControl>
-
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (925 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (674 bytes)
 ----- BEGIN -----
 using GrafikoMat.ViewModels;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.Linq;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -10883,16 +10905,11 @@ namespace GrafikoMat.Views.Settings
             ViewModel = viewModel;
         }
 
-        // Po zakończeniu przeciągania bierzemy nową kolejność z ListView i
-        // przekazujemy ją do VM. VM oznacza zmiany jako "dirty" i przelicza Rank.
-        private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
-        {
-            var newOrder = sender.Items.Cast<PriorityOptionViewModel>();
-            ViewModel.UpdateOrderFromView(newOrder);
-        }
+        // ZMIANA: Event handler został całkowicie usunięty.
+        // Drag & drop jest teraz obsługiwany przez CollectionChanged event w ViewModel.
+        // Nie potrzebujemy już ActivePrioritiesListView_DragItemsCompleted.
     }
 }
-
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3732 bytes)
