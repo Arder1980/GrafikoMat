@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-15 20:08:02
+# Data:       2025-10-16 19:07:29
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -8254,7 +8254,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (9527 bytes)
+===== FILE: GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs (9849 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -8369,15 +8369,17 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ================== ZMIANA: Uproszczona logika bez Dispatchera ==================
         private void MoveUp(PriorityOptionViewModel? priority)
         {
             if (priority == null) return;
             int index = ActivePriorities.IndexOf(priority);
             if (index > 0)
             {
-                ActivePriorities.Move(index, index - 1);
-                RefreshListState(markAsDirty: true);
+                var newList = new List<PriorityOptionViewModel>(ActivePriorities);
+                var item = newList[index];
+                newList.RemoveAt(index);
+                newList.Insert(index - 1, item);
+                UpdateOrderFromView(newList);
             }
         }
 
@@ -8387,8 +8389,11 @@ namespace GrafikoMat.ViewModels
             int index = ActivePriorities.IndexOf(priority);
             if (index < ActivePriorities.Count - 1)
             {
-                ActivePriorities.Move(index, index + 1);
-                RefreshListState(markAsDirty: true);
+                var newList = new List<PriorityOptionViewModel>(ActivePriorities);
+                var item = newList[index];
+                newList.RemoveAt(index);
+                newList.Insert(index + 1, item);
+                UpdateOrderFromView(newList);
             }
         }
 
@@ -8414,17 +8419,27 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ================== NOWA METODA: Do obsługi przeciągania w widoku ==================
         public void UpdateOrderFromView(IEnumerable<PriorityOptionViewModel> newOrder)
         {
-            // Tworzymy tymczasową listę, aby uniknąć problemów z modyfikacją kolekcji, po której iterujemy
-            var currentItems = new List<PriorityOptionViewModel>(newOrder);
-            ActivePriorities.Clear();
-            foreach (var item in currentItems)
+            var newList = newOrder.ToList();
+            if (newList.Count != ActivePriorities.Count)
+                return;
+
+            bool changed = false;
+            for (int i = 0; i < newList.Count; i++)
             {
-                ActivePriorities.Add(item);
+                if (!ReferenceEquals(newList[i], ActivePriorities[i]))
+                {
+                    changed = true;
+                    break;
+                }
             }
-            RefreshListState(markAsDirty: true);
+
+            ActivePriorities.Clear();
+            foreach (var item in newList)
+                ActivePriorities.Add(item);
+
+            RefreshListState(markAsDirty: changed);
         }
 
         private async Task SaveSettingsAsync()
@@ -10665,7 +10680,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (8999 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (9964 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.PrioritiesSettingsView"
@@ -10682,6 +10697,17 @@ namespace GrafikoMat.Views.Settings
         <common:RankToSizeConverter x:Key="RankToSizeConverter"/>
         <common:RankToBrushConverter x:Key="RankToBrushConverter"/>
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+
+        <Style x:Key="PriorityCellCheckBox" TargetType="CheckBox">
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="UseSystemFocusVisuals" Value="True"/>
+        </Style>
     </UserControl.Resources>
 
     <Grid Padding="20">
@@ -10704,7 +10730,7 @@ namespace GrafikoMat.Views.Settings
         <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
         <ListView x:Name="ActivePrioritiesListView" 
                   Grid.Row="3"
-                  ItemsSource="{x:Bind ViewModel.ActivePriorities}"
+                  ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
                   CanReorderItems="True"
                   AllowDrop="True"
                   SelectionMode="None"
@@ -10723,19 +10749,20 @@ namespace GrafikoMat.Views.Settings
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <Grid MinHeight="64" Background="Red">
+                        <Grid MinHeight="64">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="60"/>
                             </Grid.ColumnDefinitions>
 
-                            <Grid Grid.Column="0" Background="Blue">
+                            <Grid Grid.Column="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="64"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
+                                <!-- Kolumna strzałek -->
                                 <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
                                     <Button VerticalAlignment="Top"
                                             Command="{x:Bind MoveUpCommand}"
@@ -10751,13 +10778,14 @@ namespace GrafikoMat.Views.Settings
                                     </Button>
                                 </Grid>
 
+                                <!-- Kółko z rangą -->
                                 <Border Grid.Column="1"
-                                        Width="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                        Height="{x:Bind Rank, Converter={StaticResource RankToSizeConverter}}"
-                                        Background="{x:Bind Rank, Converter={StaticResource RankToBrushConverter}}"
+                                        Width="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
+                                        Height="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
+                                        Background="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToBrushConverter}}"
                                         CornerRadius="100"
                                         VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Rank}"
+                                    <TextBlock Text="{x:Bind Rank, Mode=OneWay}"
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
@@ -10768,14 +10796,17 @@ namespace GrafikoMat.Views.Settings
                                     </TextBlock>
                                 </Border>
 
+                                <!-- Nazwa i opis -->
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
-                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
 
-                            <Border Grid.Column="1" Background="Gold">
-                                <CheckBox IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            <!-- CheckBox aktywności -->
+                            <Border Grid.Column="1">
+                                <CheckBox Style="{StaticResource PriorityCellCheckBox}"
+                                          IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                             </Border>
                         </Grid>
                     </Border>
@@ -10785,7 +10816,7 @@ namespace GrafikoMat.Views.Settings
 
         <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
         <ListView Grid.Row="5"
-                  ItemsSource="{x:Bind ViewModel.InactivePriorities}"
+                  ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
                   SelectionMode="None">
 
             <ListView.ItemContainerStyle>
@@ -10809,11 +10840,13 @@ namespace GrafikoMat.Views.Settings
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
-                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                             </StackPanel>
 
-                            <CheckBox Grid.Column="1" IsChecked="{x:Bind IsActive, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource PriorityCellCheckBox}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                         </Grid>
                     </Border>
                 </DataTemplate>
@@ -10828,9 +10861,10 @@ namespace GrafikoMat.Views.Settings
                 Margin="0,20,0,0"/>
     </Grid>
 </UserControl>
+
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (961 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs (925 bytes)
 ----- BEGIN -----
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
@@ -10849,15 +10883,16 @@ namespace GrafikoMat.Views.Settings
             ViewModel = viewModel;
         }
 
+        // Po zakończeniu przeciągania bierzemy nową kolejność z ListView i
+        // przekazujemy ją do VM. VM oznacza zmiany jako "dirty" i przelicza Rank.
         private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
-            // Po tym, jak kontrolka ListView sama zaktualizowała swoją wewnętrzną kolejność,
-            // pobieramy tę nową kolejność i przekazujemy ją do ViewModelu w celu synchronizacji.
             var newOrder = sender.Items.Cast<PriorityOptionViewModel>();
             ViewModel.UpdateOrderFromView(newOrder);
         }
     }
 }
+
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (3732 bytes)

@@ -8,6 +8,7 @@ using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -24,8 +25,9 @@ namespace GrafikoMat.ViewModels
         private Guid _viewId;
 
         private bool _isDirty = false;
+        private bool _isInternalUpdate = false; // Flaga zapobiegająca nieskończonej pętli
 
-        public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; } = new();
+        public ObservableCollection<PriorityOptionViewModel> ActivePriorities { get; }
         public ObservableCollection<PriorityOptionViewModel> InactivePriorities { get; } = new();
 
         public IRelayCommand<PriorityOptionViewModel> MoveUpCommand { get; }
@@ -39,6 +41,10 @@ namespace GrafikoMat.ViewModels
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             _dispatcher = dispatcher;
 
+            // ZMIANA: Inicjalizuj kolekcję i nasłuchuj zmian
+            ActivePriorities = new ObservableCollection<PriorityOptionViewModel>();
+            ActivePriorities.CollectionChanged += ActivePriorities_CollectionChanged;
+
             MoveUpCommand = new RelayCommand<PriorityOptionViewModel>(MoveUp);
             MoveDownCommand = new RelayCommand<PriorityOptionViewModel>(MoveDown);
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
@@ -48,8 +54,26 @@ namespace GrafikoMat.ViewModels
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
 
+        // ZMIANA: Event handler reagujący na zmiany w kolekcji (np. drag & drop)
+        private void ActivePriorities_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            // Ignoruj zmiany wywołane przez nas samych (np. w LoadPriorities)
+            if (_isInternalUpdate) return;
+
+            // Drag & drop wywołuje event Move
+            if (e.Action == NotifyCollectionChangedAction.Move ||
+                e.Action == NotifyCollectionChangedAction.Remove ||
+                e.Action == NotifyCollectionChangedAction.Add)
+            {
+                // Odśwież rangi i oznacz jako dirty
+                RefreshListState(markAsDirty: true);
+            }
+        }
+
         private void LoadPriorities()
         {
+            _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas ładowania
+
             ActivePriorities.Clear();
             InactivePriorities.Clear();
             var descriptions = GetPriorityDescriptions();
@@ -75,13 +99,19 @@ namespace GrafikoMat.ViewModels
                 }
             }
 
+            // Uporządkuj według zapisanej kolejności
             var orderedActive = _appSettings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => ActivePriorities.First(vm => vm.PriorityType == p.Priority))
                 .ToList();
 
             ActivePriorities.Clear();
-            orderedActive.ForEach(p => ActivePriorities.Add(p));
+            foreach (var p in orderedActive)
+            {
+                ActivePriorities.Add(p);
+            }
+
+            _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
 
             RefreshListState();
         }
@@ -90,6 +120,8 @@ namespace GrafikoMat.ViewModels
         {
             if (e.PropertyName == nameof(PriorityOptionViewModel.IsActive) && sender is PriorityOptionViewModel changedPriority)
             {
+                _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas przenoszenia między listami
+
                 if (changedPriority.IsActive)
                 {
                     if (InactivePriorities.Remove(changedPriority))
@@ -107,18 +139,23 @@ namespace GrafikoMat.ViewModels
                         sortedInactive.ForEach(p => InactivePriorities.Add(p));
                     }
                 }
+
+                _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
                 RefreshListState(markAsDirty: true);
             }
         }
 
-        // ================== ZMIANA: Uproszczona logika bez Dispatchera ==================
         private void MoveUp(PriorityOptionViewModel? priority)
         {
             if (priority == null) return;
             int index = ActivePriorities.IndexOf(priority);
             if (index > 0)
             {
-                ActivePriorities.Move(index, index - 1);
+                _isInternalUpdate = true; // Wyłącz nasłuchiwanie podczas ręcznej zmiany
+
+                ActivePriorities.Move(index, index - 1); // ObservableCollection.Move() jest bardziej efektywne
+
+                _isInternalUpdate = false; // Włącz nasłuchiwanie z powrotem
                 RefreshListState(markAsDirty: true);
             }
         }
@@ -129,7 +166,11 @@ namespace GrafikoMat.ViewModels
             int index = ActivePriorities.IndexOf(priority);
             if (index < ActivePriorities.Count - 1)
             {
+                _isInternalUpdate = true;
+
                 ActivePriorities.Move(index, index + 1);
+
+                _isInternalUpdate = false;
                 RefreshListState(markAsDirty: true);
             }
         }
@@ -142,6 +183,7 @@ namespace GrafikoMat.ViewModels
                 SaveCommand.NotifyCanExecuteChanged();
             }
 
+            // Zawsze odśwież rangi dla aktywnych priorytetów
             for (int i = 0; i < ActivePriorities.Count; i++)
             {
                 var item = ActivePriorities[i];
@@ -156,18 +198,8 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // ================== NOWA METODA: Do obsługi przeciągania w widoku ==================
-        public void UpdateOrderFromView(IEnumerable<PriorityOptionViewModel> newOrder)
-        {
-            // Tworzymy tymczasową listę, aby uniknąć problemów z modyfikacją kolekcji, po której iterujemy
-            var currentItems = new List<PriorityOptionViewModel>(newOrder);
-            ActivePriorities.Clear();
-            foreach (var item in currentItems)
-            {
-                ActivePriorities.Add(item);
-            }
-            RefreshListState(markAsDirty: true);
-        }
+        // ZMIANA: Ta metoda nie jest już potrzebna (usunięta), bo CollectionChanged obsługuje drag & drop
+        // Została zastąpiona przez ActivePriorities_CollectionChanged
 
         private async Task SaveSettingsAsync()
         {

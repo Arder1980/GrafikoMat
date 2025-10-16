@@ -1,7 +1,5 @@
 ﻿using GrafikoMat.ViewModels;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.Linq;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -15,12 +13,8 @@ namespace GrafikoMat.Views.Settings
             ViewModel = viewModel;
         }
 
-        private void ActivePrioritiesListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
-        {
-            // Po tym, jak kontrolka ListView sama zaktualizowała swoją wewnętrzną kolejność,
-            // pobieramy tę nową kolejność i przekazujemy ją do ViewModelu w celu synchronizacji.
-            var newOrder = sender.Items.Cast<PriorityOptionViewModel>();
-            ViewModel.UpdateOrderFromView(newOrder);
-        }
+        // ZMIANA: Event handler został całkowicie usunięty.
+        // Drag & drop jest teraz obsługiwany przez CollectionChanged event w ViewModel.
+        // Nie potrzebujemy już ActivePrioritiesListView_DragItemsCompleted.
     }
 }
