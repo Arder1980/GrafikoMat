@@ -1,0 +1,3 @@
+ignore_folders=[".vs", "bin", "obj", ".git", "node_modules", ".next", "packages"]
+ignore_file_extensions=["exe", "dll", "pdb", "cache", "suo", "user", "zip"]
+ignore_name_includes=["ProjektSnapshot", "Debug", "Release"]

@@ -1,13 +1,17 @@
 ﻿using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
-using Microsoft.UI; // <-- Ta linia została dodana
+using Windows.UI;
 
 namespace GrafikoMat.Controls
 {
-    public sealed partial class ActionContainer : UserControl, IRecipient<ShowBusyOverlayMessage>, IRecipient<ShowStatusOverlayMessage>, IRecipient<HideOverlayMessage>
+    public sealed partial class ActionContainer : UserControl,
+        IRecipient<ShowBusyOverlayMessage>,
+        IRecipient<ShowStatusOverlayMessage>,
+        IRecipient<HideOverlayMessage>
     {
         private readonly Guid _viewId = Guid.NewGuid();
 
@@ -29,7 +33,6 @@ namespace GrafikoMat.Controls
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Najpierw wyrejestruj, aby uniknąć podwójnej subskrypcji.
             WeakReferenceMessenger.Default.UnregisterAll(this);
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
@@ -42,58 +45,144 @@ namespace GrafikoMat.Controls
         public void Receive(ShowBusyOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                ActionProgressRing.IsActive = true;
-                ActionInfoBar.IsOpen = false;
-                OverlayHost.Visibility = Visibility.Visible;
+                // Fade-out zawartości
+                FadeOutStoryboard.Begin();
+
+                // Po zakończeniu animacji pokaż overlay
+                FadeOutStoryboard.Completed += (s, e) =>
+                {
+                    ActionProgressRing.IsActive = true;
+                    CustomInfoBar.Visibility = Visibility.Collapsed;
+                    InfoBarContainer.Opacity = 0;
+                    OverlayHost.Visibility = Visibility.Visible;
+                };
             });
         }
 
         public void Receive(ShowStatusOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                ActionProgressRing.IsActive = false;
-                ActionInfoBar.Title = message.Title;
-                ActionInfoBar.Message = message.Message;
-                ActionInfoBar.Severity = message.Severity;
-
-                // ================== ZMIANA: Użycie nowego pędzla ==================
-                var foregroundBrush = new SolidColorBrush(Colors.White);
-
-                switch (message.Severity)
+                // Jeśli overlay nie był widoczny, zrób fade-out zawartości
+                if (OverlayHost.Visibility == Visibility.Collapsed)
                 {
-                    case InfoBarSeverity.Success:
-                        ActionInfoBar.Background = (Brush)this.Resources["SuccessBrush"];
-                        ActionInfoBar.Foreground = foregroundBrush;
-                        break;
-                    case InfoBarSeverity.Error:
-                        ActionInfoBar.Background = (Brush)this.Resources["ErrorBrush"];
-                        ActionInfoBar.Foreground = foregroundBrush;
-                        break;
-                    default:
-                        // Dla innych typów (Warning, Informational) wracamy do domyślnych kolorów motywu
-                        ActionInfoBar.ClearValue(Control.BackgroundProperty);
-                        ActionInfoBar.ClearValue(Control.ForegroundProperty);
-                        break;
-                }
-                // =================== KONIEC ZMIANY ===================
+                    FadeOutStoryboard.Begin();
 
-                ActionInfoBar.IsOpen = true;
-                OverlayHost.Visibility = Visibility.Visible;
+                    FadeOutStoryboard.Completed += (s, e) =>
+                    {
+                        ShowStatusMessage(message);
+                    };
+                }
+                else
+                {
+                    // Overlay już widoczny
+                    if (CustomInfoBar.Visibility == Visibility.Visible)
+                    {
+                        InfoBarFadeOutStoryboard.Begin();
+                        InfoBarFadeOutStoryboard.Completed += (s, e) =>
+                        {
+                            ShowStatusMessage(message);
+                        };
+                    }
+                    else
+                    {
+                        ShowStatusMessage(message);
+                    }
+                }
             });
+        }
+
+        private void ShowStatusMessage(ShowStatusOverlayMessage message)
+        {
+            ActionProgressRing.IsActive = false;
+
+            // Pokaż custom InfoBar
+            CustomInfoBar.Visibility = Visibility.Visible;
+
+            // Ustaw tekst
+            InfoTitle.Text = message.Title;
+            InfoMessage.Text = message.Message;
+
+            // Sprawdź motyw
+            var isDark = ActualTheme == ElementTheme.Dark ||
+                        (ActualTheme == ElementTheme.Default &&
+                         Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            // Kolory: jasne dla ciemnego motywu, średnie dla jasnego motywu
+            switch (message.Severity)
+            {
+                case InfoBarSeverity.Success:
+                    var successColor = isDark
+                        ? Color.FromArgb(0xFF, 0x10, 0xB9, 0x81)  // Jasna zieleń (ciemny motyw)
+                        : Color.FromArgb(0xFF, 0x16, 0xA3, 0x4A); // Średnia zieleń (jasny motyw)
+                    StatusBorder.Background = new SolidColorBrush(successColor);
+                    StatusIcon.Foreground = new SolidColorBrush(successColor);
+                    StatusIcon.Glyph = "\uF13E"; // CheckmarkCircleFilled
+                    break;
+
+                case InfoBarSeverity.Error:
+                    var errorColor = isDark
+                        ? Color.FromArgb(0xFF, 0xEF, 0x44, 0x44)  // Jasna czerwień (ciemny motyw)
+                        : Color.FromArgb(0xFF, 0xDC, 0x26, 0x26); // Średnia czerwień (jasny motyw)
+                    StatusBorder.Background = new SolidColorBrush(errorColor);
+                    StatusIcon.Foreground = new SolidColorBrush(errorColor);
+                    StatusIcon.Glyph = "\uEA39"; // ErrorBadgeFilled
+                    break;
+
+                case InfoBarSeverity.Warning:
+                    var warningColor = Color.FromArgb(0xFF, 0xF5, 0x9E, 0x0B); // Pomarańczowy
+                    StatusBorder.Background = new SolidColorBrush(warningColor);
+                    StatusIcon.Foreground = new SolidColorBrush(warningColor);
+                    StatusIcon.Glyph = "\uE7BA"; // Warning
+                    break;
+
+                default: // Informational
+                    var infoColor = Color.FromArgb(0xFF, 0x3B, 0x82, 0xF6); // Niebieski
+                    StatusBorder.Background = new SolidColorBrush(infoColor);
+                    StatusIcon.Foreground = new SolidColorBrush(infoColor);
+                    StatusIcon.Glyph = "\uF167"; // InfoFilled
+                    break;
+            }
+
+            OverlayHost.Visibility = Visibility.Visible;
+
+            // Fade-in animation
+            InfoBarFadeInStoryboard.Begin();
         }
 
         public void Receive(HideOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                OverlayHost.Visibility = Visibility.Collapsed;
-                ActionInfoBar.IsOpen = false;
-                ActionProgressRing.IsActive = false;
+                // Fade-out InfoBar
+                if (CustomInfoBar.Visibility == Visibility.Visible)
+                {
+                    InfoBarFadeOutStoryboard.Begin();
+                    InfoBarFadeOutStoryboard.Completed += (s, e) =>
+                    {
+                        OverlayHost.Visibility = Visibility.Collapsed;
+                        CustomInfoBar.Visibility = Visibility.Collapsed;
+                        ActionProgressRing.IsActive = false;
+
+                        // Fade-in zawartości z powrotem
+                        FadeInStoryboard.Begin();
+                    };
+                }
+                else
+                {
+                    OverlayHost.Visibility = Visibility.Collapsed;
+                    ActionProgressRing.IsActive = false;
+
+                    // Fade-in zawartości z powrotem
+                    FadeInStoryboard.Begin();
+                }
             });
         }
 

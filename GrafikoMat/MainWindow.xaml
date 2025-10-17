@@ -8,7 +8,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.Resources>
             <converters:BooleanToPrimaryStyleConverter x:Key="BooleanToPrimaryStyleConverter">
                 <converters:BooleanToPrimaryStyleConverter.PrimaryStyle>
