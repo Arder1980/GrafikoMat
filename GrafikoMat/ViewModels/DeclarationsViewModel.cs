@@ -12,11 +12,6 @@ using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
-    // ================== NOWA KLASA POMOCNICZA ==================
-    /// <summary>
-    /// Reprezentuje pojedynczego lekarza na liście wyboru w widoku deklaracji.
-    /// Przechowuje profil oraz nazwę wyświetlaną (potencjalnie ze skrótem).
-    /// </summary>
     public class DoctorDeclarationViewModel
     {
         public DoctorProfile Profile { get; }
@@ -28,7 +23,6 @@ namespace GrafikoMat.ViewModels
             DisplayName = displayName;
         }
     }
-    // ==========================================================
 
     public enum SlotPart { Full, Day, Night }
     public record SelectedSlot(int Index, SlotPart Part);
@@ -37,13 +31,12 @@ namespace GrafikoMat.ViewModels
     {
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
-        private readonly bool _use12hShiftsByDefault;
+        private bool _use12hShiftsByDefault;
 
         public int Year { get; }
         public int MonthIndex { get; }
         public string MonthHeader => $"Deklaracje dyżurowe na {PolishMonth(MonthIndex + 1)} {Year}";
 
-        // ================== ZMIANA TYPU KOLEKCJI ==================
         public ObservableCollection<DoctorDeclarationViewModel> Doctors { get; } = new();
         public ObservableCollection<DayCell> DayCells { get; } = new();
 
@@ -65,10 +58,18 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        // Zaktualizowana właściwość zwracająca czysty profil
         public DoctorProfile? SelectedDoctor =>
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
             Doctors[_selectedDoctorIndex].Profile : null;
+
+        // NOWA WŁAŚCIWOŚĆ: Zapamiętujemy aktualny indeks jednostki
+        private int _currentUnitIndex;
+        public int CurrentUnitIndex
+        {
+            get => _currentUnitIndex;
+            set => SetProperty(ref _currentUnitIndex, value);
+        }
+
         public ICommand SaveCommand { get; }
         public ICommand ClearSelectionCommand { get; }
         public ICommand SelectNextDoctorCommand { get; }
@@ -85,8 +86,8 @@ namespace GrafikoMat.ViewModels
             CanSwitchDoctors = isAdmin;
             _onSaveCallback = onSaveCallback;
             _use12hShiftsByDefault = use12hShifts;
+            _currentUnitIndex = 0;
 
-            // ================== NOWA LOGIKA GENEROWANIA NAZW WYŚWIETLANYCH ==================
             var duplicateFullNames = doctors
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
@@ -100,7 +101,6 @@ namespace GrafikoMat.ViewModels
                     : doc.FullName;
                 Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
             }
-            // =============================================================================
 
             _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
@@ -111,6 +111,39 @@ namespace GrafikoMat.ViewModels
 
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
+        }
+
+        // NOWA METODA: Reload dla nowej jednostki
+        public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
+        {
+            CommitChangesToSharedState();
+
+            _currentUnitIndex = newUnitIndex;
+            _use12hShiftsByDefault = use12hShifts;
+
+            Doctors.Clear();
+            var duplicateFullNames = doctors
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doc in doctors)
+            {
+                string displayName = duplicateFullNames.Contains(doc.FullName)
+                    ? $"{doc.FullName} ({doc.Abbreviation})"
+                    : doc.FullName;
+                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
+            }
+
+            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
+
+            BuildCalendarShell();
+            LoadDeclarationsForSelectedDoctor();
+
+            OnPropertyChanged(nameof(Doctors));
+            OnPropertyChanged(nameof(SelectedDoctor));
+            OnPropertyChanged(nameof(SelectedDoctorIndex));
         }
 
         private void BuildCalendarShell()
@@ -126,7 +159,6 @@ namespace GrafikoMat.ViewModels
                 var date = startDate.AddDays(i);
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
-                    // ZMIANA: Użycie IsPublicHoliday zamiast GetHolidayName do określania dni wolnych
                     PolishHolidays.IsPublicHoliday(date),
                     PolishHolidays.GetHolidayName(date));
 

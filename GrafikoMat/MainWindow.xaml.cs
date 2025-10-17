@@ -1,5 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging; // <-- Upewniamy się, że ten using jest obecny
+using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Models;
@@ -23,6 +23,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using Windows.Graphics;
 using Windows.UI;
 using WinRT;
@@ -30,7 +31,6 @@ using WinRT.Interop;
 
 namespace GrafikoMat
 {
-    // ================== ZMIANA: Implementacja interfejsu IRecipient ==================
     public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>
     {
         private const int MIN_W = 1600;
@@ -43,9 +43,14 @@ namespace GrafikoMat
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
+        private DeclarationsView? _currentDeclarationsView;
+
         private bool _isAnimating;
         private bool _isClosing;
         private Storyboard? _activeStoryboard;
+
+        private int _previousUnitIndex = -1;
+
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         private WndProc? _newWndProc;
         private IntPtr _oldWndProc;
@@ -85,21 +90,16 @@ namespace GrafikoMat
             this.Closed += OnWindowClosed;
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
 
-            // ================== ZMIANA: Rejestracja na odbiór wiadomości ==================
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
         }
 
-        // ================== NOWA METODA: Obsługa wiadomości o zmianie ustawień ==================
         public async void Receive(SettingsHaveChangedMessage message)
         {
-            // Gdy ustawienia się zmienią, wymuś ponowne załadowanie ich do pamięci MainWindow.
-            // Dzięki temu przy zamykaniu okna, zapisana zostanie aktualna wersja.
             if (_settingsService != null)
             {
                 _appSettings = await _settingsService.LoadSettingsAsync(forceReload: true);
             }
         }
-        // ====================================================================================
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
@@ -121,6 +121,15 @@ namespace GrafikoMat
             }
             else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
+                // ZAWSZE animuj nagłówek przy zmianie jednostki
+                if (ViewModel.IsUnitContextActive)
+                {
+                    int previousIndex = ViewModel.CurrentUnitIndex > 0 ? ViewModel.CurrentUnitIndex - 1 : ViewModel.TotalUnitsCount - 1;
+                    bool isNext = ViewModel.CurrentUnitIndex > previousIndex || (previousIndex == ViewModel.TotalUnitsCount - 1 && ViewModel.CurrentUnitIndex == 0);
+
+                    await AnimateUnitHeaderChange(isNext);
+                }
+
                 await ViewModel.SaveCurrentUnitAsync();
                 await ViewModel.UpdateFooterFromSettingsAsync();
             }
@@ -142,6 +151,393 @@ namespace GrafikoMat
                 Storyboard.SetTargetProperty(fadeIn, "Opacity");
                 sb.Children.Add(fadeIn);
                 sb.Begin();
+            }
+        }
+
+        private async void OnMainViewModelPropertyChangedForDeclarations(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(MainViewModel.ActiveUnit)) return;
+            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
+
+            int currentIndex = ViewModel.CurrentUnitIndex;
+
+            // POPRAWKA: Wykrywaj zmianę nawet przy pierwszym wejściu po inicjalizacji
+            if (_previousUnitIndex == -1)
+            {
+                _previousUnitIndex = currentIndex;
+                return; // Pierwsze załadowanie - bez animacji
+            }
+
+            if (_previousUnitIndex == currentIndex)
+            {
+                return; // Ta sama jednostka - brak zmiany
+            }
+
+            bool isNext = currentIndex > _previousUnitIndex ||
+                          (_previousUnitIndex == ViewModel.TotalUnitsCount - 1 && currentIndex == 0);
+
+            System.Diagnostics.Debug.WriteLine($"ANIMACJA: poprzedni={_previousUnitIndex}, obecny={currentIndex}, isNext={isNext}");
+
+            _previousUnitIndex = currentIndex;
+
+            await AnimateUnitChangeInDeclarations(isNext);
+        }
+
+        private async Task AnimateUnitChangeInDeclarations(bool isNext)
+        {
+            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
+
+            System.Diagnostics.Debug.WriteLine($"AnimateUnitChangeInDeclarations: Start (isNext={isNext})");
+
+            var frozenYear = ViewModel.SelectedYear;
+            var frozenMonthIndex = ViewModel.SelectedMonthIndex;
+            var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
+
+            if (!doctorsForUnit.Any()) return;
+
+            int initialIndex = 0;
+            if (!ViewModel.IsCurrentUserAdmin)
+            {
+                try
+                {
+                    if (_doctorRepository != null)
+                    {
+                        var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
+                        if (currentProfile != null)
+                        {
+                            var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
+                            if (idx >= 0) initialIndex = idx;
+                        }
+                    }
+                }
+                catch { initialIndex = 0; }
+            }
+
+            // Start animacji nagłówka
+            var headerTask = AnimateUnitHeaderChange(isNext);
+
+            // Start animacji kalendarza (wyjście)
+            var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
+            if (calendarGrid != null)
+            {
+                if (calendarGrid.RenderTransform == null || calendarGrid.RenderTransform is not TranslateTransform)
+                {
+                    calendarGrid.RenderTransform = new TranslateTransform();
+                }
+
+                var storyboard = new Storyboard();
+                var duration = TimeSpan.FromMilliseconds(350);
+                var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+                var slideOutX = new DoubleAnimation
+                {
+                    From = 0,
+                    To = isNext ? -600 : 600,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+                Storyboard.SetTarget(slideOutX, calendarGrid);
+                Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+                var fadeOut = new DoubleAnimation
+                {
+                    From = 1,
+                    To = 0,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+                Storyboard.SetTarget(fadeOut, calendarGrid);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+
+                storyboard.Children.Add(slideOutX);
+                storyboard.Children.Add(fadeOut);
+
+                var tcs = new TaskCompletionSource();
+                storyboard.Completed += (s, e) => tcs.TrySetResult();
+
+                try
+                {
+                    storyboard.Begin();
+                    await tcs.Task;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Błąd animacji kalendarza (wyjście): {ex.Message}");
+                }
+
+                var transform = calendarGrid.RenderTransform as TranslateTransform;
+                if (transform != null)
+                {
+                    transform.X = isNext ? 600 : -600;
+                }
+                calendarGrid.Opacity = 0;
+            }
+
+            // Załaduj nowe dane
+            System.Diagnostics.Debug.WriteLine("ReloadForNewUnit: Start");
+            _currentDeclarationsView.ViewModel?.ReloadForNewUnit(
+                doctorsForUnit,
+                initialIndex,
+                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
+                ViewModel.CurrentUnitIndex
+            );
+
+            // Poczekaj na update bindingu
+            await Task.Delay(150);
+
+            // Odśwież brushe
+            System.Diagnostics.Debug.WriteLine("RefreshCellBrushes: Start");
+            _currentDeclarationsView.RefreshCellBrushes();
+
+            await Task.Delay(50);
+
+            // Animacja wejścia kalendarza
+            if (calendarGrid != null)
+            {
+                var storyboard2 = new Storyboard();
+                var duration = TimeSpan.FromMilliseconds(350);
+                var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+                var slideInX = new DoubleAnimation
+                {
+                    From = isNext ? 600 : -600,
+                    To = 0,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+                Storyboard.SetTarget(slideInX, calendarGrid);
+                Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+                Storyboard.SetTarget(fadeIn, calendarGrid);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+
+                storyboard2.Children.Add(slideInX);
+                storyboard2.Children.Add(fadeIn);
+
+                var tcs2 = new TaskCompletionSource();
+                storyboard2.Completed += (s, e) => tcs2.TrySetResult();
+
+                try
+                {
+                    storyboard2.Begin();
+                    await tcs2.Task;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Błąd animacji kalendarza (wejście): {ex.Message}");
+                }
+            }
+
+            await headerTask;
+            System.Diagnostics.Debug.WriteLine("AnimateUnitChangeInDeclarations: Koniec");
+        }
+
+        private async Task AnimateUnitHeaderChange(bool isNext)
+        {
+            var unitContextGrid = UnitSelectionPanel.FindName("UnitContextGrid") as Grid;
+            if (unitContextGrid == null) return;
+
+            if (unitContextGrid.RenderTransform == null || unitContextGrid.RenderTransform is not TranslateTransform)
+            {
+                unitContextGrid.RenderTransform = new TranslateTransform();
+            }
+
+            var storyboard = new Storyboard();
+            var duration = TimeSpan.FromMilliseconds(300);
+            var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+            var slideOutX = new DoubleAnimation
+            {
+                From = 0,
+                To = isNext ? -400 : 400,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(slideOutX, unitContextGrid);
+            Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+            var fadeOut = new DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(fadeOut, unitContextGrid);
+            Storyboard.SetTargetProperty(fadeOut, "Opacity");
+
+            storyboard.Children.Add(slideOutX);
+            storyboard.Children.Add(fadeOut);
+
+            var tcs = new TaskCompletionSource();
+            storyboard.Completed += (s, e) => tcs.TrySetResult();
+
+            try
+            {
+                storyboard.Begin();
+                await tcs.Task;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Błąd animacji nagłówka wyjścia: {ex.Message}");
+                return;
+            }
+
+            var transform = unitContextGrid.RenderTransform as TranslateTransform;
+            if (transform != null)
+            {
+                transform.X = isNext ? 400 : -400;
+            }
+            unitContextGrid.Opacity = 0;
+
+            await Task.Delay(50);
+
+            var storyboard2 = new Storyboard();
+            var slideInX = new DoubleAnimation
+            {
+                From = isNext ? 400 : -400,
+                To = 0,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(slideInX, unitContextGrid);
+            Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+            var fadeIn = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(fadeIn, unitContextGrid);
+            Storyboard.SetTargetProperty(fadeIn, "Opacity");
+
+            storyboard2.Children.Add(slideInX);
+            storyboard2.Children.Add(fadeIn);
+
+            var tcs2 = new TaskCompletionSource();
+            storyboard2.Completed += (s, e) => tcs2.TrySetResult();
+
+            try
+            {
+                storyboard2.Begin();
+                await tcs2.Task;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Błąd animacji nagłówka wejścia: {ex.Message}");
+            }
+        }
+
+        private async Task AnimateCalendarChange(bool isNext)
+        {
+            if (_currentDeclarationsView == null) return;
+
+            var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
+            if (calendarGrid == null)
+            {
+                System.Diagnostics.Debug.WriteLine("BŁĄD: Nie znaleziono CalendarGridView!");
+                return;
+            }
+
+            if (calendarGrid.RenderTransform == null || calendarGrid.RenderTransform is not TranslateTransform)
+            {
+                calendarGrid.RenderTransform = new TranslateTransform();
+            }
+
+            var storyboard = new Storyboard();
+            var duration = TimeSpan.FromMilliseconds(350);
+            var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+            var slideOutX = new DoubleAnimation
+            {
+                From = 0,
+                To = isNext ? -600 : 600,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(slideOutX, calendarGrid);
+            Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+            var fadeOut = new DoubleAnimation
+            {
+                From = 1,
+                To = 0,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(fadeOut, calendarGrid);
+            Storyboard.SetTargetProperty(fadeOut, "Opacity");
+
+            storyboard.Children.Add(slideOutX);
+            storyboard.Children.Add(fadeOut);
+
+            var tcs = new TaskCompletionSource();
+            storyboard.Completed += (s, e) => tcs.TrySetResult();
+
+            try
+            {
+                storyboard.Begin();
+                await tcs.Task;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Błąd animacji wyjścia: {ex.Message}");
+                return;
+            }
+
+            var transform = calendarGrid.RenderTransform as TranslateTransform;
+            if (transform != null)
+            {
+                transform.X = isNext ? 600 : -600;
+            }
+            calendarGrid.Opacity = 0;
+
+            await Task.Delay(50);
+
+            var storyboard2 = new Storyboard();
+            var slideInX = new DoubleAnimation
+            {
+                From = isNext ? 600 : -600,
+                To = 0,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(slideInX, calendarGrid);
+            Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+
+            var fadeIn = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = duration,
+                EasingFunction = easing
+            };
+            Storyboard.SetTarget(fadeIn, calendarGrid);
+            Storyboard.SetTargetProperty(fadeIn, "Opacity");
+
+            storyboard2.Children.Add(slideInX);
+            storyboard2.Children.Add(fadeIn);
+
+            var tcs2 = new TaskCompletionSource();
+            storyboard2.Completed += (s, e) => tcs2.TrySetResult();
+
+            try
+            {
+                storyboard2.Begin();
+                await tcs2.Task;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Błąd animacji wejścia: {ex.Message}");
             }
         }
 
@@ -348,6 +744,10 @@ namespace GrafikoMat
         private async void SwitchToDashboard()
         {
             if (_isClosing || _isAnimating) return;
+
+            ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
+            _currentDeclarationsView = null;
+
             await ViewModel.UpdateFooterFromSettingsAsync();
             await AnimateToAsync(_dashboardView, false);
             BuildActionsForDashboard();
@@ -359,6 +759,9 @@ namespace GrafikoMat
         {
             if (_isClosing || _isAnimating) return;
             if (ViewModel.ActiveUnit == null) return;
+
+            // DODAJ: Reset poprzedniego indeksu
+            _previousUnitIndex = ViewModel.CurrentUnitIndex;
 
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
@@ -400,11 +803,25 @@ namespace GrafikoMat
                     ViewModel.RefreshDeclarationsForDashboard();
                 }
              );
+
+            declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;
+
             var declarationsView = new DeclarationsView();
-            void DeclCloseHandler() => SwitchToDashboard();
+
+            ViewModel.PropertyChanged += OnMainViewModelPropertyChangedForDeclarations;
+
+            void DeclCloseHandler()
+            {
+                ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
+                _previousUnitIndex = -1; // DODAJ: Reset przy zamknięciu
+                SwitchToDashboard();
+            }
+
             void DeclSaveAndCloseHandler()
             {
                 declarationsView.ViewModel.SaveCommand.Execute(null);
+                ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
+                _previousUnitIndex = -1; // DODAJ: Reset przy zamknięciu
                 SwitchToDashboard();
             }
 
@@ -412,6 +829,8 @@ namespace GrafikoMat
             declarationsView.SaveAndCloseRequested += DeclSaveAndCloseHandler;
 
             declarationsView.AttachViewModel(declarationsVm);
+            _currentDeclarationsView = declarationsView;
+
             await AnimateToAsync(declarationsView, true);
             BuildActionsForDeclarations(declarationsView);
             ViewModel.IsUnitContextActive = true;
@@ -551,221 +970,268 @@ namespace GrafikoMat
 
             if (_oldWndProc != IntPtr.Zero)
             {
-                SetWindowLongPtr(WindowNative.GetWindowHandle(this), -4, _oldWndProc);
+                try
+                {
+                    var hwnd = WindowNative.GetWindowHandle(this);
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        SetWindowLongPtr(hwnd, -4, _oldWndProc);
+                    }
+                }
+                catch { }
                 _oldWndProc = IntPtr.Zero;
             }
+
             if (_wndProcGCHandle.IsAllocated)
             {
                 _wndProcGCHandle.Free();
             }
 
-            this.Activated -= OnWindowActivated;
-            this.Closed -= OnWindowClosed;
-            (this.Content as FrameworkElement).ActualThemeChanged -= OnActualThemeChanged;
-            if (_appWindow != null) _appWindow.Changed -= OnAppWindowChanged;
-            if (_settingsView != null) _settingsView.ReloadRequired -= RefreshDataServicesAsync;
-            if (_appWindow?.Presenter is OverlappedPresenter p && _appSettings != null)
-            {
-                var pos = _appWindow.Position;
-                var size = _appWindow.Size;
-                var newSettings = _appSettings with
-                {
-                    LastWindowPosition = new WindowPosition(pos.X, pos.Y),
-                    LastWindowSize = new WindowSize(size.Width, size.Height),
-                    WasWindowMaximized = (p.State == OverlappedPresenterState.Maximized)
-                };
-                _settingsService.SaveSettings(newSettings);
-            }
-
-            try { ViewportNext.Content = null; } catch { }
-            try { ViewportCurrent.Content = null; } catch { }
-
-            this.SystemBackdrop = null;
-
-            WeakReferenceMessenger.Default.UnregisterAll(this);
+            WeakReferenceMessenger.Default.Unregister<SettingsHaveChangedMessage>(this);
         }
 
-        private async void ExportPlaceholder() => await ShowInfo("Eksport", "Tu dodamy eksport do XLSX/PDF (np. ClosedXML + szablony).");
-        private async Task ShowInfo(string title, string message)
+        private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
-            var dlg = App.CreateThemedDialog();
-            dlg.Title = title;
-            dlg.Content = message;
-            dlg.PrimaryButtonText = "OK";
-            await dlg.ShowAsync();
+            ApplyTitleBarMenuStyling();
         }
 
         private void ApplyTitleBarMenuStyling()
         {
-            if (_appWindow?.TitleBar is not AppWindowTitleBar titleBar) return;
-            var pad = TopBarRow.Padding;
-            TopBarRow.Padding = new Thickness(pad.Left, pad.Top, titleBar.RightInset, pad.Bottom);
-            TitleBarMenuButton.Height = TopBarRow.Height;
-            TitleBarMenuButton.MinWidth = 46;
-            TitleBarMenuButton.Resources["ControlCornerRadius"] = new CornerRadius(0);
+            var hwnd = WindowNative.GetWindowHandle(this);
+            if (hwnd == IntPtr.Zero || _appWindow == null) return;
 
-            var isLightTheme = (this.Content as FrameworkElement)?.ActualTheme == ElementTheme.Light;
-            var baseFgColor = isLightTheme ? Colors.Black : Colors.White;
-            var bgHover = isLightTheme ? Color.FromArgb(20, 0, 0, 0) : Color.FromArgb(20, 255, 255, 255);
-            var bgPressed = isLightTheme ?
-            Color.FromArgb(40, 0, 0, 0) : Color.FromArgb(40, 255, 255, 255);
-            var fgInactive = isLightTheme ?
-            Color.FromArgb(0x99, 0, 0, 0) : Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF);
+            bool isDarkTheme = (Application.Current.RequestedTheme == ApplicationTheme.Dark) ||
+                               ((Application.Current.RequestedTheme == ApplicationTheme.Light) == false &&
+                                (this.Content as FrameworkElement)?.ActualTheme == ElementTheme.Dark);
 
-            titleBar.ButtonForegroundColor = baseFgColor;
-            titleBar.ButtonHoverForegroundColor = baseFgColor;
-            titleBar.ButtonHoverBackgroundColor = bgHover;
-            titleBar.ButtonPressedForegroundColor = baseFgColor;
-            titleBar.ButtonPressedBackgroundColor = bgPressed;
-            titleBar.ButtonInactiveForegroundColor = fgInactive;
+            var titleBarColors = isDarkTheme
+                ? new
+                {
+                    Bg = Color.FromArgb(0xFF, 0x20, 0x20, 0x20),
+                    Fg = Colors.White,
+                    InactiveBg = Color.FromArgb(0xFF, 0x18, 0x18, 0x18),
+                    InactiveFg = Color.FromArgb(0xFF, 0x99, 0x99, 0x99),
+                    BtnBg = Colors.Transparent,
+                    BtnFg = Colors.White,
+                    BtnHoverBg = Color.FromArgb(0xFF, 0x30, 0x30, 0x30),
+                    BtnHoverFg = Colors.White,
+                    BtnPressBg = Color.FromArgb(0xFF, 0x28, 0x28, 0x28),
+                    BtnPressFg = Colors.White
+                }
+                : new
+                {
+                    Bg = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3),
+                    Fg = Colors.Black,
+                    InactiveBg = Color.FromArgb(0xFF, 0xEB, 0xEB, 0xEB),
+                    InactiveFg = Color.FromArgb(0xFF, 0x66, 0x66, 0x66),
+                    BtnBg = Colors.Transparent,
+                    BtnFg = Colors.Black,
+                    BtnHoverBg = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0),
+                    BtnHoverFg = Colors.Black,
+                    BtnPressBg = Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0),
+                    BtnPressFg = Colors.Black
+                };
 
-            TitleBarMenuButton.Foreground = new SolidColorBrush(baseFgColor);
-            TitleBarMenuButton.Resources["ButtonForegroundPointerOver"] = new SolidColorBrush(baseFgColor);
-            TitleBarMenuButton.Resources["ButtonForegroundPressed"] = new SolidColorBrush(baseFgColor);
-            TitleBarMenuButton.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(bgHover);
-            TitleBarMenuButton.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(bgPressed);
+            _appWindow.TitleBar.BackgroundColor = titleBarColors.Bg;
+            _appWindow.TitleBar.ForegroundColor = titleBarColors.Fg;
+            _appWindow.TitleBar.InactiveBackgroundColor = titleBarColors.InactiveBg;
+            _appWindow.TitleBar.InactiveForegroundColor = titleBarColors.InactiveFg;
+            _appWindow.TitleBar.ButtonBackgroundColor = titleBarColors.BtnBg;
+            _appWindow.TitleBar.ButtonForegroundColor = titleBarColors.BtnFg;
+            _appWindow.TitleBar.ButtonHoverBackgroundColor = titleBarColors.BtnHoverBg;
+            _appWindow.TitleBar.ButtonHoverForegroundColor = titleBarColors.BtnHoverFg;
+            _appWindow.TitleBar.ButtonPressedBackgroundColor = titleBarColors.BtnPressBg;
+            _appWindow.TitleBar.ButtonPressedForegroundColor = titleBarColors.BtnPressFg;
+
+            int useDarkMode = isDarkTheme ? 1 : 0;
+            DwmSetWindowAttribute(hwnd, 20, ref useDarkMode, sizeof(int));
         }
 
-        private void UpdateHeaderAnimation(bool isUnitContextVisible)
+        private void UpdateHeaderAnimation(bool isUnitContextActive)
         {
-            var duration = new Duration(TimeSpan.FromMilliseconds(200));
-            var storyboard = new Storyboard();
+            var sb = new Storyboard();
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            var duration = TimeSpan.FromMilliseconds(300);
 
-            var unitGridAnim = new DoubleAnimation
+            var heightAnim = new DoubleAnimation
             {
-                To = isUnitContextVisible ? 1 : 0,
-                Duration = duration
+                To = isUnitContextActive ? 80 : 0,
+                Duration = duration,
+                EasingFunction = ease
             };
-            Storyboard.SetTarget(unitGridAnim, UnitContextGrid);
-            Storyboard.SetTargetProperty(unitGridAnim, "Opacity");
+            Storyboard.SetTarget(heightAnim, UnitSelectionPanel);
+            Storyboard.SetTargetProperty(heightAnim, "Height");
+            sb.Children.Add(heightAnim);
 
-            var globalGridAnim = new DoubleAnimation
+            var opacityAnim = new DoubleAnimation
             {
-                To = isUnitContextVisible ? 0 : 1,
-                Duration = duration
+                To = isUnitContextActive ? 1 : 0,
+                Duration = duration,
+                EasingFunction = ease
             };
-            Storyboard.SetTarget(globalGridAnim, GlobalContextGrid);
-            Storyboard.SetTargetProperty(globalGridAnim, "Opacity");
+            Storyboard.SetTarget(opacityAnim, UnitSelectionPanel);
+            Storyboard.SetTargetProperty(opacityAnim, "Opacity");
+            sb.Children.Add(opacityAnim);
 
-            storyboard.Children.Add(unitGridAnim);
-            storyboard.Children.Add(globalGridAnim);
-
-            UnitContextGrid.IsHitTestVisible = isUnitContextVisible;
-            GlobalContextGrid.IsHitTestVisible = !isUnitContextVisible;
-
-            storyboard.Begin();
+            sb.Begin();
         }
 
-        #region Window Setup and Win32 Interop
         private void InitAppWindow()
         {
             var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = AppWindow.GetFromWindowId(windowId);
-            if (_appWindow is not null)
+            if (_appWindow != null)
             {
-                _appWindow.Title = string.Empty;
-                try { _appWindow.TitleBar.ExtendsContentIntoTitleBar = true; } catch { }
-                _appWindow.Changed += OnAppWindowChanged;
-                SubclassWindow(hwnd);
+                var presenter = _appWindow.Presenter as OverlappedPresenter;
+                if (presenter != null)
+                {
+                    presenter.IsResizable = true;
+                    presenter.IsMaximizable = true;
+                    presenter.IsMinimizable = true;
+                }
+                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
             }
-        }
-        private void OnActualThemeChanged(FrameworkElement sender, object args)
-        {
-            if (_backdropConfiguration != null)
-            {
-                _backdropConfiguration.Theme = (SystemBackdropTheme)sender.ActualTheme;
-            }
-            ApplyTitleBarMenuStyling();
+
+            SubclassWindow(hwnd);
         }
 
-        private bool TryInitializeBackdropController()
+        private void SubclassWindow(IntPtr hwnd)
+        {
+            _newWndProc = new WndProc(NewWindowProc);
+            _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
+            var newWndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
+            _oldWndProc = SetWindowLongPtr(hwnd, -4, newWndProcPtr);
+        }
+
+        private IntPtr NewWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            const uint WM_GETMINMAXINFO = 0x0024;
+            if (msg == WM_GETMINMAXINFO)
+            {
+                var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                mmi.ptMinTrackSize.x = MIN_W;
+                mmi.ptMinTrackSize.y = MIN_H;
+                Marshal.StructureToPtr(mmi, lParam, true);
+            }
+            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+        }
+
+        private void TryInitializeBackdropController()
         {
             if (DesktopAcrylicController.IsSupported())
             {
                 _acrylicController = new DesktopAcrylicController();
                 _backdropConfiguration = new SystemBackdropConfiguration();
+                _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10);
+                _acrylicController.TintOpacity = 0.7f;
+                _acrylicController.LuminosityOpacity = 0.1f;
+                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
 
-                this.Closed += (s, e) =>
+                ((FrameworkElement)this.Content).ActualThemeChanged += (s, e) =>
                 {
-                    if (_acrylicController != null)
+                    if (_backdropConfiguration != null)
                     {
-                        _acrylicController.Dispose();
-                        _acrylicController = null;
+                        _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                        {
+                            ElementTheme.Dark => SystemBackdropTheme.Dark,
+                            ElementTheme.Light => SystemBackdropTheme.Light,
+                            _ => SystemBackdropTheme.Default
+                        };
                     }
                 };
 
-                _backdropConfiguration.IsInputActive = true;
-                _backdropConfiguration.Theme = (SystemBackdropTheme)((FrameworkElement)this.Content).ActualTheme;
+                _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                {
+                    ElementTheme.Dark => SystemBackdropTheme.Dark,
+                    ElementTheme.Light => SystemBackdropTheme.Light,
+                    _ => SystemBackdropTheme.Default
+                };
 
                 _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
                 _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
-                return true;
             }
-            return false;
         }
 
-        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        private async void OnLogout(object? sender, RoutedEventArgs e)
         {
-            ApplyTitleBarMenuStyling();
-        }
-
-        private void SubclassWindow(IntPtr hwnd)
-        {
-            _newWndProc = new WndProc(AppWndProc);
-            _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
-            var wndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
-            _oldWndProc = SetWindowLongPtr(hwnd, -4, wndProcPtr);
-        }
-        private IntPtr AppWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
-        {
-            if (msg == 0x0024)
-            {
-                var minMaxInfo = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-                var dpi = GetDpiForWindow(hWnd);
-                float scalingFactor = dpi / 96f;
-                minMaxInfo.ptMinTrackSize.x = (int)(MIN_W * scalingFactor);
-                minMaxInfo.ptMinTrackSize.y = (int)(MIN_H * scalingFactor);
-                Marshal.StructureToPtr(minMaxInfo, lParam, true);
-                return IntPtr.Zero;
-            }
-            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
-        }
-        private async void HelpMenuItem_Click(object sender, RoutedEventArgs e) => await ShowInfo("Pomoc", "Funkcjonalność w trakcie budowy. W tym miejscu zostanie wyświetlony system pomocy lub dokumentacja programu.");
-        private async void AboutMenuItem_Click(object sender, RoutedEventArgs e) => await ShowInfo("O programie", $"GrafikoMat Dyżurowy v1.0 (Alpha)\n\nUżytkownik: Adam Lemanowicz\nElbląg, 24.12.1980");
-        private async void SignOutMenuItem_Click(object sender, RoutedEventArgs e)
-        {
+            if (_isClosing) return;
             await _supabaseService.SignOutAsync();
-            ViewModel.SetRepositories(null, null, null);
-            _doctorRepository = null;
-            _unitRepository = null;
-            _assignmentRepository = null;
-            InitialLoadingOverlay.Visibility = Visibility.Visible;
-            await InitializeApplicationAsync();
+            this.Close();
         }
 
-        [StructLayout(LayoutKind.Sequential)] public struct MINMAXINFO { public POINT ptReserved; public POINT ptMaxSize; public POINT ptMaxPosition; public POINT ptMinTrackSize; public POINT ptMaxTrackSize; }
-        [StructLayout(LayoutKind.Sequential)] public struct POINT { public int x; public int y; }
-        [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-        [DllImport("user32.dll")] private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
-        [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
-        #endregion
+        private void ExportPlaceholder()
+        {
+            _ = ShowInfo("Eksport", "Funkcja eksportu nie jest jeszcze zaimplementowana.");
+        }
+
+        public async Task<ContentDialogResult> ShowInfo(string title, string message)
+        {
+            if (_isClosing) return ContentDialogResult.None;
+            var dialog = new ContentDialog
+            {
+                XamlRoot = this.Content.XamlRoot,
+                Title = title,
+                Content = message,
+                CloseButtonText = "OK",
+                DefaultButton = ContentDialogButton.Close
+            };
+            return await dialog.ShowAsync();
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int x;
+            public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
     }
 
-    public class BooleanToPrimaryStyleConverter : IValueConverter
+    public class UiAction
     {
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value is bool isPrimary && isPrimary)
-            {
-                if (Application.Current.Resources.TryGetValue("AccentButtonStyle", out var style))
-                {
-                    return style as Style;
-                }
-            }
-            return Application.Current.Resources["DefaultButtonStyle"] as Style;
-        }
+        public string Label { get; }
+        public ICommand Command { get; }
+        public bool IsPrimary { get; }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+        public UiAction(string label, ICommand command, bool isPrimary = false)
+        {
+            Label = label;
+            Command = command;
+            IsPrimary = isPrimary;
+        }
+    }
+
+    public class UiActionTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate? NormalButtonTemplate { get; set; }
+        public DataTemplate? PrimaryButtonTemplate { get; set; }
+
+        protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
+        {
+            if (item is UiAction action)
+            {
+                return action.IsPrimary ? (PrimaryButtonTemplate ?? NormalButtonTemplate!) : NormalButtonTemplate!;
+            }
+            return NormalButtonTemplate!;
+        }
     }
 }

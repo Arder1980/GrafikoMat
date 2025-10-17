@@ -102,6 +102,10 @@
             </Grid>
 
             <GridView Grid.Row="1" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
+                <GridView.RenderTransform>
+                    <TranslateTransform X="0"/>
+                </GridView.RenderTransform>
+
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>

@@ -298,11 +298,24 @@ namespace GrafikoMat.Views
 
         private void UpdateAllCellBrushes()
         {
-            if (ViewModel?.DayCells == null) return;
+            if (ViewModel?.DayCells == null)
+            {
+                System.Diagnostics.Debug.WriteLine("UpdateAllCellBrushes: ViewModel lub DayCells są null!");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"UpdateAllCellBrushes: Aktualizuję {ViewModel.DayCells.Count} komórek");
+
             foreach (var cell in ViewModel.DayCells)
             {
                 UpdateCellBrushes(cell);
             }
+        }
+
+        public void RefreshCellBrushes()
+        {
+            System.Diagnostics.Debug.WriteLine("RefreshCellBrushes wywołane");
+            UpdateAllCellBrushes();
         }
 
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
