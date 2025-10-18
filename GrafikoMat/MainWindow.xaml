@@ -34,13 +34,14 @@
         </Grid.Resources>
 
         <Grid.RowDefinitions>
-            <RowDefinition Height="48"/>
+            <RowDefinition Height="32"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="32"/>
         </Grid.RowDefinitions>
 
+        <!-- BELKA TYTUŁOWA -->
         <Grid x:Name="TopBarRow" Grid.Row="0" Background="{ThemeResource LayerFillColorDefaultBrush}" Opacity="0">
             <Grid.RenderTransform>
                 <TranslateTransform Y="-20"/>
@@ -49,31 +50,68 @@
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="12,0,0,0">
-                <Button x:Name="TitleBarMenuButton" Width="40" Height="40" Background="Transparent" BorderThickness="0" VerticalAlignment="Center" Click="TitleBarMenuButton_Click">
-                    <FontIcon Glyph="&#xE700;" FontSize="16"/>
-                    <FlyoutBase.AttachedFlyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <MenuFlyoutItem Text="Wyloguj" Click="OnLogout">
-                                <MenuFlyoutItem.Icon>
-                                    <FontIcon Glyph="&#xF3B1;"/>
-                                </MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                        </MenuFlyout>
-                    </FlyoutBase.AttachedFlyout>
-                </Button>
-            </StackPanel>
+            <!-- Nazwa programu po lewej -->
+            <TextBlock Grid.Column="0" 
+                       Text="GrafikoMat Dyżurowy" 
+                       VerticalAlignment="Center" 
+                       FontWeight="SemiBold" 
+                       FontSize="13" 
+                       Margin="16,0,0,0"
+                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
+            <!-- DragBar - obszar przeciągania okna -->
             <Border x:Name="DragBar" Grid.Column="1" Background="Transparent"/>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="0,0,140,0" VerticalAlignment="Center">
-                <TextBlock Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" VerticalAlignment="Center" FontSize="13" Opacity="0.8" Margin="0,0,12,0"/>
-                <TextBlock Text="{x:Bind ViewModel.CurrentViewTitle, Mode=OneWay}" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" Opacity="0.9"/>
+            <!-- Dane użytkownika wyśrodkowane w pionie -->
+            <StackPanel Grid.Column="2" 
+            Orientation="Horizontal" 
+            VerticalAlignment="Center"
+            Margin="12,0">
+                <TextBlock Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" 
+               VerticalAlignment="Center" 
+               FontSize="12" 
+               Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
             </StackPanel>
+
+            <!-- Hamburger button po prawej (przed przyciskami okna) -->
+            <Button x:Name="TitleBarMenuButton" 
+        Grid.Column="3"
+        Width="46" 
+        Height="32" 
+        Background="Transparent" 
+        BorderThickness="0"
+        CornerRadius="0"
+        Padding="0"
+        VerticalAlignment="Stretch"
+        HorizontalAlignment="Stretch"
+        Margin="0,0,138,0"
+        Click="TitleBarMenuButton_Click">
+                <FontIcon Glyph="&#xE700;" FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                <FlyoutBase.AttachedFlyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyout.MenuFlyoutPresenterStyle>
+                            <Style TargetType="MenuFlyoutPresenter">
+                                <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}"/>
+                                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Padding" Value="4"/>
+                                <Setter Property="CornerRadius" Value="8"/>
+                            </Style>
+                        </MenuFlyout.MenuFlyoutPresenterStyle>
+                        <MenuFlyoutItem Text="Wyloguj" Click="OnLogout">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xF3B1;"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </FlyoutBase.AttachedFlyout>
+            </Button>
         </Grid>
 
+        <!-- PANEL WYBORU JEDNOSTKI -->
         <Grid x:Name="UnitSelectionPanel" Grid.Row="1" Background="{ThemeResource LayerFillColorDefaultBrush}" Height="80" Opacity="0">
             <Grid.RenderTransform>
                 <TranslateTransform Y="-20"/>
@@ -105,46 +143,38 @@
             </Border>
         </Grid>
 
+        <!-- GŁÓWNA ZAWARTOŚĆ -->
         <Border x:Name="MainContentPanel" Grid.Row="2" Opacity="0">
             <Border.RenderTransform>
                 <TranslateTransform Y="-20"/>
             </Border.RenderTransform>
             <Grid>
-                <ContentPresenter x:Name="ViewportCurrent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
-                    <ContentPresenter.RenderTransform>
-                        <TranslateTransform X="0"/>
-                    </ContentPresenter.RenderTransform>
-                </ContentPresenter>
-                <ContentPresenter x:Name="ViewportNext" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Opacity="0">
-                    <ContentPresenter.RenderTransform>
-                        <TranslateTransform X="0"/>
-                    </ContentPresenter.RenderTransform>
-                </ContentPresenter>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <ContentPresenter x:Name="ViewportCurrent" Content="{x:Null}"/>
+                <ContentPresenter x:Name="ViewportNext" Content="{x:Null}"/>
             </Grid>
         </Border>
 
+        <!-- PANEL AKCJI -->
         <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,12" Opacity="0">
             <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
-                <Grid Margin="0,12,0,0">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <ItemsControl Grid.Column="0" ItemsSource="{x:Bind ActionsLeft}" HorizontalAlignment="Left">
+                    <ItemsControl Grid.Column="0" ItemsSource="{x:Bind ActionsLeft, Mode=OneWay}" HorizontalAlignment="Left" ItemTemplateSelector="{StaticResource UiActionTemplateSelector}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="8"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Content="{Binding Label}" Command="{Binding Command}" MinWidth="120"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ItemsControl Grid.Column="1" ItemsSource="{x:Bind ActionsRight}" HorizontalAlignment="Right" ItemTemplateSelector="{StaticResource UiActionTemplateSelector}">
+                    <ItemsControl Grid.Column="1" ItemsSource="{x:Bind ActionsRight, Mode=OneWay}" HorizontalAlignment="Right" ItemTemplateSelector="{StaticResource UiActionTemplateSelector}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="8"/>
@@ -155,6 +185,7 @@
             </Border>
         </Grid>
 
+        <!-- DOLNY PASEK STATUSU -->
         <Grid x:Name="BottomStatusBar" Grid.Row="4" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,0" Opacity="0">
             <Grid.RenderTransform>
                 <TranslateTransform Y="20"/>
@@ -172,6 +203,7 @@
             </Border>
         </Grid>
 
+        <!-- OVERLAY ŁADOWANIA -->
         <Grid x:Name="InitialLoadingOverlay" Grid.RowSpan="5" Background="{ThemeResource LayerFillColorDefaultBrush}" VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="16">
                 <ProgressRing IsActive="True" Width="48" Height="48"/>

@@ -43,7 +43,7 @@ namespace GrafikoMat.Views
             _appSettings = settings;
 
             // ZMIANA: Usunięto domyślne zaznaczanie pierwszego elementu
-            // SettingsMenu.SelectedIndex = 0; 
+            // SettingsMenu.SelectedIndex = 0;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -73,7 +73,9 @@ namespace GrafikoMat.Views
             {
                 case "Połączenie z Bazą Danych":
                     var connectionView = new ConnectionSettingsView();
+                    // Upewniamy się, że NIE ustawiamy IsInitialSetupMode (domyślnie false)
                     connectionView.Initialize(_settingsService, _appSettings);
+                    // ZMIANA: Ta linia jest teraz POPRAWNA, bo ReloadRequired istnieje
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
                     viewToLoad = connectionView;
                     break;
@@ -92,18 +94,20 @@ namespace GrafikoMat.Views
                     {
                         var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
-                        var container = new ActionContainer { Content = prioritiesView };
-                        prioritiesViewModel.SetViewId(container.GetViewId());
-                        viewToLoad = container;
+                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
+                        var containerPriorities = new ActionContainer { Content = prioritiesView };
+                        prioritiesViewModel.SetViewId(containerPriorities.GetViewId());
+                        viewToLoad = containerPriorities;
                     }
                     break;
                 case "Silnik Obliczeniowy":
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
-                        var container = new ActionContainer { Content = engineView };
-                        engineView.ViewModel.SetViewId(container.GetViewId());
-                        viewToLoad = container;
+                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
+                        var containerEngine = new ActionContainer { Content = engineView };
+                        engineView.ViewModel.SetViewId(containerEngine.GetViewId());
+                        viewToLoad = containerEngine;
                     }
                     break;
                 case "Wygląd i Motyw":

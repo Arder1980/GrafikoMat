@@ -20,6 +20,8 @@ namespace GrafikoMat
         public App()
         {
             this.InitializeComponent();
+            // Wyświetl ścieżkę do LocalFolder w oknie Output Visual Studio
+            System.Diagnostics.Debug.WriteLine($"---> Ścieżka LocalFolder: {Windows.Storage.ApplicationData.Current.LocalFolder.Path}");
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)

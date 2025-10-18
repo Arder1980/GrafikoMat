@@ -62,9 +62,15 @@ namespace GrafikoMat.Views.Settings
             }
 
             // 1. Zastosuj zmianę natychmiast w UI
-            if (App.MainRoot.Content is FrameworkElement rootElement)
+            if (App.MainRoot?.Content is FrameworkElement rootElement)
             {
                 rootElement.RequestedTheme = newElementTheme;
+
+                // Daj czas na przeładowanie ThemeResource
+                await System.Threading.Tasks.Task.Delay(50);
+
+                // Odśwież belkę tytułową
+                App.MainRoot.RefreshTheme();
             }
 
             // 2. Zapisz nowe ustawienie
@@ -72,10 +78,10 @@ namespace GrafikoMat.Views.Settings
             await _settingsService.SaveSettingsAsync(newSettings);
             _appSettings = newSettings;
 
-            // ZMIANA: Poinformuj "Wyrocznię" o nowym, obowiązującym stanie motywu
+            // 3. Poinformuj "Wyrocznię" o nowym, obowiązującym stanie motywu
             ThemeManagerService.Instance.SetTheme(newElementTheme);
 
-            // Rozgłoszenie wiadomości pozostaje, może być przydatne dla innych części programu
+            // 4. Rozgłoszenie wiadomości pozostaje, może być przydatne dla innych części programu
             WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
     }

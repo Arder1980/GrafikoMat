@@ -1,8 +1,8 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-17 19:28:08
-# Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat
-# Maszyna:    FRACTAL
-# Użytkownik: adaml
+# Data:       2025-10-18 13:19:06
+# Katalog:    C:\Users\Shadow\OneDrive\Dokumenty\GrafikoMat
+# Maszyna:    SHADOW-F6TNGC78
+# Użytkownik: Shadow
 # Kodowanie snapshotu: UTF-8 (z BOM)
 
 ## TREE (foldery)
@@ -43,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 171
+## FILES (liczba): 172
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -82,6 +82,7 @@ FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
 FILE GrafikoMat\Common\CalendarBrushConverters.cs
 FILE GrafikoMat\Common\Converters.cs
+FILE GrafikoMat\Common\DispatcherQueueExtensions.cs
 FILE GrafikoMat\Common\InverseBooleanToVisibilityConverter.cs
 FILE GrafikoMat\Common\ObservableObject.cs
 FILE GrafikoMat\Common\PasswordGenerator.cs
@@ -3291,7 +3292,7 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (6396 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (6617 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
@@ -3315,6 +3316,8 @@ namespace GrafikoMat
         public App()
         {
             this.InitializeComponent();
+            // Wyświetl ścieżkę do LocalFolder w oknie Output Visual Studio
+            System.Diagnostics.Debug.WriteLine($"---> Ścieżka LocalFolder: {Windows.Storage.ApplicationData.Current.LocalFolder.Path}");
         }
 
         protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -3702,6 +3705,39 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
+===== FILE: GrafikoMat\Common\DispatcherQueueExtensions.cs (734 bytes)
+----- BEGIN -----
+using Microsoft.UI.Dispatching;
+using System;
+using System.Threading.Tasks;
+
+namespace GrafikoMat.Common
+{
+    public static class DispatcherQueueExtensions
+    {
+        public static Task EnqueueAsync(this DispatcherQueue dispatcher, Func<Task> asyncAction)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            dispatcher.TryEnqueue(async () =>
+            {
+                try
+                {
+                    await asyncAction();
+                    tcs.SetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+
+            return tcs.Task;
+        }
+    }
+}
+----- END -----
+
 ===== FILE: GrafikoMat\Common\InverseBooleanToVisibilityConverter.cs (797 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml;
@@ -3955,7 +3991,7 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml (1554 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml (6293 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Controls.ActionContainer"
@@ -3966,54 +4002,157 @@ namespace GrafikoMat.Common
     <UserControl.Resources>
         <SolidColorBrush x:Key="SuccessBrush" Color="#FF0A540A"/>
         <SolidColorBrush x:Key="ErrorBrush" Color="#FF6A0A0A"/>
+
+        <Storyboard x:Name="FadeOutStoryboard">
+            <DoubleAnimation Storyboard.TargetName="ContentHost"
+                           Storyboard.TargetProperty="Opacity"
+                           To="0.0"
+                           Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <Storyboard x:Name="FadeInStoryboard">
+            <DoubleAnimation Storyboard.TargetName="ContentHost"
+                           Storyboard.TargetProperty="Opacity"
+                           To="1.0"
+                           Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <Storyboard x:Name="InfoBarFadeInStoryboard">
+            <DoubleAnimation Storyboard.TargetName="InfoBarContainer"
+                           Storyboard.TargetProperty="Opacity"
+                           From="0.0"
+                           To="1.0"
+                           Duration="0:0:0.3">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <Storyboard x:Name="InfoBarFadeOutStoryboard">
+            <DoubleAnimation Storyboard.TargetName="InfoBarContainer"
+                           Storyboard.TargetProperty="Opacity"
+                           To="0.0"
+                           Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseIn"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
     </UserControl.Resources>
 
     <Grid>
         <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
 
         <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
-
-            <Grid>
-                <Grid.Background>
-                    <media:AcrylicBrush
-                        TintOpacity="0.1"
-                        TintColor="{ThemeResource SystemChromeAltLowColor}"/>
-                </Grid.Background>
-            </Grid>
-
             <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
-            <Grid Translation="0,0,32"
+            <Grid x:Name="InfoBarContainer" 
+                  Opacity="0"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center"
                   MinWidth="340"
                   MaxWidth="500">
-                <Grid.Shadow>
-                    <ThemeShadow />
-                </Grid.Shadow>
 
-                <InfoBar x:Name="ActionInfoBar"
-                         IsOpen="False"
-                         IsClosable="False"
-                         CornerRadius="6"/>
+                <!-- Custom InfoBar -->
+                <Grid x:Name="CustomInfoBar" 
+                      Background="{ThemeResource ControlFillColorDefaultBrush}"
+                      Padding="0"
+                      CornerRadius="10"
+                      Visibility="Collapsed">
+
+                    <!-- Miękki cień -->
+                    <Grid.Shadow>
+                        <media:ThemeShadow/>
+                    </Grid.Shadow>
+
+                    <!-- Subtelna ramka w kolorze systemowym -->
+                    <Border BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            CornerRadius="10"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Lewy pasek koloru -->
+                        <Border x:Name="StatusBorder" 
+                                Grid.Column="0"
+                                Background="#10B981"
+                                CornerRadius="10,0,0,10"/>
+
+                        <!-- Ikona (większa o 50%, wycentrowana) -->
+                        <Grid Grid.Column="1" 
+                              Width="64" 
+                              Margin="16,16,16,16">
+                            <Viewbox Width="72" Height="72">
+                                <FontIcon x:Name="StatusIcon" 
+                                          Glyph="&#xF13E;" 
+                                          Foreground="#10B981"
+                                          FontWeight="Bold"/>
+                            </Viewbox>
+                        </Grid>
+
+                        <!-- Separator -->
+                        <Rectangle Grid.Column="1"
+                                   Width="1"
+                                   Opacity="0.1"
+                                   Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                   Margin="0,12,0,12"
+                                   HorizontalAlignment="Right"/>
+
+                        <!-- Tekst -->
+                        <StackPanel Grid.Column="2" 
+                                    Margin="20,16,24,16"
+                                    VerticalAlignment="Center"
+                                    Spacing="6">
+                            <TextBlock x:Name="InfoTitle" 
+                                       Text="Tytuł"
+                                       FontWeight="Bold"
+                                       FontSize="15"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="InfoMessage" 
+                                       Text="Wiadomość"
+                                       FontSize="13"
+                                       Opacity="0.75"
+                                       TextWrapping="Wrap"
+                                       LineHeight="18"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (3951 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (7308 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
-using Microsoft.UI; // <-- Ta linia została dodana
+using Windows.UI;
 
 namespace GrafikoMat.Controls
 {
-    public sealed partial class ActionContainer : UserControl, IRecipient<ShowBusyOverlayMessage>, IRecipient<ShowStatusOverlayMessage>, IRecipient<HideOverlayMessage>
+    public sealed partial class ActionContainer : UserControl,
+        IRecipient<ShowBusyOverlayMessage>,
+        IRecipient<ShowStatusOverlayMessage>,
+        IRecipient<HideOverlayMessage>
     {
         private readonly Guid _viewId = Guid.NewGuid();
 
@@ -4035,7 +4174,6 @@ namespace GrafikoMat.Controls
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Najpierw wyrejestruj, aby uniknąć podwójnej subskrypcji.
             WeakReferenceMessenger.Default.UnregisterAll(this);
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
@@ -4048,58 +4186,144 @@ namespace GrafikoMat.Controls
         public void Receive(ShowBusyOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                ActionProgressRing.IsActive = true;
-                ActionInfoBar.IsOpen = false;
-                OverlayHost.Visibility = Visibility.Visible;
+                // Fade-out zawartości
+                FadeOutStoryboard.Begin();
+
+                // Po zakończeniu animacji pokaż overlay
+                FadeOutStoryboard.Completed += (s, e) =>
+                {
+                    ActionProgressRing.IsActive = true;
+                    CustomInfoBar.Visibility = Visibility.Collapsed;
+                    InfoBarContainer.Opacity = 0;
+                    OverlayHost.Visibility = Visibility.Visible;
+                };
             });
         }
 
         public void Receive(ShowStatusOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                ActionProgressRing.IsActive = false;
-                ActionInfoBar.Title = message.Title;
-                ActionInfoBar.Message = message.Message;
-                ActionInfoBar.Severity = message.Severity;
-
-                // ================== ZMIANA: Użycie nowego pędzla ==================
-                var foregroundBrush = new SolidColorBrush(Colors.White);
-
-                switch (message.Severity)
+                // Jeśli overlay nie był widoczny, zrób fade-out zawartości
+                if (OverlayHost.Visibility == Visibility.Collapsed)
                 {
-                    case InfoBarSeverity.Success:
-                        ActionInfoBar.Background = (Brush)this.Resources["SuccessBrush"];
-                        ActionInfoBar.Foreground = foregroundBrush;
-                        break;
-                    case InfoBarSeverity.Error:
-                        ActionInfoBar.Background = (Brush)this.Resources["ErrorBrush"];
-                        ActionInfoBar.Foreground = foregroundBrush;
-                        break;
-                    default:
-                        // Dla innych typów (Warning, Informational) wracamy do domyślnych kolorów motywu
-                        ActionInfoBar.ClearValue(Control.BackgroundProperty);
-                        ActionInfoBar.ClearValue(Control.ForegroundProperty);
-                        break;
-                }
-                // =================== KONIEC ZMIANY ===================
+                    FadeOutStoryboard.Begin();
 
-                ActionInfoBar.IsOpen = true;
-                OverlayHost.Visibility = Visibility.Visible;
+                    FadeOutStoryboard.Completed += (s, e) =>
+                    {
+                        ShowStatusMessage(message);
+                    };
+                }
+                else
+                {
+                    // Overlay już widoczny
+                    if (CustomInfoBar.Visibility == Visibility.Visible)
+                    {
+                        InfoBarFadeOutStoryboard.Begin();
+                        InfoBarFadeOutStoryboard.Completed += (s, e) =>
+                        {
+                            ShowStatusMessage(message);
+                        };
+                    }
+                    else
+                    {
+                        ShowStatusMessage(message);
+                    }
+                }
             });
+        }
+
+        private void ShowStatusMessage(ShowStatusOverlayMessage message)
+        {
+            ActionProgressRing.IsActive = false;
+
+            // Pokaż custom InfoBar
+            CustomInfoBar.Visibility = Visibility.Visible;
+
+            // Ustaw tekst
+            InfoTitle.Text = message.Title;
+            InfoMessage.Text = message.Message;
+
+            // Sprawdź motyw
+            var isDark = ActualTheme == ElementTheme.Dark ||
+                        (ActualTheme == ElementTheme.Default &&
+                         Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            // Kolory: jasne dla ciemnego motywu, średnie dla jasnego motywu
+            switch (message.Severity)
+            {
+                case InfoBarSeverity.Success:
+                    var successColor = isDark
+                        ? Color.FromArgb(0xFF, 0x10, 0xB9, 0x81)  // Jasna zieleń (ciemny motyw)
+                        : Color.FromArgb(0xFF, 0x16, 0xA3, 0x4A); // Średnia zieleń (jasny motyw)
+                    StatusBorder.Background = new SolidColorBrush(successColor);
+                    StatusIcon.Foreground = new SolidColorBrush(successColor);
+                    StatusIcon.Glyph = "\uF13E"; // CheckmarkCircleFilled
+                    break;
+
+                case InfoBarSeverity.Error:
+                    var errorColor = isDark
+                        ? Color.FromArgb(0xFF, 0xEF, 0x44, 0x44)  // Jasna czerwień (ciemny motyw)
+                        : Color.FromArgb(0xFF, 0xDC, 0x26, 0x26); // Średnia czerwień (jasny motyw)
+                    StatusBorder.Background = new SolidColorBrush(errorColor);
+                    StatusIcon.Foreground = new SolidColorBrush(errorColor);
+                    StatusIcon.Glyph = "\uEA39"; // ErrorBadgeFilled
+                    break;
+
+                case InfoBarSeverity.Warning:
+                    var warningColor = Color.FromArgb(0xFF, 0xF5, 0x9E, 0x0B); // Pomarańczowy
+                    StatusBorder.Background = new SolidColorBrush(warningColor);
+                    StatusIcon.Foreground = new SolidColorBrush(warningColor);
+                    StatusIcon.Glyph = "\uE7BA"; // Warning
+                    break;
+
+                default: // Informational
+                    var infoColor = Color.FromArgb(0xFF, 0x3B, 0x82, 0xF6); // Niebieski
+                    StatusBorder.Background = new SolidColorBrush(infoColor);
+                    StatusIcon.Foreground = new SolidColorBrush(infoColor);
+                    StatusIcon.Glyph = "\uF167"; // InfoFilled
+                    break;
+            }
+
+            OverlayHost.Visibility = Visibility.Visible;
+
+            // Fade-in animation
+            InfoBarFadeInStoryboard.Begin();
         }
 
         public void Receive(HideOverlayMessage message)
         {
             if (message.ViewId != _viewId) return;
+
             DispatcherQueue.TryEnqueue(() =>
             {
-                OverlayHost.Visibility = Visibility.Collapsed;
-                ActionInfoBar.IsOpen = false;
-                ActionProgressRing.IsActive = false;
+                // Fade-out InfoBar
+                if (CustomInfoBar.Visibility == Visibility.Visible)
+                {
+                    InfoBarFadeOutStoryboard.Begin();
+                    InfoBarFadeOutStoryboard.Completed += (s, e) =>
+                    {
+                        OverlayHost.Visibility = Visibility.Collapsed;
+                        CustomInfoBar.Visibility = Visibility.Collapsed;
+                        ActionProgressRing.IsActive = false;
+
+                        // Fade-in zawartości z powrotem
+                        FadeInStoryboard.Begin();
+                    };
+                }
+                else
+                {
+                    OverlayHost.Visibility = Visibility.Collapsed;
+                    ActionProgressRing.IsActive = false;
+
+                    // Fade-in zawartości z powrotem
+                    FadeInStoryboard.Begin();
+                }
             });
         }
 
@@ -4493,7 +4717,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (10798 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (10823 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -4505,7 +4729,7 @@ namespace GrafikoMat.Converters
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.Resources>
             <converters:BooleanToPrimaryStyleConverter x:Key="BooleanToPrimaryStyleConverter">
                 <converters:BooleanToPrimaryStyleConverter.PrimaryStyle>
@@ -4682,7 +4906,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (52746 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (72645 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -4714,10 +4938,14 @@ using Windows.Graphics;
 using Windows.UI;
 using WinRT;
 using WinRT.Interop;
+// Added using for DispatcherQueueExtensions
+using GrafikoMat.Common;
+
 
 namespace GrafikoMat
 {
-    public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>
+    // Added IRecipient<UnitDataChangedMessage>
+    public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
@@ -4777,15 +5005,32 @@ namespace GrafikoMat
             (this.Content as FrameworkElement).ActualThemeChanged += OnActualThemeChanged;
 
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
+            // Register new recipient
+            WeakReferenceMessenger.Default.Register<UnitDataChangedMessage>(this);
         }
 
         public async void Receive(SettingsHaveChangedMessage message)
         {
             if (_settingsService != null)
             {
-                _appSettings = await _settingsService.LoadSettingsAsync(forceReload: true);
+                // Use DispatcherQueue as Receive might be called from another thread
+                await DispatcherQueue.EnqueueAsync(async () => {
+                    _appSettings = await _settingsService.LoadSettingsAsync(forceReload: true);
+                    await ViewModel.UpdateFooterFromSettingsAsync(); // Update footer immediately
+                });
             }
         }
+
+        // NEW Receive method for UnitDataChangedMessage
+        public void Receive(UnitDataChangedMessage message)
+        {
+            _ = DispatcherQueue.EnqueueAsync(async () => {
+                // Use ViewModel methods
+                await ViewModel.LoadUserAndUnitDataAsync(); // Reload user and unit data
+                ViewModel.LoadDataForActiveUnit();          // Refresh data for the current unit
+            });
+        }
+
 
         private void OnWindowActivated(object? sender, WindowActivatedEventArgs e)
         {
@@ -4807,20 +5052,28 @@ namespace GrafikoMat
             }
             else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
-                // ZAWSZE animuj nagłówek przy zmianie jednostki
-                if (ViewModel.IsUnitContextActive)
+                // IMPROVED ANIMATION LOGIC - animate only if _previousUnitIndex was already set
+                if (ViewModel.IsUnitContextActive && _previousUnitIndex != -1)
                 {
-                    int previousIndex = ViewModel.CurrentUnitIndex > 0 ? ViewModel.CurrentUnitIndex - 1 : ViewModel.TotalUnitsCount - 1;
+                    // Use the stored _previousUnitIndex
+                    int previousIndex = _previousUnitIndex;
                     bool isNext = ViewModel.CurrentUnitIndex > previousIndex || (previousIndex == ViewModel.TotalUnitsCount - 1 && ViewModel.CurrentUnitIndex == 0);
 
-                    await AnimateUnitHeaderChange(isNext);
+                    // Additional check if indexes are different
+                    if (ViewModel.CurrentUnitIndex != _previousUnitIndex)
+                    {
+                        await AnimateUnitHeaderChange(isNext);
+                    }
                 }
+                // Always update _previousUnitIndex after every change (even the first one)
+                _previousUnitIndex = ViewModel.CurrentUnitIndex;
 
                 await ViewModel.SaveCurrentUnitAsync();
                 await ViewModel.UpdateFooterFromSettingsAsync();
             }
             else if (e.PropertyName == nameof(MainViewModel.EngineName) || e.PropertyName == nameof(MainViewModel.PriorityOrder))
             {
+                // Animate footer changes
                 var sb = new Storyboard();
                 var fadeOut = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(150) };
                 Storyboard.SetTarget(fadeOut, BottomStatusBar);
@@ -4847,25 +5100,18 @@ namespace GrafikoMat
 
             int currentIndex = ViewModel.CurrentUnitIndex;
 
-            // POPRAWKA: Wykrywaj zmianę nawet przy pierwszym wejściu po inicjalizacji
             if (_previousUnitIndex == -1)
             {
                 _previousUnitIndex = currentIndex;
-                return; // Pierwsze załadowanie - bez animacji
+                return; // First load - no animation
             }
-
-            if (_previousUnitIndex == currentIndex)
-            {
-                return; // Ta sama jednostka - brak zmiany
-            }
+            if (_previousUnitIndex == currentIndex) return; // Same unit - no change
 
             bool isNext = currentIndex > _previousUnitIndex ||
                           (_previousUnitIndex == ViewModel.TotalUnitsCount - 1 && currentIndex == 0);
 
-            System.Diagnostics.Debug.WriteLine($"ANIMACJA: poprzedni={_previousUnitIndex}, obecny={currentIndex}, isNext={isNext}");
-
-            _previousUnitIndex = currentIndex;
-
+            // System.Diagnostics.Debug.WriteLine($"ANIMATION DECLARATIONS: previous={_previousUnitIndex}, current={currentIndex}, isNext={isNext}");
+            _previousUnitIndex = currentIndex; // Update before animating
             await AnimateUnitChangeInDeclarations(isNext);
         }
 
@@ -4873,36 +5119,30 @@ namespace GrafikoMat
         {
             if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
 
-            System.Diagnostics.Debug.WriteLine($"AnimateUnitChangeInDeclarations: Start (isNext={isNext})");
+            // System.Diagnostics.Debug.WriteLine($"AnimateUnitChangeInDeclarations: Start (isNext={isNext})");
 
-            var frozenYear = ViewModel.SelectedYear;
-            var frozenMonthIndex = ViewModel.SelectedMonthIndex;
             var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
-
             if (!doctorsForUnit.Any()) return;
 
             int initialIndex = 0;
-            if (!ViewModel.IsCurrentUserAdmin)
+            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null) // Added null check
             {
                 try
                 {
-                    if (_doctorRepository != null)
+                    var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
+                    if (currentProfile != null)
                     {
-                        var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
-                        if (currentProfile != null)
-                        {
-                            var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
-                            if (idx >= 0) initialIndex = idx;
-                        }
+                        var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
+                        if (idx >= 0) initialIndex = idx;
                     }
                 }
                 catch { initialIndex = 0; }
             }
 
-            // Start animacji nagłówka
+            // Start header animation
             var headerTask = AnimateUnitHeaderChange(isNext);
 
-            // Start animacji kalendarza (wyjście)
+            // Start calendar animation (exit)
             var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
             if (calendarGrid != null)
             {
@@ -4915,23 +5155,11 @@ namespace GrafikoMat
                 var duration = TimeSpan.FromMilliseconds(350);
                 var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
-                var slideOutX = new DoubleAnimation
-                {
-                    From = 0,
-                    To = isNext ? -600 : 600,
-                    Duration = duration,
-                    EasingFunction = easing
-                };
+                var slideOutX = new DoubleAnimation { From = 0, To = isNext ? -600 : 600, Duration = duration, EasingFunction = easing };
                 Storyboard.SetTarget(slideOutX, calendarGrid);
                 Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-                var fadeOut = new DoubleAnimation
-                {
-                    From = 1,
-                    To = 0,
-                    Duration = duration,
-                    EasingFunction = easing
-                };
+                var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = duration, EasingFunction = easing };
                 Storyboard.SetTarget(fadeOut, calendarGrid);
                 Storyboard.SetTargetProperty(fadeOut, "Opacity");
 
@@ -4940,67 +5168,35 @@ namespace GrafikoMat
 
                 var tcs = new TaskCompletionSource();
                 storyboard.Completed += (s, e) => tcs.TrySetResult();
+                try { storyboard.Begin(); await tcs.Task; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (exit): {ex.Message}"); }
 
-                try
-                {
-                    storyboard.Begin();
-                    await tcs.Task;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Błąd animacji kalendarza (wyjście): {ex.Message}");
-                }
 
                 var transform = calendarGrid.RenderTransform as TranslateTransform;
-                if (transform != null)
-                {
-                    transform.X = isNext ? 600 : -600;
-                }
+                if (transform != null) transform.X = isNext ? 600 : -600;
                 calendarGrid.Opacity = 0;
             }
 
-            // Załaduj nowe dane
-            System.Diagnostics.Debug.WriteLine("ReloadForNewUnit: Start");
-            _currentDeclarationsView.ViewModel?.ReloadForNewUnit(
-                doctorsForUnit,
-                initialIndex,
-                ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
-                ViewModel.CurrentUnitIndex
-            );
-
-            // Poczekaj na update bindingu
-            await Task.Delay(150);
-
-            // Odśwież brushe
-            System.Diagnostics.Debug.WriteLine("RefreshCellBrushes: Start");
-            _currentDeclarationsView.RefreshCellBrushes();
-
+            // Load new data
+            // System.Diagnostics.Debug.WriteLine("ReloadForNewUnit: Start");
+            _currentDeclarationsView.ViewModel?.ReloadForNewUnit(doctorsForUnit, initialIndex, ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, ViewModel.CurrentUnitIndex);
+            await Task.Delay(150); // Wait for binding update
+                                   // System.Diagnostics.Debug.WriteLine("RefreshCellBrushes: Start");
+            _currentDeclarationsView.RefreshCellBrushes(); // Refresh brushes
             await Task.Delay(50);
 
-            // Animacja wejścia kalendarza
+            // Calendar animation (entry)
             if (calendarGrid != null)
             {
                 var storyboard2 = new Storyboard();
                 var duration = TimeSpan.FromMilliseconds(350);
                 var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
-                var slideInX = new DoubleAnimation
-                {
-                    From = isNext ? 600 : -600,
-                    To = 0,
-                    Duration = duration,
-                    EasingFunction = easing
-                };
+                var slideInX = new DoubleAnimation { From = isNext ? 600 : -600, To = 0, Duration = duration, EasingFunction = easing };
                 Storyboard.SetTarget(slideInX, calendarGrid);
                 Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-                var fadeIn = new DoubleAnimation
-                {
-                    From = 0,
-                    To = 1,
-                    Duration = duration,
-                    EasingFunction = easing
-                };
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration, EasingFunction = easing };
                 Storyboard.SetTarget(fadeIn, calendarGrid);
                 Storyboard.SetTargetProperty(fadeIn, "Opacity");
 
@@ -5009,20 +5205,12 @@ namespace GrafikoMat
 
                 var tcs2 = new TaskCompletionSource();
                 storyboard2.Completed += (s, e) => tcs2.TrySetResult();
-
-                try
-                {
-                    storyboard2.Begin();
-                    await tcs2.Task;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Błąd animacji kalendarza (wejście): {ex.Message}");
-                }
+                try { storyboard2.Begin(); await tcs2.Task; }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (entry): {ex.Message}"); }
             }
 
-            await headerTask;
-            System.Diagnostics.Debug.WriteLine("AnimateUnitChangeInDeclarations: Koniec");
+            await headerTask; // Wait for header animation to complete
+            // System.Diagnostics.Debug.WriteLine("AnimateUnitChangeInDeclarations: End");
         }
 
         private async Task AnimateUnitHeaderChange(bool isNext)
@@ -5039,23 +5227,11 @@ namespace GrafikoMat
             var duration = TimeSpan.FromMilliseconds(300);
             var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
-            var slideOutX = new DoubleAnimation
-            {
-                From = 0,
-                To = isNext ? -400 : 400,
-                Duration = duration,
-                EasingFunction = easing
-            };
+            var slideOutX = new DoubleAnimation { From = 0, To = isNext ? -400 : 400, Duration = duration, EasingFunction = easing };
             Storyboard.SetTarget(slideOutX, unitContextGrid);
             Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-            var fadeOut = new DoubleAnimation
-            {
-                From = 1,
-                To = 0,
-                Duration = duration,
-                EasingFunction = easing
-            };
+            var fadeOut = new DoubleAnimation { From = 1, To = 0, Duration = duration, EasingFunction = easing };
             Storyboard.SetTarget(fadeOut, unitContextGrid);
             Storyboard.SetTargetProperty(fadeOut, "Opacity");
 
@@ -5064,45 +5240,21 @@ namespace GrafikoMat
 
             var tcs = new TaskCompletionSource();
             storyboard.Completed += (s, e) => tcs.TrySetResult();
+            try { storyboard.Begin(); await tcs.Task; }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating header exit: {ex.Message}"); return; }
 
-            try
-            {
-                storyboard.Begin();
-                await tcs.Task;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Błąd animacji nagłówka wyjścia: {ex.Message}");
-                return;
-            }
 
             var transform = unitContextGrid.RenderTransform as TranslateTransform;
-            if (transform != null)
-            {
-                transform.X = isNext ? 400 : -400;
-            }
+            if (transform != null) transform.X = isNext ? 400 : -400;
             unitContextGrid.Opacity = 0;
-
-            await Task.Delay(50);
+            await Task.Delay(50); // Short pause for data update in background
 
             var storyboard2 = new Storyboard();
-            var slideInX = new DoubleAnimation
-            {
-                From = isNext ? 400 : -400,
-                To = 0,
-                Duration = duration,
-                EasingFunction = easing
-            };
+            var slideInX = new DoubleAnimation { From = isNext ? 400 : -400, To = 0, Duration = duration, EasingFunction = easing };
             Storyboard.SetTarget(slideInX, unitContextGrid);
             Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-            var fadeIn = new DoubleAnimation
-            {
-                From = 0,
-                To = 1,
-                Duration = duration,
-                EasingFunction = easing
-            };
+            var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration, EasingFunction = easing };
             Storyboard.SetTarget(fadeIn, unitContextGrid);
             Storyboard.SetTargetProperty(fadeIn, "Opacity");
 
@@ -5111,145 +5263,53 @@ namespace GrafikoMat
 
             var tcs2 = new TaskCompletionSource();
             storyboard2.Completed += (s, e) => tcs2.TrySetResult();
-
-            try
-            {
-                storyboard2.Begin();
-                await tcs2.Task;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Błąd animacji nagłówka wejścia: {ex.Message}");
-            }
+            try { storyboard2.Begin(); await tcs2.Task; }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating header entry: {ex.Message}"); }
         }
 
-        private async Task AnimateCalendarChange(bool isNext)
-        {
-            if (_currentDeclarationsView == null) return;
-
-            var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
-            if (calendarGrid == null)
-            {
-                System.Diagnostics.Debug.WriteLine("BŁĄD: Nie znaleziono CalendarGridView!");
-                return;
-            }
-
-            if (calendarGrid.RenderTransform == null || calendarGrid.RenderTransform is not TranslateTransform)
-            {
-                calendarGrid.RenderTransform = new TranslateTransform();
-            }
-
-            var storyboard = new Storyboard();
-            var duration = TimeSpan.FromMilliseconds(350);
-            var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
-
-            var slideOutX = new DoubleAnimation
-            {
-                From = 0,
-                To = isNext ? -600 : 600,
-                Duration = duration,
-                EasingFunction = easing
-            };
-            Storyboard.SetTarget(slideOutX, calendarGrid);
-            Storyboard.SetTargetProperty(slideOutX, "(UIElement.RenderTransform).(TranslateTransform.X)");
-
-            var fadeOut = new DoubleAnimation
-            {
-                From = 1,
-                To = 0,
-                Duration = duration,
-                EasingFunction = easing
-            };
-            Storyboard.SetTarget(fadeOut, calendarGrid);
-            Storyboard.SetTargetProperty(fadeOut, "Opacity");
-
-            storyboard.Children.Add(slideOutX);
-            storyboard.Children.Add(fadeOut);
-
-            var tcs = new TaskCompletionSource();
-            storyboard.Completed += (s, e) => tcs.TrySetResult();
-
-            try
-            {
-                storyboard.Begin();
-                await tcs.Task;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Błąd animacji wyjścia: {ex.Message}");
-                return;
-            }
-
-            var transform = calendarGrid.RenderTransform as TranslateTransform;
-            if (transform != null)
-            {
-                transform.X = isNext ? 600 : -600;
-            }
-            calendarGrid.Opacity = 0;
-
-            await Task.Delay(50);
-
-            var storyboard2 = new Storyboard();
-            var slideInX = new DoubleAnimation
-            {
-                From = isNext ? 600 : -600,
-                To = 0,
-                Duration = duration,
-                EasingFunction = easing
-            };
-            Storyboard.SetTarget(slideInX, calendarGrid);
-            Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
-
-            var fadeIn = new DoubleAnimation
-            {
-                From = 0,
-                To = 1,
-                Duration = duration,
-                EasingFunction = easing
-            };
-            Storyboard.SetTarget(fadeIn, calendarGrid);
-            Storyboard.SetTargetProperty(fadeIn, "Opacity");
-
-            storyboard2.Children.Add(slideInX);
-            storyboard2.Children.Add(fadeIn);
-
-            var tcs2 = new TaskCompletionSource();
-            storyboard2.Completed += (s, e) => tcs2.TrySetResult();
-
-            try
-            {
-                storyboard2.Begin();
-                await tcs2.Task;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Błąd animacji wejścia: {ex.Message}");
-            }
-        }
-
+        // REFACTORED InitializeApplicationAsync
         private async Task InitializeApplicationAsync()
         {
             await ReloadSettingsAndServicesAsync();
+
+            // Step 1: Check connection configuration
             if (_appSettings == null || string.IsNullOrWhiteSpace(_appSettings.SupabaseUrl) || string.IsNullOrWhiteSpace(_appSettings.SupabaseAnonKey))
             {
-                ViewModel.IsUnitContextActive = false;
-                ViewModel.CurrentViewTitle = "Konfiguracja Połączenia";
-                var setupView = new Views.Settings.ConnectionSettingsView();
-                setupView.Initialize(_settingsService, _appSettings ?? new AppSettings());
-                setupView.ReloadRequired += async () => { StartupOverlayContent.Content = null; await InitializeApplicationAsync(); };
-                StartupOverlayContent.Content = setupView;
-                InitialLoadingOverlay.Visibility = Visibility.Collapsed;
-                return;
+                ShowInitialConnectionSetup();
+                return; // Wait for ConnectionEstablished event
             }
+
+            // Step 2: Check session and login
             var restored = await _supabaseService.RestoreSessionIfAnyAsync();
             if (!restored && !_supabaseService.IsAuthenticated)
             {
                 ViewModel.IsUnitContextActive = false;
                 ViewModel.CurrentViewTitle = "Logowanie";
                 bool loggedIn = await ShowLoginScreenAsync();
-                if (!loggedIn) { this.Close(); return; }
+                if (!loggedIn)
+                {
+                    this.Close(); // Close app if login cancelled/failed
+                    return;
+                }
             }
-            if (_doctorRepository != null && _supabaseService.IsAuthenticated)
+
+            // Step 3: Continue initialization (check password, load data, UI)
+            await ContinueInitializationAfterLoginAsync();
+        }
+
+        // NEW Method called from InitializeApplicationAsync and ConnectionEstablished handler
+        private async Task ContinueInitializationAfterLoginAsync()
+        {
+            // Ensure we are authenticated before proceeding
+            if (!_supabaseService.IsAuthenticated)
+            {
+                // This might happen if session restoration failed silently or login was skipped unexpectedly
+                await ShowInfo("Błąd krytyczny", "Nie udało się uwierzytelnić użytkownika. Aplikacja zostanie zamknięta.");
+                this.Close();
+                return;
+            }
+
+            if (_doctorRepository != null) // Check if repository was initialized successfully
             {
                 try
                 {
@@ -5259,26 +5319,109 @@ namespace GrafikoMat
                         ViewModel.IsUnitContextActive = false;
                         ViewModel.CurrentViewTitle = "Wymagana zmiana hasła";
                         bool passwordChanged = await ShowForcePasswordChangeAsync();
-                        if (!passwordChanged) { await _supabaseService.SignOutAsync(); this.Close(); return; }
+                        if (!passwordChanged)
+                        {
+                            await _supabaseService.SignOutAsync();
+                            this.Close();
+                            return;
+                        }
+                        // If password was changed, mark it in the database
                         await _doctorRepository.ClearPasswordChangeFlagAsync(profile.Id);
+                    }
+                    else if (profile == null) // Handle case where profile couldn't be fetched
+                    {
+                        await ShowInfo("Błąd krytyczny", "Nie można wczytać profilu zalogowanego użytkownika.");
+                        await _supabaseService.SignOutAsync();
+                        this.Close();
+                        return;
                     }
                 }
                 catch (Exception ex)
                 {
+                    // Handle critical errors during profile check
                     await ShowInfo("Błąd krytyczny", $"Nie można wczytać profilu użytkownika: {ex.Message}");
-                    await _supabaseService.SignOutAsync();
-                    this.Close();
+                    await _supabaseService.SignOutAsync(); // Sign out just in case
+                    this.Close(); // Close the application
                     return;
                 }
             }
+            else // Handle case where repositories couldn't be initialized (e.g., bad connection string after restart)
+            {
+                await ShowInfo("Błąd krytyczny", "Nie można zainicjalizować połączenia z bazą danych. Sprawdź ustawienia.");
+                // Optionally clear settings here to force re-config on next start
+                // await _settingsService.SaveSettingsAsync(new AppSettings());
+                this.Close();
+                return;
+            }
+
+
+            // Load data and show dashboard
             await LoadDataAndShowDashboardAsync();
-            InitialLoadingOverlay.Visibility = Visibility.Collapsed;
-            StartupOverlayContent.Content = null;
-            await RunEntranceAnimationAsync();
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed; // Hide main loading screen
+            StartupOverlayContent.Content = null; // Ensure overlay (e.g., login) is hidden
+            await RunEntranceAnimationAsync(); // Run UI entrance animation
         }
+
+
+        // NEW Method to show initial connection setup
+        private void ShowInitialConnectionSetup()
+        {
+            ViewModel.IsUnitContextActive = false;
+            ViewModel.CurrentViewTitle = "Konfiguracja Połączenia";
+            var setupView = new Views.Settings.ConnectionSettingsView();
+            setupView.IsInitialSetupMode = true; // Set initial mode
+            setupView.Initialize(_settingsService, _appSettings ?? new AppSettings());
+
+            // NEW Handler for ConnectionEstablished
+            setupView.ConnectionEstablished += async () =>
+            {
+                // Use DispatcherQueue for UI operations
+                await DispatcherQueue.EnqueueAsync(async () => {
+                    StartupOverlayContent.Content = null; // Hide setup view
+                    InitialLoadingOverlay.Visibility = Visibility.Visible; // Show spinner during login
+                });
+
+                await ReloadSettingsAndServicesAsync(); // Reload with new data
+                bool loggedIn = await ShowLoginScreenAsync(); // Show login
+
+                // Again, use DispatcherQueue for UI operations after login
+                await DispatcherQueue.EnqueueAsync(async () => {
+                    if (loggedIn)
+                    {
+                        await ContinueInitializationAfterLoginAsync(); // Continue initialization
+                    }
+                    else
+                    {
+                        this.Close(); // Close if login failed
+                    }
+                });
+            };
+
+            StartupOverlayContent.Content = setupView;
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed; // Hide main spinner, show setup view
+        }
+
 
         private async Task RunEntranceAnimationAsync()
         {
+            // Ensure elements are visible before animating opacity/transform
+            TopBarRow.Opacity = 0; TopBarRow.Visibility = Visibility.Visible;
+            UnitSelectionPanel.Opacity = 0; UnitSelectionPanel.Visibility = Visibility.Visible;
+            MainContentPanel.Opacity = 0; MainContentPanel.Visibility = Visibility.Visible;
+            ActionButtonsPanel.Opacity = 0; ActionButtonsPanel.Visibility = Visibility.Visible;
+            BottomStatusBar.Opacity = 0; BottomStatusBar.Visibility = Visibility.Visible;
+            // Ensure transforms exist
+            TopBarRow.RenderTransform ??= new TranslateTransform();
+            UnitSelectionPanel.RenderTransform ??= new TranslateTransform();
+            MainContentPanel.RenderTransform ??= new TranslateTransform();
+            BottomStatusBar.RenderTransform ??= new TranslateTransform();
+            // Set initial Y transforms
+            (TopBarRow.RenderTransform as TranslateTransform).Y = -20;
+            (UnitSelectionPanel.RenderTransform as TranslateTransform).Y = -20;
+            (MainContentPanel.RenderTransform as TranslateTransform).Y = -20;
+            (BottomStatusBar.RenderTransform as TranslateTransform).Y = 20;
+
+
             var sb = new Storyboard();
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
             var duration = new Duration(TimeSpan.FromMilliseconds(400));
@@ -5302,7 +5445,7 @@ namespace GrafikoMat
             sb.Completed += (_, _) => tcs.TrySetResult();
             sb.Begin();
             await tcs.Task;
-            SetTitleBar(DragBar);
+            SetTitleBar(DragBar); // Ensure TitleBar is set after animation
         }
 
         private async Task ReloadSettingsAndServicesAsync()
@@ -5319,69 +5462,216 @@ namespace GrafikoMat
                     _unitRepository = new SupabaseUnitRepository(_supabaseService.Client);
                     _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
                 }
+                else // If Supabase client initialization fails, nullify repositories
+                {
+                    _doctorRepository = null;
+                    _unitRepository = null;
+                    _assignmentRepository = null;
+                }
             }
             else
             {
-                _supabaseService.Initialize(string.Empty, string.Empty);
+                _supabaseService.Initialize(string.Empty, string.Empty); // Nullify Supabase client
                 _doctorRepository = null;
                 _unitRepository = null;
                 _assignmentRepository = null;
             }
+            // Always set repositories (even if null)
             ViewModel.SetRepositories(_doctorRepository, _unitRepository, _assignmentRepository);
         }
 
         private async void RefreshDataServicesAsync()
         {
             await ReloadSettingsAndServicesAsync();
-            if (ViewportCurrent.Content == _settingsView) { SwitchToSettings(forceRefresh: true); }
+            // If currently in settings view, refresh it
+            if (ViewportCurrent.Content == _settingsView)
+            {
+                SwitchToSettings(forceRefresh: true);
+            }
         }
 
+        // UPDATED ShowLoginScreenAsync with fade animations
         private async Task<bool> ShowLoginScreenAsync()
         {
-            if (_supabaseService != null && _supabaseService.IsAuthenticated) return true;
+            // Show loading screen while preparing login view
+            InitialLoadingOverlay.Visibility = Visibility.Visible;
+            StartupOverlayContent.Content = null; // Hide previous content
+
+            // Short delay for UI refresh
+            await Task.Delay(50);
+
+            if (_supabaseService != null && _supabaseService.IsAuthenticated)
+            {
+                InitialLoadingOverlay.Visibility = Visibility.Collapsed; // Hide loading if already logged in
+                return true;
+            }
+
             var tcs = new TaskCompletionSource<bool>();
             var loginView = new LoginView(_supabaseService!);
-            loginView.CancelRequested += () => { LoginOverlay.Content = null; tcs.TrySetResult(false); };
-            loginView.LoginSuccess += async () => { await _supabaseService.SaveCurrentSessionAsync(); LoginOverlay.Content = null; tcs.TrySetResult(true); };
-            LoginOverlay.Content = loginView;
+
+            // ---- Fade-Out Logic ----
+            Func<Task> fadeOutAndCleanup = async () =>
+            {
+                var sb = new Storyboard();
+                var fadeOutAnim = new DoubleAnimation
+                {
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(200), // Faster fade out
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+                Storyboard.SetTarget(fadeOutAnim, LoginOverlay);
+                Storyboard.SetTargetProperty(fadeOutAnim, "Opacity");
+                sb.Children.Add(fadeOutAnim);
+
+                var fadeTcs = new TaskCompletionSource();
+                sb.Completed += (_, _) =>
+                {
+                    LoginOverlay.Content = null; // Clear content AFTER animation
+                    InitialLoadingOverlay.Visibility = Visibility.Collapsed; // Ensure loading is hidden
+                    fadeTcs.TrySetResult();
+                };
+                sb.Begin();
+                await fadeTcs.Task;
+            };
+
+            loginView.CancelRequested += async () =>
+            {
+                await fadeOutAndCleanup();
+                tcs.TrySetResult(false);
+            };
+
+            loginView.LoginSuccess += async () =>
+            {
+                // Save session first, then animate fade out
+                await _supabaseService.SaveCurrentSessionAsync();
+                await fadeOutAndCleanup();
+                tcs.TrySetResult(true);
+            };
+
+            // ---- Fade-In Logic ----
+            LoginOverlay.Opacity = 0; // Set initial opacity
+            LoginOverlay.Content = loginView; // Set the view
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed; // Hide loading spinner
+
+            // Start fade-in animation
+            var fadeInSb = new Storyboard();
+            var fadeInAnim = new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(300), // Slightly longer fade in
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            Storyboard.SetTarget(fadeInAnim, LoginOverlay);
+            Storyboard.SetTargetProperty(fadeInAnim, "Opacity");
+            fadeInSb.Children.Add(fadeInAnim);
+            fadeInSb.Begin();
+
             return await tcs.Task;
         }
+
 
         private async Task<bool> ShowForcePasswordChangeAsync()
         {
+            // Show loading screen while preparing change password view
+            InitialLoadingOverlay.Visibility = Visibility.Visible;
+            LoginOverlay.Content = null; // Hide previous content (e.g., login)
+
+            // Short delay
+            await Task.Delay(50);
+
             var tcs = new TaskCompletionSource<bool>();
             var changePasswordView = new ChangePasswordView(_supabaseService);
-            changePasswordView.PasswordChangeSuccess += () => { LoginOverlay.Content = null; tcs.TrySetResult(true); };
-            changePasswordView.PasswordChangeCancelled += () => { LoginOverlay.Content = null; tcs.TrySetResult(false); };
+
+            // --- Reusing fadeOutAndCleanup logic ---
+            Func<Task> fadeOutAndCleanup = async () =>
+            {
+                var sb = new Storyboard();
+                var fadeOutAnim = new DoubleAnimation { To = 0, Duration = TimeSpan.FromMilliseconds(200), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+                Storyboard.SetTarget(fadeOutAnim, LoginOverlay); // Target LoginOverlay
+                Storyboard.SetTargetProperty(fadeOutAnim, "Opacity");
+                sb.Children.Add(fadeOutAnim);
+
+                var fadeTcs = new TaskCompletionSource();
+                sb.Completed += (_, _) => { LoginOverlay.Content = null; InitialLoadingOverlay.Visibility = Visibility.Collapsed; fadeTcs.TrySetResult(); };
+                sb.Begin();
+                await fadeTcs.Task;
+            };
+
+            changePasswordView.PasswordChangeSuccess += async () => {
+                await fadeOutAndCleanup();
+                tcs.TrySetResult(true);
+            };
+            changePasswordView.PasswordChangeCancelled += async () => {
+                await fadeOutAndCleanup();
+                tcs.TrySetResult(false);
+            };
+
+            // --- Fade-In Logic ---
+            LoginOverlay.Opacity = 0;
             LoginOverlay.Content = changePasswordView;
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed;
+
+            var fadeInSb = new Storyboard();
+            var fadeInAnim = new DoubleAnimation { From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(300), EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            Storyboard.SetTarget(fadeInAnim, LoginOverlay); // Target LoginOverlay
+            Storyboard.SetTargetProperty(fadeInAnim, "Opacity");
+            fadeInSb.Children.Add(fadeInAnim);
+            fadeInSb.Begin();
+
             return await tcs.Task;
         }
 
+
         private async Task LoadDataAndShowDashboardAsync()
         {
-            if (_doctorRepository != null) { await ViewModel.LoadUserAndUnitDataAsync(); ViewModel.LoadDataForActiveUnit(); }
+            // Show spinner while loading data
+            InitialLoadingOverlay.Visibility = Visibility.Visible;
+            await Task.Delay(50); // Give UI a moment to show spinner
+
+            if (_doctorRepository != null)
+            {
+                await ViewModel.LoadUserAndUnitDataAsync();
+                ViewModel.LoadDataForActiveUnit();
+            }
+
             ViewportCurrent.Content = _dashboardView;
             BuildActionsForDashboard();
             ResetViewportState();
             ViewModel.IsUnitContextActive = true;
             ViewModel.CurrentViewTitle = string.Empty;
+
+            // Hide spinner only after data is loaded and view is set
+            InitialLoadingOverlay.Visibility = Visibility.Collapsed;
         }
 
         private async void SwitchToSettings(bool forceRefresh = false)
         {
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
             _settingsView = new SettingsView();
-            _settingsView.ReloadRequired += RefreshDataServicesAsync;
+            _settingsView.ReloadRequired += RefreshDataServicesAsync; // Attach event BEFORE Initialize
             _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
-            if (!forceRefresh) { await AnimateToAsync(_settingsView, forward: true); } else { ViewportCurrent.Content = _settingsView; }
+
+            if (!forceRefresh)
+            {
+                await AnimateToAsync(_settingsView, forward: true);
+            }
+            else
+            {
+                // On refresh, just swap content without animation
+                ViewportCurrent.Content = _settingsView;
+                ResetViewportState(); // Reset viewport state just in case
+            }
+
             BuildActionsForSettings();
             ViewModel.IsUnitContextActive = false;
             ViewModel.CurrentViewTitle = "Ustawienia";
         }
 
+
         private async void SwitchToManagement()
         {
-            if (_isClosing) return;
+            if (_isClosing || _isAnimating) return; // Added _isAnimating check
             if (_doctorRepository == null || _unitRepository == null || _assignmentRepository == null) { await ShowInfo("Brak aktywnego połączenia", "Sprawdź konfigurację połączenia w ustawieniach."); return; }
             _managementView = new ManagementView(_doctorRepository, _unitRepository, _assignmentRepository, _supabaseService, this.DispatcherQueue);
             await AnimateToAsync(_managementView, forward: true);
@@ -5407,9 +5697,9 @@ namespace GrafikoMat
             ActionsLeft.Clear();
             ActionsRight.Clear();
             ActionsLeft.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
-            ActionsLeft.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel.ClearSelectionCommand.Execute(null))));
+            ActionsLeft.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel?.ClearSelectionCommand.Execute(null)))); // Added ?.
 
-            ActionsRight.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel.SaveCommand.Execute(null))));
+            ActionsRight.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel?.SaveCommand.Execute(null)))); // Added ?.
             ActionsRight.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
         }
 
@@ -5433,6 +5723,7 @@ namespace GrafikoMat
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
             _currentDeclarationsView = null;
+            _previousUnitIndex = -1; // Reset on return
 
             await ViewModel.UpdateFooterFromSettingsAsync();
             await AnimateToAsync(_dashboardView, false);
@@ -5446,8 +5737,7 @@ namespace GrafikoMat
             if (_isClosing || _isAnimating) return;
             if (ViewModel.ActiveUnit == null) return;
 
-            // DODAJ: Reset poprzedniego indeksu
-            _previousUnitIndex = ViewModel.CurrentUnitIndex;
+            _previousUnitIndex = ViewModel.CurrentUnitIndex; // Set before switching
 
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
@@ -5460,54 +5750,44 @@ namespace GrafikoMat
             }
 
             int initialIndex = 0;
-            if (!ViewModel.IsCurrentUserAdmin)
+            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null) // Added null check
             {
                 try
                 {
-                    if (_doctorRepository != null)
+                    var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
+                    if (currentProfile != null)
                     {
-                        var currentProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
-                        if (currentProfile != null)
-                        {
-                            var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
-                            if (idx >= 0) initialIndex = idx;
-                        }
+                        var idx = doctorsForUnit.FindIndex(d => d.Id == currentProfile.Id);
+                        if (idx >= 0) initialIndex = idx;
                     }
                 }
                 catch { initialIndex = 0; }
             }
 
             var declarationsVm = new DeclarationsViewModel(
-                frozenYear,
-                frozenMonthIndex,
-                doctorsForUnit,
-                initialIndex,
-                ViewModel.Declarations,
-                ViewModel.IsCurrentUserAdmin,
+                frozenYear, frozenMonthIndex, doctorsForUnit, initialIndex,
+                ViewModel.Declarations, ViewModel.IsCurrentUserAdmin,
                 ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
-                () => {
-                    ViewModel.RefreshDeclarationsForDashboard();
-                }
+                () => { ViewModel.RefreshDeclarationsForDashboard(); }
              );
 
             declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;
-
             var declarationsView = new DeclarationsView();
-
             ViewModel.PropertyChanged += OnMainViewModelPropertyChangedForDeclarations;
 
             void DeclCloseHandler()
             {
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1; // DODAJ: Reset przy zamknięciu
+                _previousUnitIndex = -1; // Reset on close
                 SwitchToDashboard();
             }
 
             void DeclSaveAndCloseHandler()
             {
-                declarationsView.ViewModel.SaveCommand.Execute(null);
+                // Null check before executing command
+                declarationsView.ViewModel?.SaveCommand.Execute(null);
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1; // DODAJ: Reset przy zamknięciu
+                _previousUnitIndex = -1; // Reset on save & close
                 SwitchToDashboard();
             }
 
@@ -5523,8 +5803,10 @@ namespace GrafikoMat
             ViewModel.CurrentViewTitle = "Edycja deklaracji";
         }
 
+
         private static void DetachFromParent(FrameworkElement el)
         {
+            if (el == null) return; // Added null check
             if (el.Parent is ContentControl cc) cc.Content = null;
             else if (el.Parent is Border b) b.Child = null;
             else if (el.Parent is Panel p) p.Children.Remove(el);
@@ -5540,14 +5822,15 @@ namespace GrafikoMat
         {
             var cur = ViewportCurrent;
             var nxt = ViewportNext;
+            // Added null checks
+            if (cur == null || nxt == null) return;
+
             var curT = (cur.RenderTransform as TranslateTransform) ?? new TranslateTransform();
             var nxtT = (nxt.RenderTransform as TranslateTransform) ?? new TranslateTransform();
             cur.RenderTransform = curT;
             nxt.RenderTransform = nxtT;
-            curT.X = 0;
-            nxtT.X = 0;
-            cur.Opacity = 1;
-            nxt.Opacity = 0;
+            curT.X = 0; nxtT.X = 0;
+            cur.Opacity = 1; nxt.Opacity = 0;
             var ch = TryGetHeader(cur.Content);
             var nh = TryGetHeader(nxt.Content);
             if (ch != null) { var t = (ch.RenderTransform as TranslateTransform) ?? new TranslateTransform(); t.X = 0; ch.RenderTransform = t; }
@@ -5556,27 +5839,47 @@ namespace GrafikoMat
 
         private async Task AnimateToAsync(FrameworkElement nextView, bool forward)
         {
+            if (nextView == null) return; // Added null check
             if (_isClosing) { ViewportCurrent.Content = nextView; ResetViewportState(); return; }
             if (ReferenceEquals(ViewportCurrent.Content, nextView)) return;
+
+            // Stop previous animation and set view immediately if animating
             if (_isAnimating)
             {
-                DetachFromParent(nextView);
                 _activeStoryboard?.Stop();
-                _activeStoryboard = null;
+                _activeStoryboard = null; // Reset reference
+                _isAnimating = false;    // Reset flag
+                // Detach potentially attached nextView from ViewportNext
+                if (ViewportNext?.Content == nextView) DetachFromParent(nextView);
                 ViewportNext.Content = null;
                 ViewportCurrent.Content = nextView;
                 ResetViewportState();
-                return;
+                return; // Exit, don't start new animation
             }
-            _isAnimating = true;
+
+            _isAnimating = true; // Set animation flag
+
             var curPresenter = ViewportCurrent;
             var nxtPresenter = ViewportNext;
+            // Added null checks
+            if (curPresenter == null || nxtPresenter == null)
+            {
+                _isAnimating = false;
+                return;
+            }
+
             DetachFromParent(nextView);
-            ResetViewportState();
+            ResetViewportState(); // Reset state BEFORE setting new content
+            nxtPresenter.Content = nextView; // Set new content in the hidden presenter
+
+            // Ensure transforms exist (important!)
+            curPresenter.RenderTransform ??= new TranslateTransform();
+            nxtPresenter.RenderTransform ??= new TranslateTransform();
+
             var curTransform = (curPresenter.RenderTransform as TranslateTransform)!;
             var nxtTransform = (nxtPresenter.RenderTransform as TranslateTransform)!;
             var curHeader = TryGetHeader(curPresenter.Content);
-            var nxtHeader = TryGetHeader(nextView);
+            var nxtHeader = TryGetHeader(nxtPresenter.Content); // Get header from nxtPresenter
             TranslateTransform? curHeaderTransform = null;
             TranslateTransform? nxtHeaderTransform = null;
             if (curHeader != null) { curHeaderTransform = (curHeader.RenderTransform as TranslateTransform) ?? new TranslateTransform(); curHeader.RenderTransform = curHeaderTransform; }
@@ -5584,56 +5887,125 @@ namespace GrafikoMat
             double offset = 64;
             double fromNext = forward ? +offset : -offset;
             double toCur = forward ? -offset : +offset;
-            nxtTransform.X = fromNext;
-            nxtPresenter.Opacity = 0;
-            curTransform.X = 0;
-            curPresenter.Opacity = 1;
+            // Set initial states for animation
+            nxtTransform.X = fromNext; nxtPresenter.Opacity = 0;
+            curTransform.X = 0; curPresenter.Opacity = 1;
             if (nxtHeaderTransform != null) nxtHeaderTransform.X = fromNext * 0.5;
             if (curHeaderTransform != null) curHeaderTransform.X = 0;
-            nxtPresenter.Content = nextView;
+
             var sb = new Storyboard();
-            _activeStoryboard = sb;
+            _activeStoryboard = sb; // Store storyboard reference
             var dur = TimeSpan.FromMilliseconds(280);
             var easeIn = new CubicEase { EasingMode = EasingMode.EaseIn };
             var easeOut = new CubicEase { EasingMode = EasingMode.EaseOut };
             var curX = new DoubleAnimation { From = 0, To = toCur, Duration = dur, EasingFunction = easeIn };
-            Storyboard.SetTarget(curX, curPresenter);
-            Storyboard.SetTargetProperty(curX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            Storyboard.SetTarget(curX, curTransform); // Target: Current transform
+            Storyboard.SetTargetProperty(curX, "X");
             sb.Children.Add(curX);
             var curOp = new DoubleAnimation { From = 1, To = 0, Duration = dur, EasingFunction = easeIn };
             Storyboard.SetTarget(curOp, curPresenter);
             Storyboard.SetTargetProperty(curOp, "Opacity");
             sb.Children.Add(curOp);
             var nxtX = new DoubleAnimation { From = fromNext, To = 0, Duration = dur, EasingFunction = easeOut };
-            Storyboard.SetTarget(nxtX, nxtPresenter);
-            Storyboard.SetTargetProperty(nxtX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+            Storyboard.SetTarget(nxtX, nxtTransform); // Target: Next transform
+            Storyboard.SetTargetProperty(nxtX, "X");
             sb.Children.Add(nxtX);
             var nxtOp = new DoubleAnimation { From = 0, To = 1, Duration = dur, EasingFunction = easeOut };
             Storyboard.SetTarget(nxtOp, nxtPresenter);
             Storyboard.SetTargetProperty(nxtOp, "Opacity");
             sb.Children.Add(nxtOp);
-            if (curHeaderTransform != null)
+            if (curHeaderTransform != null && curHeader != null) // Added null check for curHeader
             {
                 var curHX = new DoubleAnimation { From = 0, To = toCur * 0.5, Duration = dur, EasingFunction = easeIn };
-                Storyboard.SetTarget(curHX, curHeader);
-                Storyboard.SetTargetProperty(curHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                Storyboard.SetTarget(curHX, curHeaderTransform); // Target: Header transform
+                Storyboard.SetTargetProperty(curHX, "X");
                 sb.Children.Add(curHX);
             }
-            if (nxtHeaderTransform != null)
+            if (nxtHeaderTransform != null && nxtHeader != null) // Added null check for nxtHeader
             {
                 var nxtHX = new DoubleAnimation { From = fromNext * 0.5, To = 0, Duration = dur, EasingFunction = easeOut };
-                Storyboard.SetTarget(nxtHX, nxtHeader);
-                Storyboard.SetTargetProperty(nxtHX, "(UIElement.RenderTransform).(TranslateTransform.X)");
+                Storyboard.SetTarget(nxtHX, nxtHeaderTransform); // Target: Header transform
+                Storyboard.SetTargetProperty(nxtHX, "X");
                 sb.Children.Add(nxtHX);
             }
             var tcs = new TaskCompletionSource<bool>();
-            sb.Completed += (_, __) => { _activeStoryboard = null; tcs.TrySetResult(true); };
-            try { sb.Begin(); await tcs.Task; } catch { }
-            if (_isClosing) return;
-            ViewportNext.Content = null;
-            ViewportCurrent.Content = nextView;
-            ResetViewportState();
-            _isAnimating = false;
+            sb.Completed += (_, __) =>
+            {
+                // ZMIANA: Bardziej szczegółowa logika czyszczenia w DispatcherQueue
+                bool enqueued = DispatcherQueue.TryEnqueue(() =>
+                {
+                    // Check if animation was interrupted or window is closing
+                    if (!ReferenceEquals(_activeStoryboard, sb) || _isClosing)
+                    {
+                        if (ReferenceEquals(_activeStoryboard, sb)) _activeStoryboard = null; // Clear ref if it matches
+                        _isAnimating = false; // Reset flag regardless
+                        return; // Exit early
+                    }
+                    _activeStoryboard = null; // Clear reference
+
+                    try
+                    {
+                        // 1. Make the 'next' view the 'current' content
+                        ViewportCurrent.Content = nextView;
+                        // 2. Ensure the 'current' presenter is fully visible and in place
+                        ViewportCurrent.Opacity = 1;
+                        (ViewportCurrent.RenderTransform as TranslateTransform).X = 0;
+                        // 3. Clear the temporary 'next' presenter and ensure it's hidden and reset
+                        ViewportNext.Content = null;
+                        ViewportNext.Opacity = 0;
+                        (ViewportNext.RenderTransform as TranslateTransform).X = 0;
+                        // 4. Reset header transforms explicitly
+                        var curHeaderFinal = TryGetHeader(ViewportCurrent.Content); // Get header of the NEW content
+                        if (curHeaderFinal != null)
+                        {
+                            curHeaderFinal.RenderTransform ??= new TranslateTransform();
+                            (curHeaderFinal.RenderTransform as TranslateTransform).X = 0;
+                        }
+                        // No need to reset header for ViewportNext as its content is null
+                    }
+                    catch (ArgumentException ex) // Catch specific exception
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error setting ContentPresenter.Content after animation: {ex}");
+                        // Fallback: Force set content and reset state if error occurs
+                        ViewportCurrent.Content = nextView;
+                        ViewportNext.Content = null;
+                        ResetViewportState();
+                    }
+                    catch (Exception ex) // General catch
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Unexpected error during animation cleanup: {ex}");
+                        // Fallback
+                        ViewportCurrent.Content = nextView;
+                        ViewportNext.Content = null;
+                        ResetViewportState();
+                    }
+                    finally
+                    {
+                        _isAnimating = false; // Reset animation flag inside dispatcher, in finally block
+                    }
+                });
+                if (!enqueued) // If queuing failed
+                {
+                    _isAnimating = false; // Reset flag immediately
+                    System.Diagnostics.Debug.WriteLine("Failed to enqueue final animation cleanup");
+                }
+
+                tcs.TrySetResult(true); // Signal Task completion immediately
+            };
+
+            try { sb.Begin(); await tcs.Task; }
+            catch
+            {
+                // In case of animation error, ensure state is correct
+                if (!_isClosing)
+                {
+                    ViewportCurrent.Content = nextView;
+                    ViewportNext.Content = null;
+                    ResetViewportState();
+                }
+                _activeStoryboard = null;
+                _isAnimating = false;
+            }
         }
 
         private void TitleBarMenuButton_Click(object sender, RoutedEventArgs e)
@@ -5644,16 +6016,18 @@ namespace GrafikoMat
         private void OnWindowClosed(object sender, WindowEventArgs args)
         {
             _isClosing = true;
-            try { _activeStoryboard?.Stop(); } catch { }
+            try { _activeStoryboard?.Stop(); } catch { } // Stop any running animation
             _activeStoryboard = null;
             _isAnimating = false;
 
+            // Dispose backdrop controller
             if (_acrylicController != null)
             {
                 _acrylicController.Dispose();
                 _acrylicController = null;
             }
 
+            // Restore original window procedure
             if (_oldWndProc != IntPtr.Zero)
             {
                 try
@@ -5661,24 +6035,29 @@ namespace GrafikoMat
                     var hwnd = WindowNative.GetWindowHandle(this);
                     if (hwnd != IntPtr.Zero)
                     {
-                        SetWindowLongPtr(hwnd, -4, _oldWndProc);
+                        SetWindowLongPtr(hwnd, -4 /* GWLP_WNDPROC */, _oldWndProc);
                     }
                 }
-                catch { }
+                catch { /* Ignore errors during cleanup */ }
                 _oldWndProc = IntPtr.Zero;
             }
 
+            // Free GCHandle
             if (_wndProcGCHandle.IsAllocated)
             {
                 _wndProcGCHandle.Free();
             }
 
+            // Unregister message listeners
             WeakReferenceMessenger.Default.Unregister<SettingsHaveChangedMessage>(this);
+            WeakReferenceMessenger.Default.Unregister<UnitDataChangedMessage>(this);
         }
 
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
             ApplyTitleBarMenuStyling();
+            // Additionally save window state as system might change title bar color
+            _ = DispatcherQueue.TryEnqueue(async () => await SaveWindowStateAsync()); // Use TryEnqueue
         }
 
         private void ApplyTitleBarMenuStyling()
@@ -5691,46 +6070,35 @@ namespace GrafikoMat
                                 (this.Content as FrameworkElement)?.ActualTheme == ElementTheme.Dark);
 
             var titleBarColors = isDarkTheme
-                ? new
-                {
-                    Bg = Color.FromArgb(0xFF, 0x20, 0x20, 0x20),
-                    Fg = Colors.White,
-                    InactiveBg = Color.FromArgb(0xFF, 0x18, 0x18, 0x18),
-                    InactiveFg = Color.FromArgb(0xFF, 0x99, 0x99, 0x99),
-                    BtnBg = Colors.Transparent,
-                    BtnFg = Colors.White,
-                    BtnHoverBg = Color.FromArgb(0xFF, 0x30, 0x30, 0x30),
-                    BtnHoverFg = Colors.White,
-                    BtnPressBg = Color.FromArgb(0xFF, 0x28, 0x28, 0x28),
-                    BtnPressFg = Colors.White
-                }
-                : new
-                {
-                    Bg = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3),
-                    Fg = Colors.Black,
-                    InactiveBg = Color.FromArgb(0xFF, 0xEB, 0xEB, 0xEB),
-                    InactiveFg = Color.FromArgb(0xFF, 0x66, 0x66, 0x66),
-                    BtnBg = Colors.Transparent,
-                    BtnFg = Colors.Black,
-                    BtnHoverBg = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0),
-                    BtnHoverFg = Colors.Black,
-                    BtnPressBg = Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0),
-                    BtnPressFg = Colors.Black
-                };
+                ? new { Bg = Color.FromArgb(0xFF, 0x20, 0x20, 0x20), Fg = Colors.White, InactiveBg = Color.FromArgb(0xFF, 0x18, 0x18, 0x18), InactiveFg = Color.FromArgb(0xFF, 0x99, 0x99, 0x99), BtnBg = Colors.Transparent, BtnFg = Colors.White, BtnHoverBg = Color.FromArgb(0xFF, 0x30, 0x30, 0x30), BtnHoverFg = Colors.White, BtnPressBg = Color.FromArgb(0xFF, 0x28, 0x28, 0x28), BtnPressFg = Colors.White }
+                : new { Bg = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3), Fg = Colors.Black, InactiveBg = Color.FromArgb(0xFF, 0xEB, 0xEB, 0xEB), InactiveFg = Color.FromArgb(0xFF, 0x66, 0x66, 0x66), BtnBg = Colors.Transparent, BtnFg = Colors.Black, BtnHoverBg = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0), BtnHoverFg = Colors.Black, BtnPressBg = Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0), BtnPressFg = Colors.Black };
 
-            _appWindow.TitleBar.BackgroundColor = titleBarColors.Bg;
-            _appWindow.TitleBar.ForegroundColor = titleBarColors.Fg;
-            _appWindow.TitleBar.InactiveBackgroundColor = titleBarColors.InactiveBg;
-            _appWindow.TitleBar.InactiveForegroundColor = titleBarColors.InactiveFg;
-            _appWindow.TitleBar.ButtonBackgroundColor = titleBarColors.BtnBg;
-            _appWindow.TitleBar.ButtonForegroundColor = titleBarColors.BtnFg;
-            _appWindow.TitleBar.ButtonHoverBackgroundColor = titleBarColors.BtnHoverBg;
-            _appWindow.TitleBar.ButtonHoverForegroundColor = titleBarColors.BtnHoverFg;
-            _appWindow.TitleBar.ButtonPressedBackgroundColor = titleBarColors.BtnPressBg;
-            _appWindow.TitleBar.ButtonPressedForegroundColor = titleBarColors.BtnPressFg;
+            // Set title bar colors only if window is active and TitleBar exists
+            if (_appWindow.TitleBar != null) // Added null check
+            {
+                _appWindow.TitleBar.BackgroundColor = titleBarColors.Bg;
+                _appWindow.TitleBar.ForegroundColor = titleBarColors.Fg;
+                _appWindow.TitleBar.InactiveBackgroundColor = titleBarColors.InactiveBg;
+                _appWindow.TitleBar.InactiveForegroundColor = titleBarColors.InactiveFg;
+                _appWindow.TitleBar.ButtonBackgroundColor = titleBarColors.BtnBg;
+                _appWindow.TitleBar.ButtonForegroundColor = titleBarColors.BtnFg;
+                _appWindow.TitleBar.ButtonHoverBackgroundColor = titleBarColors.BtnHoverBg;
+                _appWindow.TitleBar.ButtonHoverForegroundColor = titleBarColors.BtnHoverFg;
+                _appWindow.TitleBar.ButtonPressedBackgroundColor = titleBarColors.BtnPressBg;
+                _appWindow.TitleBar.ButtonPressedForegroundColor = titleBarColors.BtnPressFg;
+            }
 
-            int useDarkMode = isDarkTheme ? 1 : 0;
-            DwmSetWindowAttribute(hwnd, 20, ref useDarkMode, sizeof(int));
+            // Set DWM attribute for Windows title bar dark/light mode
+            try // Add try-catch for DwmSetWindowAttribute calls
+            {
+                int useDarkMode = isDarkTheme ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDarkMode, sizeof(int)); // Attribute 20 for Win11+
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDarkMode, sizeof(int)); // Attribute 19 for older Win10
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to set DWM attribute: {ex.Message}");
+            }
         }
 
         private void UpdateHeaderAnimation(bool isUnitContextActive)
@@ -5739,22 +6107,12 @@ namespace GrafikoMat
             var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
             var duration = TimeSpan.FromMilliseconds(300);
 
-            var heightAnim = new DoubleAnimation
-            {
-                To = isUnitContextActive ? 80 : 0,
-                Duration = duration,
-                EasingFunction = ease
-            };
+            var heightAnim = new DoubleAnimation { To = isUnitContextActive ? 80 : 0, Duration = duration, EasingFunction = ease };
             Storyboard.SetTarget(heightAnim, UnitSelectionPanel);
             Storyboard.SetTargetProperty(heightAnim, "Height");
             sb.Children.Add(heightAnim);
 
-            var opacityAnim = new DoubleAnimation
-            {
-                To = isUnitContextActive ? 1 : 0,
-                Duration = duration,
-                EasingFunction = ease
-            };
+            var opacityAnim = new DoubleAnimation { To = isUnitContextActive ? 1 : 0, Duration = duration, EasingFunction = ease };
             Storyboard.SetTarget(opacityAnim, UnitSelectionPanel);
             Storyboard.SetTargetProperty(opacityAnim, "Opacity");
             sb.Children.Add(opacityAnim);
@@ -5776,7 +6134,8 @@ namespace GrafikoMat
                     presenter.IsMaximizable = true;
                     presenter.IsMinimizable = true;
                 }
-                _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
+                // Size is now set by App.xaml.cs logic
+                // _appWindow.Resize(new SizeInt32(MIN_W, MIN_H));
             }
 
             SubclassWindow(hwnd);
@@ -5787,64 +6146,206 @@ namespace GrafikoMat
             _newWndProc = new WndProc(NewWindowProc);
             _wndProcGCHandle = GCHandle.Alloc(_newWndProc);
             var newWndProcPtr = Marshal.GetFunctionPointerForDelegate(_newWndProc);
+            // Use GWLP_WNDPROC index (-4)
             _oldWndProc = SetWindowLongPtr(hwnd, -4, newWndProcPtr);
         }
+
 
         private IntPtr NewWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
             const uint WM_GETMINMAXINFO = 0x0024;
-            if (msg == WM_GETMINMAXINFO)
+            const uint WM_SIZE = 0x0005;
+            const uint WM_MOVE = 0x0003;
+
+            try // Add try-catch around message handling
             {
-                var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-                mmi.ptMinTrackSize.x = MIN_W;
-                mmi.ptMinTrackSize.y = MIN_H;
-                Marshal.StructureToPtr(mmi, lParam, true);
+                if (msg == WM_GETMINMAXINFO)
+                {
+                    var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                    mmi.ptMinTrackSize.x = MIN_W;
+                    mmi.ptMinTrackSize.y = MIN_H;
+                    Marshal.StructureToPtr(mmi, lParam, true);
+                    // Don't return here, let CallWindowProc handle it
+                }
+                // Save window state on size/move events
+                else if ((msg == WM_SIZE || msg == WM_MOVE) && !_isClosing && _appWindow != null && _settingsService != null && DispatcherQueue != null)
+                {
+                    // Use TryEnqueue to avoid blocking UI thread
+                    bool enqueued = DispatcherQueue.TryEnqueue(async () => await SaveWindowStateAsync());
+                    if (!enqueued) System.Diagnostics.Debug.WriteLine("Failed to enqueue SaveWindowStateAsync");
+
+                }
             }
-            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error in NewWindowProc: {ex.Message}");
+            }
+
+
+            // Always call the original window procedure
+            // Ensure _oldWndProc is not IntPtr.Zero before calling
+            return (_oldWndProc != IntPtr.Zero) ? CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam) : IntPtr.Zero;
         }
+
+
+        // NEW Method to save window state
+        private async Task SaveWindowStateAsync()
+        {
+            // Additional check for closing state
+            if (_isClosing || _appWindow == null || _settingsService == null) return;
+
+            try
+            {
+                var presenter = _appWindow.Presenter as OverlappedPresenter;
+                // If presenter is not OverlappedPresenter (e.g., fullscreen), don't save
+                if (presenter == null) return;
+
+                var currentSettings = await _settingsService.LoadSettingsAsync();
+                bool isMaximized = presenter.State == OverlappedPresenterState.Maximized;
+                var currentSize = _appWindow.Size;
+                var currentPosition = _appWindow.Position;
+
+                // Don't save size/position if window is maximized
+                // Keep previous values for LastWindowSize and LastWindowPosition
+                var newSettings = currentSettings with
+                {
+                    WasWindowMaximized = isMaximized,
+                    LastWindowSize = isMaximized ? currentSettings.LastWindowSize : new WindowSize(currentSize.Width, currentSize.Height),
+                    LastWindowPosition = isMaximized ? currentSettings.LastWindowPosition : new WindowPosition(currentPosition.X, currentPosition.Y)
+                };
+
+                // Check if anything changed to avoid unnecessary file writes
+                if (newSettings != currentSettings)
+                {
+                    await _settingsService.SaveSettingsAsync(newSettings);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error saving window state (optional)
+                System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
+            }
+        }
+
 
         private void TryInitializeBackdropController()
         {
             if (DesktopAcrylicController.IsSupported())
             {
-                _acrylicController = new DesktopAcrylicController();
-                _backdropConfiguration = new SystemBackdropConfiguration();
-                _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10);
-                _acrylicController.TintOpacity = 0.7f;
-                _acrylicController.LuminosityOpacity = 0.1f;
-                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
-
-                ((FrameworkElement)this.Content).ActualThemeChanged += (s, e) =>
+                try // Added try-catch for initialization issues
                 {
-                    if (_backdropConfiguration != null)
+                    _acrylicController = new DesktopAcrylicController();
+                    _backdropConfiguration = new SystemBackdropConfiguration();
+
+                    // Set default colors - might be overridden by theme
+                    _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10);
+                    _acrylicController.TintOpacity = 0.7f;
+                    _acrylicController.LuminosityOpacity = 0.1f;
+                    _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
+
+                    // Theme change handler
+                    ((FrameworkElement)this.Content).ActualThemeChanged += (s, e) =>
                     {
-                        _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                        if (_backdropConfiguration != null)
                         {
-                            ElementTheme.Dark => SystemBackdropTheme.Dark,
-                            ElementTheme.Light => SystemBackdropTheme.Light,
-                            _ => SystemBackdropTheme.Default
-                        };
-                    }
-                };
+                            _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                            {
+                                ElementTheme.Dark => SystemBackdropTheme.Dark,
+                                ElementTheme.Light => SystemBackdropTheme.Light,
+                                _ => SystemBackdropTheme.Default
+                            };
+                            // Update Acrylic colors after theme change
+                            UpdateAcrylicColors(((FrameworkElement)this.Content).ActualTheme);
+                        }
+                    };
 
-                _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                    // Set initial theme
+                    _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
+                    {
+                        ElementTheme.Dark => SystemBackdropTheme.Dark,
+                        ElementTheme.Light => SystemBackdropTheme.Light,
+                        _ => SystemBackdropTheme.Default
+                    };
+                    // Set initial Acrylic colors
+                    UpdateAcrylicColors(((FrameworkElement)this.Content).ActualTheme);
+
+
+                    _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
+                    _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
+                }
+                catch (Exception ex)
                 {
-                    ElementTheme.Dark => SystemBackdropTheme.Dark,
-                    ElementTheme.Light => SystemBackdropTheme.Light,
-                    _ => SystemBackdropTheme.Default
-                };
+                    // Log Acrylic initialization error (optional)
+                    System.Diagnostics.Debug.WriteLine($"Error initializing Acrylic backdrop: {ex.Message}");
+                    if (_acrylicController != null)
+                    {
+                        _acrylicController.Dispose();
+                        _acrylicController = null;
+                    }
+                    _backdropConfiguration = null;
+                }
+            }
+        }
+        // NEW Method to update Acrylic colors based on theme
+        private void UpdateAcrylicColors(ElementTheme theme)
+        {
+            if (_acrylicController == null) return;
 
-                _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
-                _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
+            if (theme == ElementTheme.Dark)
+            {
+                _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10); // Darker tint for dark theme
+                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
+            }
+            else // Light or Default (assuming Default follows Light for Acrylic)
+            {
+                _acrylicController.TintColor = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0); // Lighter tint for light theme
+                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3);
             }
         }
 
+        // MODIFIED OnLogout method
         private async void OnLogout(object? sender, RoutedEventArgs e)
         {
             if (_isClosing) return;
+
+            // 1. Save window state before logging out (optional, but good practice)
+            await SaveWindowStateAsync();
+
+            // 2. Sign out from Supabase and delete session file
             await _supabaseService.SignOutAsync();
-            this.Close();
+
+            // 3. Prepare UI for showing the login screen
+            //    Optionally add fade-out animation here, but for simplicity
+            //    we just hide elements and show the loading overlay.
+
+            // Stop any ongoing animations
+            _activeStoryboard?.Stop();
+            _activeStoryboard = null;
+            _isAnimating = false;
+
+            // Hide main UI elements
+            TopBarRow.Visibility = Visibility.Collapsed;
+            UnitSelectionPanel.Visibility = Visibility.Collapsed;
+            MainContentPanel.Visibility = Visibility.Collapsed;
+            ActionButtonsPanel.Visibility = Visibility.Collapsed;
+            BottomStatusBar.Visibility = Visibility.Collapsed;
+            ViewportCurrent.Content = null; // Clear main view
+            LoginOverlay.Content = null;    // Clear login overlay (just in case)
+            StartupOverlayContent.Content = null; // Clear setup overlay (just in case)
+
+            ViewModel.IsUnitContextActive = false; // Hide unit context
+            ViewModel.CurrentViewTitle = string.Empty; // Clear view title
+            _previousUnitIndex = -1; // Reset unit index
+
+            // Show loading overlay
+            InitialLoadingOverlay.Visibility = Visibility.Visible;
+            await Task.Delay(50); // Give UI a moment to show the spinner
+
+            // 4. Restart the initialization process
+            //    This method will check that there's no session and show the login screen.
+            await InitializeApplicationAsync();
         }
+
 
         private void ExportPlaceholder()
         {
@@ -5854,32 +6355,43 @@ namespace GrafikoMat
         public async Task<ContentDialogResult> ShowInfo(string title, string message)
         {
             if (_isClosing) return ContentDialogResult.None;
-            var dialog = new ContentDialog
+            // Ensure dialog is created on the UI thread
+            ContentDialogResult result = ContentDialogResult.None;
+            if (DispatcherQueue != null) // Add null check for DispatcherQueue
             {
-                XamlRoot = this.Content.XamlRoot,
-                Title = title,
-                Content = message,
-                CloseButtonText = "OK",
-                DefaultButton = ContentDialogButton.Close
-            };
-            return await dialog.ShowAsync();
+                await DispatcherQueue.EnqueueAsync(async () => {
+                    var dialog = App.CreateThemedDialog(); // Use method from App.xaml.cs
+                    dialog.Title = title;
+                    dialog.Content = message;
+                    dialog.CloseButtonText = "OK";
+                    dialog.DefaultButton = ContentDialogButton.Close;
+                    try { result = await dialog.ShowAsync(); } catch { /* Ignore dialog errors */ }
+                });
+            }
+            else // Fallback if DispatcherQueue is somehow null
+            {
+                System.Diagnostics.Debug.WriteLine("DispatcherQueue is null in ShowInfo");
+            }
+
+            return result;
         }
 
-        [DllImport("user32.dll", SetLastError = true)]
+        // --- P/Invoke Definitions ---
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
-        [DllImport("user32.dll")]
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+        // Updated DwmSetWindowAttribute declaration
         [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19; // For specific Win10 builds
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20; // For Win11+ and later Win10 builds
+
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int x;
-            public int y;
-        }
+        private struct POINT { public int x; public int y; }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct MINMAXINFO
@@ -5890,8 +6402,9 @@ namespace GrafikoMat
             public POINT ptMinTrackSize;
             public POINT ptMaxTrackSize;
         }
-    }
 
+    }
+    // ... rest of the classes (UiAction, UiActionTemplateSelector) unchanged ...
     public class UiAction
     {
         public string Label { get; }
@@ -10747,7 +11260,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml (1572 bytes)
+===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml (1912 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.ConnectionSettingsView"
@@ -10756,24 +11269,30 @@ namespace GrafikoMat.Views.Settings
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:controls="using:GrafikoMat.Controls"
+    xmlns:common="using:GrafikoMat.Common"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <common:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
     <controls:ActionContainer x:Name="ActionContainer">
-        <StackPanel Spacing="20" MaxWidth="500" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Spacing="20" VerticalAlignment="Center" HorizontalAlignment="Center">
             <TextBlock Text="Połączenie z Bazą Danych" FontSize="20" FontWeight="SemiBold"/>
 
             <TextBlock TextWrapping="Wrap">
-                 Wprowadź tutaj dane połączeniowe do Twojego projektu w Supabase. Te ustawienia są globalne dla całej aplikacji.
+                 Wprowadź tutaj dane połączeniowe do bazy danych GrafikoMat w Supabase.
             </TextBlock>
 
-            <TextBox x:Name="UrlTextBox" Header="Supabase URL"/>
-            <TextBox x:Name="ApiKeyTextBox" Header="Supabase Anon Key"/>
+            <TextBox x:Name="UrlTextBox" Header="Supabase URL" Width="550"/>
+            <TextBox x:Name="ApiKeyTextBox" Header="Supabase Anon Key" Width="550"/>
 
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button x:Name="TestButton" 
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button x:Name="TestButton"
                         Content="Testuj połączenie"
-                        Click="TestButton_Click"/>
-                <Button x:Name="SaveButton" 
+                        Click="TestButton_Click"
+                        Visibility="{Binding IsInitialSetupMode, Converter={StaticResource InverseBooleanToVisibilityConverter}, Mode=OneWay}"/>
+                <Button x:Name="SaveButton"
                         Content="Zapisz i kontynuuj"
                         Style="{StaticResource AccentButtonStyle}"
                         Click="SaveButton_Click"/>
@@ -10783,7 +11302,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml.cs (3648 bytes)
+===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml.cs (5317 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
@@ -10797,16 +11316,27 @@ namespace GrafikoMat.Views.Settings
 {
     public sealed partial class ConnectionSettingsView : UserControl
     {
+        public event Action? ConnectionEstablished;
+        // ZMIANA: Przywrócono ReloadRequired
         public event Action? ReloadRequired;
 
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
         private readonly IUxActionOrchestrator _orchestrator;
 
+        public bool IsInitialSetupMode
+        {
+            get => (bool)GetValue(IsInitialSetupModeProperty);
+            set => SetValue(IsInitialSetupModeProperty, value);
+        }
+        public static readonly DependencyProperty IsInitialSetupModeProperty =
+            DependencyProperty.Register(nameof(IsInitialSetupMode), typeof(bool), typeof(ConnectionSettingsView), new PropertyMetadata(false));
+
         public ConnectionSettingsView()
         {
             this.InitializeComponent();
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            DataContext = this;
         }
 
         public void Initialize(SettingsService service, AppSettings settings)
@@ -10823,6 +11353,7 @@ namespace GrafikoMat.Views.Settings
 
         private async void TestButton_Click(object sender, RoutedEventArgs e)
         {
+            // Ta metoda będzie wywoływana tylko, gdy IsInitialSetupMode jest false
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
                 actionAsync: async () => { await Task.CompletedTask; }, // Sama weryfikacja jest akcją
@@ -10838,51 +11369,74 @@ namespace GrafikoMat.Views.Settings
 
             var newSettings = _appSettings with
             {
-                SupabaseUrl = UrlTextBox.Text,
-                SupabaseAnonKey = ApiKeyTextBox.Text
+                SupabaseUrl = UrlTextBox.Text.Trim(),
+                SupabaseAnonKey = ApiKeyTextBox.Text.Trim()
             };
 
+            bool success = false;
             try
             {
                 await _orchestrator.PerformActionAsync(
                     viewId: ActionContainer.GetViewId(),
                     actionAsync: async () =>
                     {
-                        if (!await RunConnectionTestAsync())
-                        {
-                            throw new Exception("Test połączenia z nowymi danymi nie powiódł się.");
-                        }
                         await _settingsService.SaveSettingsAsync(newSettings);
                     },
-                    verificationAsync: async () => true,
-                    successMessage: "Ustawienia zostały zapisane. Aplikacja zostanie przeładowana.",
-                    errorMessageTitle: "Błąd zapisu"
+                    verificationAsync: RunConnectionTestAsync,
+                    successMessage: "Pomyślnie nawiązano połączenie z bazą danych GrafikoMat w Supabase!",
+                    errorMessageTitle: "Błąd zapisu lub połączenia"
                 );
-
-                await Task.Delay(1500);
-                ReloadRequired?.Invoke();
+                success = true; // Doszliśmy tutaj, więc się udało
             }
             catch (Exception)
             {
-                // Orkiestrator już wyświetlił błąd, więc nie robimy nic więcej
+                success = false; // Orkiestrator obsłużył błąd
+            }
+
+            // ZMIANA: Wywołaj odpowiedni event w zależności od trybu
+            if (success)
+            {
+                if (IsInitialSetupMode)
+                {
+                    // W trybie inicjalnym, wywołaj ConnectionEstablished
+                    ConnectionEstablished?.Invoke();
+                }
+                else
+                {
+                    // W normalnych ustawieniach, daj czas na przeczytanie komunikatu i wywołaj ReloadRequired
+                    await Task.Delay(1500);
+                    ReloadRequired?.Invoke();
+                }
             }
         }
 
+
         private async Task<bool> RunConnectionTestAsync()
         {
-            var url = UrlTextBox.Text;
-            var key = ApiKeyTextBox.Text;
+            var url = UrlTextBox.Text.Trim();
+            var key = ApiKeyTextBox.Text.Trim();
 
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))
             {
                 throw new Exception("URL i klucz API nie mogą być puste.");
             }
+            if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+            {
+                throw new FormatException("Wprowadzony URL jest nieprawidłowy. Powinien zaczynać się od 'http://' lub 'https://'.");
+            }
 
             var options = new SupabaseOptions { AutoConnectRealtime = false, AutoRefreshToken = false };
             var tempClient = new Client(url, key, options);
 
-            await tempClient.From<Unit>().Select("id").Limit(1).Get();
-            return true;
+            try
+            {
+                await tempClient.From<Unit>().Select("id").Limit(1).Get();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Nie można połączyć się z bazą danych Supabase. Sprawdź poprawność URL i klucza API, stan projektu w Supabase oraz połączenie internetowe. Szczegóły: {ex.Message}", ex);
+            }
         }
     }
 }
@@ -11931,7 +12485,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (5370 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (5808 bytes)
 ----- BEGIN -----
 using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
@@ -11978,7 +12532,7 @@ namespace GrafikoMat.Views
             _appSettings = settings;
 
             // ZMIANA: Usunięto domyślne zaznaczanie pierwszego elementu
-            // SettingsMenu.SelectedIndex = 0; 
+            // SettingsMenu.SelectedIndex = 0;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -12008,7 +12562,9 @@ namespace GrafikoMat.Views
             {
                 case "Połączenie z Bazą Danych":
                     var connectionView = new ConnectionSettingsView();
+                    // Upewniamy się, że NIE ustawiamy IsInitialSetupMode (domyślnie false)
                     connectionView.Initialize(_settingsService, _appSettings);
+                    // ZMIANA: Ta linia jest teraz POPRAWNA, bo ReloadRequired istnieje
                     connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
                     viewToLoad = connectionView;
                     break;
@@ -12027,18 +12583,20 @@ namespace GrafikoMat.Views
                     {
                         var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
-                        var container = new ActionContainer { Content = prioritiesView };
-                        prioritiesViewModel.SetViewId(container.GetViewId());
-                        viewToLoad = container;
+                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
+                        var containerPriorities = new ActionContainer { Content = prioritiesView };
+                        prioritiesViewModel.SetViewId(containerPriorities.GetViewId());
+                        viewToLoad = containerPriorities;
                     }
                     break;
                 case "Silnik Obliczeniowy":
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
-                        var container = new ActionContainer { Content = engineView };
-                        engineView.ViewModel.SetViewId(container.GetViewId());
-                        viewToLoad = container;
+                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
+                        var containerEngine = new ActionContainer { Content = engineView };
+                        engineView.ViewModel.SetViewId(containerEngine.GetViewId());
+                        viewToLoad = containerEngine;
                     }
                     break;
                 case "Wygląd i Motyw":
