@@ -6,15 +6,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using SbClient = Supabase.Client; // <-- NOWY ALIAS
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Repositories
 {
     public class SupabaseUnitRepository : IUnitRepository
     {
-        private readonly SbClient _supabase; // <-- ZMIANA TYPU
+        private readonly SbClient _supabase;
 
-        public SupabaseUnitRepository(SbClient supabaseClient) // <-- ZMIANA TYPU
+        public SupabaseUnitRepository(SbClient supabaseClient)
         {
             _supabase = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
         }
@@ -36,14 +36,29 @@ namespace GrafikoMat.Repositories
 
         public async Task<Unit?> GetUniqueByHospitalNameStartAsync(string partialName)
         {
+            // Pobierz wszystkie jednostki zaczynające się od podanego tekstu
             var response = await _supabase.From<Unit>()
                 .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
-                .Limit(2)
                 .Get();
 
-            return response.Models != null && response.Models.Count == 1
-                ? response.Models.First()
-                : null;
+            var matches = response.Models ?? new List<Unit>();
+
+            if (!matches.Any())
+                return null;
+
+            // Sprawdź czy wszystkie pasujące jednostki mają tę samą nazwę szpitala
+            var uniqueHospitalNames = matches
+                .Select(u => u.HospitalFullName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Jeśli jest dokładnie jedna unikalna nazwa szpitala, zwróć pierwszą jednostkę
+            if (uniqueHospitalNames.Count == 1)
+            {
+                return matches.First();
+            }
+
+            return null;
         }
 
         public async Task SaveAsync(Unit unit)

@@ -19,6 +19,8 @@ namespace GrafikoMat.Views
         private SettingsService? _settingsService;
         private AppSettings? _appSettings;
         public event Action? ReloadRequired;
+        public event Action<List<UiAction>>? ActionButtonsChanged;
+
         public SettingsView()
         {
             this.InitializeComponent();
@@ -82,7 +84,16 @@ namespace GrafikoMat.Views
                 case "Zarządzanie Jednostkami":
                     if (_unitRepository != null)
                     {
-                        viewToLoad = new UnitsSettingsView(_unitRepository);
+                        var unitsView = new UnitsSettingsView(_unitRepository);
+
+                        // DODAJ OBSŁUGĘ AKCJI
+                        unitsView.ActionsChanged += (actions) =>
+                        {
+                            // Przekazanie akcji do MainWindow przez event
+                            ActionButtonsChanged?.Invoke(actions);
+                        };
+
+                        viewToLoad = unitsView;
                     }
                     else
                     {

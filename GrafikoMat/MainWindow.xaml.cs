@@ -677,6 +677,20 @@ namespace GrafikoMat
             if ((_isClosing || _appSettings == null) && !forceRefresh) return;
             _settingsView = new SettingsView();
             _settingsView.ReloadRequired += RefreshDataServicesAsync;
+
+            // DODAJ OBSŁUGĘ AKCJI
+            _settingsView.ActionButtonsChanged += (actions) =>
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    ActionsRight.Clear();
+                    foreach (var action in actions)
+                    {
+                        ActionsRight.Add(action);
+                    }
+                });
+            };
+
             _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
 
             if (!forceRefresh)
@@ -731,8 +745,10 @@ namespace GrafikoMat
         private void BuildActionsForSettings()
         {
             ActionsLeft.Clear();
+            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(SwitchToDashboard), isPrimary: false));
+
+            // Wyczyść prawe akcje - będą ustawiane dynamicznie przez podwidoki
             ActionsRight.Clear();
-            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private void BuildActionsForManage()
