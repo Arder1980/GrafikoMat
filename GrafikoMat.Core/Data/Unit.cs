@@ -5,7 +5,6 @@ using System;
 namespace GrafikoMat.Core.Data
 {
     [Table("units")]
-    // NOWA ZMIANA: Implementacja interfejsu dla łatwego sortowania
     public class Unit : BaseModel, IComparable<Unit>
     {
         [PrimaryKey("id")]
@@ -20,22 +19,23 @@ namespace GrafikoMat.Core.Data
         [Column("department_name")]
         public string DepartmentName { get; set; } = string.Empty;
 
-        // NOWA WŁAŚCIWOŚĆ: Status archiwizacji
         [Column("is_archived")]
         public bool IsArchived { get; set; } = false;
 
-        // ================== NOWA WŁAŚCIWOŚĆ ==================
-        /// <summary>
-        /// Gdy true, dyżury dla tej jednostki domyślnie dzielone są na 12h (Dzień/Noc).
-        /// </summary>
         [Column("use_twelve_hour_shifts")]
         public bool UseTwelveHourShiftsByDefault { get; set; } = false;
+
+        // ================== NOWA WŁAŚCIWOŚĆ ==================
+        /// <summary>
+        /// Gdy true, nieobsadzone sloty w grafiku będą oznaczane jako "Teleradiologia".
+        /// </summary>
+        [Column("allow_teleradiology_fallback")]
+        public bool AllowTeleradiologyFallback { get; set; } = false;
         // ======================================================
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        // NOWA METODA: Implementacja sortowania po nazwie skróconej
         public int CompareTo(Unit? other)
         {
             if (other == null) return 1;

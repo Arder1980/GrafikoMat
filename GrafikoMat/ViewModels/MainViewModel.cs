@@ -23,6 +23,8 @@ namespace GrafikoMat.ViewModels
 {
     public class MainViewModel : ObservableObject, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
+        private ScheduleSolution? _lastGeneratedSolution = null;
+
         protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
         {
             if (EqualityComparer<T>.Default.Equals(backingStore, value))
@@ -108,7 +110,6 @@ namespace GrafikoMat.ViewModels
         public ICommand SwitchToPreviousUnitCommand { get; set; }
         public ICommand SwitchToNextUnitCommand { get; set; }
 
-        // NOWE WŁAŚCIWOŚCI: Ilość jednostek i indeks aktualnej
         public int TotalUnitsCount => _userUnits.Count;
         public int CurrentUnitIndex => _activeUnitIndex;
 
@@ -116,7 +117,7 @@ namespace GrafikoMat.ViewModels
         {
             SwitchToPreviousUnitCommand = new RelayCommand(SwitchToPreviousUnit);
             SwitchToNextUnitCommand = new RelayCommand(SwitchToNextUnit);
-            UpdateRosterForSelectedMonth();
+            UpdateRosterForSelectedMonth(); // Inicjalizuje pustą listę RosterRows
             WeakReferenceMessenger.Default.Register<SettingsHaveChangedMessage>(this);
             WeakReferenceMessenger.Default.Register<UnitDataChangedMessage>(this);
         }
@@ -229,10 +230,22 @@ namespace GrafikoMat.ViewModels
         public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();
-            if (ActiveUnit == null) return;
+            if (ActiveUnit == null)
+            {
+                // Jeśli nie ma aktywnej jednostki, wyczyść też wynik grafiku
+                _lastGeneratedSolution = null;
+                UpdateRosterForSelectedMonth();
+                return;
+            }
 
             var doctorIdsForUnit = _allAssignments.Where(a => a.UnitId == ActiveUnit.Id && a.IsActive).Select(a => a.DoctorId).ToHashSet();
-            if (!doctorIdsForUnit.Any()) return;
+            if (!doctorIdsForUnit.Any())
+            {
+                // Jeśli nie ma lekarzy, wyczyść też wynik grafiku
+                _lastGeneratedSolution = null;
+                UpdateRosterForSelectedMonth();
+                return;
+            }
 
             var doctorsForUnit = _allDoctors.Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived).OrderBy(d => d.LastName).ThenBy(d => d.FirstName).ToList();
             var duplicateFullNames = doctorsForUnit.GroupBy(d => d.FullName).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
@@ -245,6 +258,7 @@ namespace GrafikoMat.ViewModels
                 string displayName = needsDifferentiator ? $"{doctor.LastName} {doctor.FirstName} ({doctor.Abbreviation})" : $"{doctor.LastName} {doctor.FirstName}";
                 DoctorRows.Add(new DoctorRow(doctor, displayName, hasDecls));
             }
+            // Po załadowaniu lekarzy odśwież widok grafiku (może użyć _lastGeneratedSolution)
             UpdateRosterForSelectedMonth();
         }
 
@@ -252,6 +266,8 @@ namespace GrafikoMat.ViewModels
         {
             RosterRows.Clear();
             int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
+            bool allowTele = ActiveUnit?.AllowTeleradiologyFallback ?? false; // Pobierz ustawienie dla aktywnej jednostki
+
             for (int day = 1; day <= daysInMonth; day++)
             {
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, day);
@@ -261,9 +277,27 @@ namespace GrafikoMat.ViewModels
                                 date.DayOfWeek == DayOfWeek.Sunday ||
                                 PolishHolidays.IsPublicHoliday(date);
                 bool isLast = (day == daysInMonth);
-                RosterRows.Add(new RosterRow(dateLabel, "—", isDayOff, isLast));
+
+                string dutyLabel = "—"; // Domyślnie brak obsady
+
+                // Sprawdź, czy mamy wygenerowany grafik dla tego miesiąca
+                if (_lastGeneratedSolution != null)
+                {
+                    if (_lastGeneratedSolution.Assignments.TryGetValue(date, out var doctor) && doctor != null)
+                    {
+                        dutyLabel = doctor.Abbreviation; // Przypisany lekarz
+                    }
+                    else // Brak przypisanego lekarza (null w solution.Assignments)
+                    {
+                        // Zastosuj logikę teleradiologii
+                        dutyLabel = allowTele ? "TELE" : "—"; // Użyj "TELE" jeśli dozwolone, inaczej "—"
+                    }
+                }
+
+                RosterRows.Add(new RosterRow(dateLabel, dutyLabel, isDayOff, isLast));
             }
         }
+
 
         public void RefreshDeclarationsForDashboard()
         {
@@ -330,11 +364,55 @@ namespace GrafikoMat.ViewModels
 
         public async Task GenerateScheduleAsync()
         {
-            if (_settingsService == null) return;
+            if (_settingsService == null || ActiveUnit == null)
+            {
+                // TODO: Pokaż błąd - brak jednostki lub serwisu ustawień
+                return;
+            }
+
             var settings = await _settingsService.LoadSettingsAsync();
             var activePriorities = settings.Priorities.Where(p => p.IsActive).Select(p => p.Priority).ToList();
-            if (!activePriorities.Any()) return;
-            var scheduleInput = new ScheduleInput();
+            if (!activePriorities.Any())
+            {
+                // TODO: Pokaż błąd - brak priorytetów
+                return;
+            }
+
+            // --- Przygotowanie ScheduleInput ---
+            // TODO: Zastąpić poniższy kod rzeczywistym wczytywaniem deklaracji dla wybranego miesiąca
+            var doctorsForSchedule = DoctorRows.Select(dr => dr.Profile).ToList();
+            if (!doctorsForSchedule.Any())
+            {
+                // TODO: Pokaż błąd - brak lekarzy dla jednostki
+                return;
+            }
+            // Przykład budowania Availability (na podstawie danych z _declByKey - DO ROZWINIĘCIA)
+            var availability = new Dictionary<DateTime, Dictionary<string, AvailabilityType>>();
+            int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
+            for (int d = 1; d <= daysInMonth; d++)
+            {
+                var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, d);
+                var dayAvailability = new Dictionary<string, AvailabilityType>();
+                foreach (var doctor in doctorsForSchedule)
+                {
+                    // Tutaj trzeba by wczytać prawdziwą deklarację z _declByKey i zmapować na AvailabilityType
+                    // Na razie przykład: co drugi lekarz jest dostępny
+                    dayAvailability[doctor.Abbreviation] = (doctorsForSchedule.IndexOf(doctor) % 2 == 0) ? AvailabilityType.Available : AvailabilityType.Unavailable;
+                }
+                availability[date] = dayAvailability;
+            }
+
+            var scheduleInput = new ScheduleInput
+            {
+                Doctors = doctorsForSchedule,
+                Availability = availability, // Użyj wczytanych/przykładowych danych
+                DutyLimits = doctorsForSchedule.ToDictionary(dr => dr.Abbreviation, dr => 10) // Przykładowy limit, TODO: Wczytać prawdziwe limity
+                // AllowTeleradiologyFallback NIE jest tutaj potrzebne
+            };
+            // --- Koniec przygotowania ScheduleInput ---
+
+
+            ScheduleSolution solution;
             try
             {
                 var solverParams = new SolverParameters
@@ -349,9 +427,23 @@ namespace GrafikoMat.ViewModels
                     TabuMaxIterations = settings.TabuMaxIterations
                 };
                 var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities);
-                var solution = await Task.Run(() => solver.FindOptimalSolution());
+
+                // Wywołanie solvera w tle
+                // TODO: Dodać obsługę progresu i anulowania
+                solution = await Task.Run(() => solver.FindOptimalSolution());
+
+                _lastGeneratedSolution = solution; // Zapisz wynik
+
             }
-            catch (Exception ex) { /* TODO: Błąd */ }
+            catch (Exception ex)
+            {
+                // TODO: Pokaż błąd generowania
+                Console.WriteLine($"Błąd generowania grafiku: {ex.Message}"); // Tymczasowy log
+                _lastGeneratedSolution = null; // Wyczyść stary wynik w razie błędu
+            }
+
+            // Odśwież widok tabeli z wynikiem (RosterRows)
+            UpdateRosterForSelectedMonth();
         }
     }
 

@@ -173,6 +173,9 @@ namespace GrafikoMat.Views.Settings
                 successMessage: $"Jednostka '{selectedUnit.Name}' została zarchiwizowana.",
                 errorMessageTitle: "Błąd archiwizacji"
             );
+            // ================== NOWA LINIA ==================
+            WeakReferenceMessenger.Default.Send(new UnitDataChangedMessage());
+            // ==============================================
         }
 
         private async void RestoreButton_Click(object sender, RoutedEventArgs e)
@@ -190,6 +193,9 @@ namespace GrafikoMat.Views.Settings
                 successMessage: $"Jednostka '{selectedUnit.Name}' została przywrócona.",
                 errorMessageTitle: "Błąd przywracania"
             );
+            // ================== NOWA LINIA ==================
+            WeakReferenceMessenger.Default.Send(new UnitDataChangedMessage());
+            // ==============================================
         }
 
         private async void AddButton_Click(object sender, RoutedEventArgs e) => await ShowUnitDialogAsync(null);
@@ -213,11 +219,24 @@ namespace GrafikoMat.Views.Settings
                 IsChecked = existingUnit?.UseTwelveHourShiftsByDefault ?? false,
                 Margin = new Thickness(0, 8, 0, 0)
             };
+            // ================== NOWY CHECKBOX ==================
+            var allowTeleCheckBox = new CheckBox
+            {
+                Content = "Zezwalaj na teleradiologię jako zastępstwo przy braku obsady",
+                IsChecked = existingUnit?.AllowTeleradiologyFallback ?? false,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            // ================================================
+
             hospitalNameTextBox.TextChanged += HospitalNameTextBox_TextChanged;
             hospitalNameTextBox.KeyDown += HospitalNameTextBox_KeyDown;
             hospitalNameTextBox.LostFocus += HospitalNameTextBox_LostFocus;
             hospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(nameTextBox, departmentNameTextBox);
-            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox, use12hCheckBox }, Width = 650 };
+
+            // ================== AKTUALIZACJA KONTROLEK W PANELU ==================
+            var panel = new StackPanel { Spacing = 12, Children = { hospitalNameTextBox, departmentNameTextBox, nameTextBox, use12hCheckBox, allowTeleCheckBox }, Width = 650 };
+            // ===================================================================
+
             var dialog = App.CreateThemedDialog();
             dialog.Title = isEditMode ? "Edytuj jednostkę" : "Dodaj nową jednostkę";
             dialog.Content = panel;
@@ -233,6 +252,9 @@ namespace GrafikoMat.Views.Settings
             unitToSave.HospitalFullName = hospitalNameTextBox.Text;
             unitToSave.DepartmentName = departmentNameTextBox.Text;
             unitToSave.UseTwelveHourShiftsByDefault = use12hCheckBox.IsChecked ?? false;
+            // ================== ZAPIS NOWEJ WŁAŚCIWOŚCI ==================
+            unitToSave.AllowTeleradiologyFallback = allowTeleCheckBox.IsChecked ?? false;
+            // ==========================================================
 
             await _orchestrator.PerformActionAsync(
                 viewId: ActionContainer.GetViewId(),
@@ -240,16 +262,18 @@ namespace GrafikoMat.Views.Settings
                 verificationAsync: async () =>
                 {
                     await LoadUnitsAsync();
-                    return _masterUnitList.Any(u => u.Id == unitToSave.Id && u.Name == unitToSave.Name);
+                    // ZMIANA: Sprawdzamy też nową właściwość dla pewności
+                    return _masterUnitList.Any(u => u.Id == unitToSave.Id &&
+                                                    u.Name == unitToSave.Name &&
+                                                    u.AllowTeleradiologyFallback == unitToSave.AllowTeleradiologyFallback);
                 },
                 successMessage: isEditMode ? "Poprawnie zapisano zmiany w jednostce." : "Nowa jednostka została pomyślnie dodana.",
                 errorMessageTitle: "Błąd zapisu jednostki"
             );
 
-            // ================== NOWA LINIA ==================
-            // Informujemy resztę aplikacji, że dane jednostek mogły się zmienić.
+            // ================== ZMIANA: Przeniesione z UnitsSettingsView.xaml.cs, aby wywołać PO zapisie ==================
             WeakReferenceMessenger.Default.Send(new UnitDataChangedMessage());
-            // ==============================================
+            // =======================================================================================================
         }
     }
 }
