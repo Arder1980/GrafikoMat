@@ -5,8 +5,8 @@
       "mtime": 1756142090.0
     },
     ".gitignore": {
-      "hash": "cecdcf578be42a04a093cf13b289090a5108e0ba6413a08fd5beec9ee482cc47",
-      "mtime": 1756142090.0
+      "hash": "b26e2e6dcc24cb2c256911bb7079493b4e471769f42b6212b6316995f11378db",
+      "mtime": 1760805378.9546914
     },
     "claude_pyrojects.config": {
       "hash": "37fba5d7a5ccb5ce4d3558524f4a0437d96a830346e696f3109e65132db0df8f",
@@ -21,8 +21,8 @@
       "mtime": 1760721545.0
     },
     "claude_pyrojects.manifest": {
-      "hash": "c906d8c973fcafb74ac6178de4dccdbc316645d4b56234e3beaeb35365db3122",
-      "mtime": 1760787149.6880531
+      "hash": "842b54841fbc998694e3d958b3674782396a4a44ba8f03e5f92057b0fee6e27b",
+      "mtime": 1760792651.8528514
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "5d31686b6cb4892da7f1b5a506135237416719275d57fe8bc3f2f33ba836a9e0",
-      "mtime": 1760792634.5862033
+      "mtime": 1760806562.0901666
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -53,24 +53,24 @@
       "mtime": 1756132658.0
     },
     "GrafikoMat\\App.xaml": {
-      "hash": "9dbaec31a5ae60c39ca1154ad0d27115337369e1801a4542f5c663fab54f5127",
-      "mtime": 1760419851.0
+      "hash": "7c1650944d2dd7820d121ef93c5b10f2b51a8b65e332c7ec4733e3d734ec54db",
+      "mtime": 1760794187.7179265
     },
     "GrafikoMat\\App.xaml.cs": {
-      "hash": "9136ba58455c78031b9d1f2334e05372311bb71b79cee3e391792a2170bd8357",
-      "mtime": 1760782492.0261695
+      "hash": "f1b021bb5a1c69cb73328c8868991ce0b0e69a376a6e3cdb7c72897eddea20ba",
+      "mtime": 1760793916.4099493
     },
     "GrafikoMat\\GrafikoMat.WinUI.csproj": {
       "hash": "b5e3ad3e3915b226c4f59f9a06cae242100e5a28d04adbef43da9a6e2274225f",
       "mtime": 1760280081.0
     },
     "GrafikoMat\\MainWindow.xaml": {
-      "hash": "3c4c6cb419d4176be9ef81e88d9a45ef8579b3db87b0359cd60330cb2b273608",
-      "mtime": 1760792205.9462793
+      "hash": "2263d5f73197a29d894eb375aa5d683357fb4d5c7e9e049934d118bb6912e71a",
+      "mtime": 1760795890.2307587
     },
     "GrafikoMat\\MainWindow.xaml.cs": {
-      "hash": "67848b5d4b35b5a95845a81109bf27a87a997fd4eed8686946dcfccaa8edc72e",
-      "mtime": 1760792452.8880801
+      "hash": "59515b4c6f364d4dce9b4bd2ac9bb9524fbe5cf44612e1527fbc43680fd4cff4",
+      "mtime": 1760795933.7469976
     },
     "GrafikoMat\\Package.appxmanifest": {
       "hash": "93d142cda6a1423ba0c0fef96265e61ff6f13657e2f322549c23e661460934ed",
@@ -204,6 +204,10 @@
       "hash": "7216f6042ee6d4fca6a762e8fc4eae3825b11408b5f89cc3bbdba27dc6f53403",
       "mtime": 1757516456.0
     },
+    "GrafikoMat\\Services\\AcrylicBackdropManager.cs": {
+      "hash": "ab19a1ba2ced62423bb9f533cba3f7556b740ce9f1cc63dc931a111717b4c225",
+      "mtime": 1760795377.4754846
+    },
     "GrafikoMat\\Services\\FileSessionHandler.cs": {
       "hash": "0b6683993734827e1a2628d17b872b05c7876b4d115195e91c15c6066e89269b",
       "mtime": 1757195889.0
@@ -265,8 +269,8 @@
       "mtime": 1760172617.0
     },
     "GrafikoMat\\ViewModels\\MainViewModel.cs": {
-      "hash": "14b2cc2856abd4eea0868fb17b35f86564ab7d05869563c0ef4586893120abdc",
-      "mtime": 1760721910.0
+      "hash": "89ba85f1f73c22365723241cb25ea576da54ae7401498c852a15ed03ad59e35a",
+      "mtime": 1760804036.564404
     },
     "GrafikoMat\\ViewModels\\ManagementViewModel.cs": {
       "hash": "944eebbba09505705220626e6e5176f98fc669553ce542f5a52a0de5c8b8bbd0",
@@ -369,8 +373,8 @@
       "mtime": 1757866950.0
     },
     "GrafikoMat\\Views\\Settings\\UnitsSettingsView.xaml.cs": {
-      "hash": "06cd8cc85ddbdf58e2b56baf9e935c100a272ea235f490713915c58cbee5c1a2",
-      "mtime": 1760676965.0
+      "hash": "b1fe68f5c7c7458e88c88a0c7788d2c815cce9340b4aa6139d0cad1f288559d5",
+      "mtime": 1760804036.595416
     },
     "grafikomat-web\\.env.local": {
       "hash": "da51d20d67384867774fd3e0211085bc88ad9c06a2c3f589154be9636b6d59d1",
@@ -569,8 +573,8 @@
       "mtime": 1756996175.0
     },
     "GrafikoMat.Core\\Data\\Unit.cs": {
-      "hash": "705a61c4ed2998212f5caf60eeb11b1d3207eee4d95946435da97e0648e4e27e",
-      "mtime": 1760676965.0
+      "hash": "8ff6bfcf4687ae137618c52723195523b27a3281eb1e2a690d2dab4c41f8b9f0",
+      "mtime": 1760804036.6114326
     },
     "GrafikoMat.Core\\Data\\UnitDoctorAssignment.cs": {
       "hash": "276409d03f89dab93e88b826d219e2a03996f986df6f8f56e2f538ba012cbecf",
@@ -705,5 +709,5 @@
       "mtime": 1757151896.0
     }
   },
-  "last_sync": "2025-10-18T15:04:11.849149"
+  "last_sync": "2025-10-18T18:56:30.457672"
 }

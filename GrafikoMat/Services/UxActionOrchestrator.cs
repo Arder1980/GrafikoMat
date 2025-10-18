@@ -52,9 +52,16 @@ namespace GrafikoMat.Services
         public async Task PerformLoadAsync(Guid viewId, Func<Task> loadActionAsync)
         {
             _messenger.Send(new ShowBusyOverlayMessage(viewId));
+
+            // Dodajemy małe opóźnienie, aby overlay mógł się poprawnie wyświetlić
+            await Task.Delay(100);
+
             try
             {
                 await loadActionAsync();
+
+                // Dodajemy małe opóźnienie przed ukryciem, aby uniknąć "migania"
+                await Task.Delay(200);
             }
             catch (Exception ex)
             {
