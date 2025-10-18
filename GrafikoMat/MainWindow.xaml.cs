@@ -252,7 +252,7 @@ namespace GrafikoMat
 
             _currentDeclarationsView.ViewModel?.ReloadForNewUnit(doctorsForUnit, initialIndex, ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, ViewModel.CurrentUnitIndex);
             await Task.Delay(150);
-            _currentDeclarationsView.RefreshCellBrushes();
+            _currentDeclarationsView?.UpdateAllCellBrushes();
             await Task.Delay(50);
 
             if (calendarGrid != null)

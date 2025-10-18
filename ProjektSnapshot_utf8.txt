@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-18 23:37:56
+# Data:       2025-10-19 01:08:24
 # Katalog:    C:\Users\Shadow\OneDrive\Dokumenty\GrafikoMat
 # Maszyna:    SHADOW-F6TNGC78
 # Użytkownik: Shadow
@@ -43,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 174
+## FILES (liczba): 176
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -80,6 +80,8 @@ FILE GrafikoMat.Core\Scheduling\Validation\ConstraintValidationService.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
 FILE GrafikoMat\App.xaml.cs
+FILE GrafikoMat\Common\AnimationExtensions.cs
+FILE GrafikoMat\Common\AppPermissions.cs
 FILE GrafikoMat\Common\CalendarBrushConverters.cs
 FILE GrafikoMat\Common\Converters.cs
 FILE GrafikoMat\Common\DispatcherQueueExtensions.cs
@@ -3474,6 +3476,108 @@ namespace GrafikoMat
 }
 ----- END -----
 
+===== FILE: GrafikoMat\Common\AnimationExtensions.cs (749 bytes)
+----- BEGIN -----
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media.Animation;
+
+namespace GrafikoMat.Common // Upewnij się, że namespace pasuje do folderu
+{
+    /// <summary>
+    /// Zawiera metody rozszerzające dla animacji WinUI.
+    /// </summary>
+    public static class AnimationExtensions
+    {
+        /// <summary>
+        /// Ustawia cel i właściwość dla animacji DoubleAnimation (fluent syntax).
+        /// </summary>
+        public static DoubleAnimation SetTarget(this DoubleAnimation animation, DependencyObject target, string propertyPath)
+        {
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, propertyPath);
+            return animation;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\Common\AppPermissions.cs (3610 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace GrafikoMat.Common // lub GrafikoMat.Services
+{
+    /// <summary>
+    /// Statyczna klasa centralizująca logikę sprawdzania uprawnień w aplikacji.
+    /// Definiuje poziomy ról i udostępnia metody do weryfikacji dostępu do funkcji.
+    /// </summary>
+    public static class AppPermissions
+    {
+        // Poziomy uprawnień dla czytelności
+        public const int UserLevel = 0;
+        public const int AdminLevel = 1;
+        public const int SuperAdminLevel = 9; // Lub wyższy, np. 10
+
+        /// <summary> Sprawdza, czy użytkownik ma uprawnienia co najmniej Administratora. </summary>
+        public static bool IsAdminOrHigher(int userLevel) => userLevel >= AdminLevel;
+
+        /// <summary> Sprawdza, czy użytkownik ma uprawnienia Superadministratora. </summary>
+        public static bool IsSuperAdmin(int userLevel) => userLevel >= SuperAdminLevel;
+
+        /// <summary> Sprawdza, czy użytkownik może zarządzać użytkownikami (dodawać, edytować, archiwizować). </summary>
+        public static bool CanManageUsers(int userLevel) => IsSuperAdmin(userLevel);
+
+        /// <summary> Sprawdza, czy użytkownik może edytować deklaracje innych użytkowników. </summary>
+        public static bool CanEditOtherDeclarations(int userLevel) => IsAdminOrHigher(userLevel);
+
+        /// <summary> Sprawdza, czy użytkownik może zarządzać jednostkami (dodawać, edytować). </summary>
+        public static bool CanManageUnits(int userLevel) => IsSuperAdmin(userLevel); // Tylko SuperAdmin
+
+        /// <summary> Sprawdza, czy użytkownik ma dostęp do wszystkich opcji w ustawieniach. </summary>
+        public static bool CanAccessAllSettings(int userLevel) => IsSuperAdmin(userLevel);
+
+        /// <summary> Sprawdza, czy użytkownik ma dostęp do podstawowych opcji w ustawieniach (Wygląd, Priorytety, Silnik). </summary>
+        public static bool CanAccessBasicSettings(int userLevel) => userLevel >= UserLevel; // Wszyscy
+
+        /// <summary>
+        /// Zwraca listę tytułów menu ustawień dozwolonych dla danego poziomu uprawnień,
+        /// zachowując predefiniowaną kolejność.
+        /// </summary>
+        public static List<string> GetAllowedSettingsMenuItems(int userLevel)
+        {
+            var allowedItems = new List<string>
+            {
+                "Wygląd i Motyw",
+                "Priorytety Obliczeń Grafiku",
+                "Silnik Obliczeniowy"
+            };
+
+            // Tylko SuperAdmin widzi zarządzanie połączeniem i jednostkami
+            if (IsSuperAdmin(userLevel))
+            {
+                allowedItems.Add("Połączenie z Bazą Danych");
+                allowedItems.Add("Zarządzanie Jednostkami");
+            }
+            // Można tu dodać 'else if (IsAdminOrHigher(userLevel))' gdyby Admin miał coś więcej niż User
+
+            // Predefiniowana kolejność wszystkich możliwych opcji
+            var orderedTitles = new[] {
+                "Wygląd i Motyw",                   // Index 0
+                "Połączenie z Bazą Danych",        // Index 1
+                "Zarządzanie Jednostkami",          // Index 2
+                "Priorytety Obliczeń Grafiku",     // Index 3
+                "Silnik Obliczeniowy"              // Index 4
+            };
+
+            // Sortuj dozwolone elementy zgodnie z predefiniowaną kolejnością
+            return allowedItems.OrderBy(item => Array.IndexOf(orderedTitles, item)).ToList();
+        }
+    }
+}
+----- END -----
+
 ===== FILE: GrafikoMat\Common\CalendarBrushConverters.cs (3255 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml;
@@ -6691,7 +6795,7 @@ namespace GrafikoMat.Repositories
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Repositories\SupabaseUnitRepository.cs (2063 bytes)
+===== FILE: GrafikoMat\Repositories\SupabaseUnitRepository.cs (2576 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
@@ -6701,15 +6805,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using SbClient = Supabase.Client; // <-- NOWY ALIAS
+using SbClient = Supabase.Client;
 
 namespace GrafikoMat.Repositories
 {
     public class SupabaseUnitRepository : IUnitRepository
     {
-        private readonly SbClient _supabase; // <-- ZMIANA TYPU
+        private readonly SbClient _supabase;
 
-        public SupabaseUnitRepository(SbClient supabaseClient) // <-- ZMIANA TYPU
+        public SupabaseUnitRepository(SbClient supabaseClient)
         {
             _supabase = supabaseClient ?? throw new ArgumentNullException(nameof(supabaseClient));
         }
@@ -6731,14 +6835,29 @@ namespace GrafikoMat.Repositories
 
         public async Task<Unit?> GetUniqueByHospitalNameStartAsync(string partialName)
         {
+            // Pobierz wszystkie jednostki zaczynające się od podanego tekstu
             var response = await _supabase.From<Unit>()
                 .Filter("hospital_full_name", Constants.Operator.ILike, $"{partialName}%")
-                .Limit(2)
                 .Get();
 
-            return response.Models != null && response.Models.Count == 1
-                ? response.Models.First()
-                : null;
+            var matches = response.Models ?? new List<Unit>();
+
+            if (!matches.Any())
+                return null;
+
+            // Sprawdź czy wszystkie pasujące jednostki mają tę samą nazwę szpitala
+            var uniqueHospitalNames = matches
+                .Select(u => u.HospitalFullName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Jeśli jest dokładnie jedna unikalna nazwa szpitala, zwróć pierwszą jednostkę
+            if (uniqueHospitalNames.Count == 1)
+            {
+                return matches.First();
+            }
+
+            return null;
         }
 
         public async Task SaveAsync(Unit unit)
