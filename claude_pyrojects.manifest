@@ -21,8 +21,8 @@
       "mtime": 1760721545.0
     },
     "claude_pyrojects.manifest": {
-      "hash": "53813ef368232bc02500d2622dbc673e80ffc03f98e048b48cd3a441215618df",
-      "mtime": 1760733443.0
+      "hash": "c906d8c973fcafb74ac6178de4dccdbc316645d4b56234e3beaeb35365db3122",
+      "mtime": 1760787149.6880531
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "5d31686b6cb4892da7f1b5a506135237416719275d57fe8bc3f2f33ba836a9e0",
-      "mtime": 1760786348.3291545
+      "mtime": 1760792634.5862033
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -65,12 +65,12 @@
       "mtime": 1760280081.0
     },
     "GrafikoMat\\MainWindow.xaml": {
-      "hash": "4f6bdb3965050a66ea27901fd6f05d169d740ed5884480201b0415796cb1fff0",
-      "mtime": 1760722265.0
+      "hash": "3c4c6cb419d4176be9ef81e88d9a45ef8579b3db87b0359cd60330cb2b273608",
+      "mtime": 1760792205.9462793
     },
     "GrafikoMat\\MainWindow.xaml.cs": {
-      "hash": "c3cf7fa7c0213dd248ac0de0e061731392c388f05aa708bae83afc4cf6e80e1d",
-      "mtime": 1760786566.2766633
+      "hash": "67848b5d4b35b5a95845a81109bf27a87a997fd4eed8686946dcfccaa8edc72e",
+      "mtime": 1760792452.8880801
     },
     "GrafikoMat\\Package.appxmanifest": {
       "hash": "93d142cda6a1423ba0c0fef96265e61ff6f13657e2f322549c23e661460934ed",
@@ -337,8 +337,8 @@
       "mtime": 1757629645.0
     },
     "GrafikoMat\\Views\\Settings\\AppearanceSettingsView.xaml.cs": {
-      "hash": "160c9fc9bfd2123a3ded879871f35b7ca85e48a1acb95cfd72d5de14b18db202",
-      "mtime": 1757787399.0
+      "hash": "ed5edca4fe2b889fcdea66b43979613ea2b9808ae99adb30851d4ba760ccc889",
+      "mtime": 1760789415.109829
     },
     "GrafikoMat\\Views\\Settings\\ConnectionSettingsView.xaml": {
       "hash": "137db9bb361c01a7f93231065cb1262a2f2974ac2d421a3bfdd73081403626ec",
@@ -705,5 +705,5 @@
       "mtime": 1757151896.0
     }
   },
-  "last_sync": "2025-10-18T13:32:29.686122"
+  "last_sync": "2025-10-18T15:04:11.849149"
 }

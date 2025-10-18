@@ -58,8 +58,7 @@ namespace GrafikoMat
         private IntPtr _oldWndProc;
         private GCHandle _wndProcGCHandle;
 
-        private DesktopAcrylicController? _acrylicController;
-        private SystemBackdropConfiguration? _backdropConfiguration;
+        private AcrylicBackdropManager? _backdropManager;
 
         private readonly SettingsService _settingsService;
         private readonly SupabaseService _supabaseService;
@@ -82,7 +81,8 @@ namespace GrafikoMat
             this.SetTitleBar(DragBar);
             InitAppWindow();
 
-            TryInitializeBackdropController();
+            _backdropManager = new AcrylicBackdropManager();
+            _backdropManager.Initialize(this);
 
             RootGrid.Loaded += async (s, e) => {
                 ApplyTitleBarMenuStyling();
@@ -123,10 +123,7 @@ namespace GrafikoMat
         {
             if (_isClosing) return;
 
-            if (_backdropConfiguration != null)
-            {
-                _backdropConfiguration.IsInputActive = e.WindowActivationState != WindowActivationState.Deactivated;
-            }
+            _backdropManager?.SetIsInputActive(e.WindowActivationState != WindowActivationState.Deactivated);
 
             ApplyTitleBarMenuStyling();
         }
@@ -1023,11 +1020,8 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
-            if (_acrylicController != null)
-            {
-                _acrylicController.Dispose();
-                _acrylicController = null;
-            }
+            _backdropManager?.Dispose();
+            _backdropManager = null;
 
             if (_oldWndProc != IntPtr.Zero)
             {
@@ -1149,7 +1143,11 @@ namespace GrafikoMat
         {
             if (TitleBarMenuButton == null) return;
             bool isDark = RootGrid.ActualTheme == ElementTheme.Dark;
-            var hoverColor = isDark ? Color.FromArgb(0xFF, 0x50, 0x50, 0x50) : Color.FromArgb(0xFF, 0xC0, 0xC0, 0xC0);
+
+            var hoverColor = isDark
+                ? Color.FromArgb(0xFF, 0x50, 0x50, 0x50)
+                : Colors.Transparent;
+
             TitleBarMenuButton.Background = new SolidColorBrush(hoverColor);
         }
 
@@ -1163,7 +1161,11 @@ namespace GrafikoMat
         {
             if (TitleBarMenuButton == null) return;
             bool isDark = RootGrid.ActualTheme == ElementTheme.Dark;
-            var pressColor = isDark ? Color.FromArgb(0xFF, 0x40, 0x40, 0x40) : Color.FromArgb(0xFF, 0xA8, 0xA8, 0xA8);
+
+            var pressColor = isDark
+                ? Color.FromArgb(0xFF, 0x40, 0x40, 0x40)
+                : Colors.Transparent;
+
             TitleBarMenuButton.Background = new SolidColorBrush(pressColor);
         }
 
@@ -1171,7 +1173,11 @@ namespace GrafikoMat
         {
             if (TitleBarMenuButton == null) return;
             bool isDark = RootGrid.ActualTheme == ElementTheme.Dark;
-            var hoverColor = isDark ? Color.FromArgb(0xFF, 0x50, 0x50, 0x50) : Color.FromArgb(0xFF, 0xC0, 0xC0, 0xC0);
+
+            var hoverColor = isDark
+                ? Color.FromArgb(0xFF, 0x50, 0x50, 0x50)
+                : Colors.Transparent;
+
             TitleBarMenuButton.Background = new SolidColorBrush(hoverColor);
         }
 
@@ -1259,10 +1265,13 @@ namespace GrafikoMat
                 var presenter = _appWindow.Presenter as OverlappedPresenter;
                 if (presenter == null) return;
 
-                var currentSettings = await _settingsService.LoadSettingsAsync();
                 bool isMaximized = presenter.State == OverlappedPresenterState.Maximized;
                 var currentSize = _appWindow.Size;
                 var currentPosition = _appWindow.Position;
+
+                System.Diagnostics.Debug.WriteLine($"Saving window state: isMaximized={isMaximized}, state={presenter.State}, size={currentSize.Width}x{currentSize.Height}, pos={currentPosition.X},{currentPosition.Y}");
+
+                var currentSettings = await _settingsService.LoadSettingsAsync();
 
                 var newSettings = currentSettings with
                 {
@@ -1279,74 +1288,6 @@ namespace GrafikoMat
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
-            }
-        }
-
-        private void TryInitializeBackdropController()
-        {
-            if (DesktopAcrylicController.IsSupported())
-            {
-                try
-                {
-                    _acrylicController = new DesktopAcrylicController();
-                    _backdropConfiguration = new SystemBackdropConfiguration();
-
-                    _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10);
-                    _acrylicController.TintOpacity = 0.7f;
-                    _acrylicController.LuminosityOpacity = 0.1f;
-                    _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
-
-                    ((FrameworkElement)this.Content).ActualThemeChanged += (s, e) =>
-                    {
-                        if (_backdropConfiguration != null)
-                        {
-                            _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
-                            {
-                                ElementTheme.Dark => SystemBackdropTheme.Dark,
-                                ElementTheme.Light => SystemBackdropTheme.Light,
-                                _ => SystemBackdropTheme.Default
-                            };
-                            UpdateAcrylicColors(((FrameworkElement)this.Content).ActualTheme);
-                        }
-                    };
-
-                    _backdropConfiguration.Theme = ((FrameworkElement)this.Content).ActualTheme switch
-                    {
-                        ElementTheme.Dark => SystemBackdropTheme.Dark,
-                        ElementTheme.Light => SystemBackdropTheme.Light,
-                        _ => SystemBackdropTheme.Default
-                    };
-                    UpdateAcrylicColors(((FrameworkElement)this.Content).ActualTheme);
-
-                    _acrylicController.AddSystemBackdropTarget(this.As<ICompositionSupportsSystemBackdrop>());
-                    _acrylicController.SetSystemBackdropConfiguration(_backdropConfiguration);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error initializing Acrylic backdrop: {ex.Message}");
-                    if (_acrylicController != null)
-                    {
-                        _acrylicController.Dispose();
-                        _acrylicController = null;
-                    }
-                    _backdropConfiguration = null;
-                }
-            }
-        }
-
-        private void UpdateAcrylicColors(ElementTheme theme)
-        {
-            if (_acrylicController == null) return;
-
-            if (theme == ElementTheme.Dark)
-            {
-                _acrylicController.TintColor = Color.FromArgb(0xFF, 0x10, 0x10, 0x10);
-                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0x20, 0x20, 0x20);
-            }
-            else
-            {
-                _acrylicController.TintColor = Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0);
-                _acrylicController.FallbackColor = Color.FromArgb(0xFF, 0xF3, 0xF3, 0xF3);
             }
         }
 

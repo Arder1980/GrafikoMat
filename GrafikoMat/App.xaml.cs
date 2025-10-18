@@ -118,16 +118,21 @@ namespace GrafikoMat
             var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
 
-            if (appWindow != null)
+            if (appWindow != null && appWindow.Presenter is OverlappedPresenter presenter)
             {
                 // Sprawdzamy, czy to pierwsze uruchomienie (brak zapisanej pozycji i nie był zmaksymalizowany)
-                bool isFirstRun = !settings.WasWindowMaximized && settings.LastWindowPosition.X == 0 && settings.LastWindowPosition.Y == 0;
+                bool isFirstRun = !settings.WasWindowMaximized &&
+                                  settings.LastWindowPosition.X == 0 &&
+                                  settings.LastWindowPosition.Y == 0;
 
                 if (isFirstRun)
                 {
                     // --- LOGIKA DLA PIERWSZEGO URUCHOMIENIA ---
                     const int defaultWidth = 1600;
                     const int defaultHeight = 1000;
+
+                    // WAŻNE: Najpierw jawnie przywróć okno (jeśli było zminimalizowane)
+                    presenter.Restore();
 
                     // Ustawiamy domyślny rozmiar
                     appWindow.Resize(new SizeInt32(defaultWidth, defaultHeight));
@@ -137,8 +142,8 @@ namespace GrafikoMat
                     if (displayArea != null)
                     {
                         // Obliczamy pozycję, aby wyśrodkować okno
-                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - appWindow.Size.Width) / 2;
-                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - appWindow.Size.Height) / 2;
+                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - defaultWidth) / 2;
+                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - defaultHeight) / 2;
 
                         // Przesuwamy okno na środek
                         appWindow.Move(new PointInt32(centerX, centerY));
@@ -146,19 +151,26 @@ namespace GrafikoMat
                 }
                 else
                 {
-                    // --- LOGIKA DLA KOLEJNYCH URUCHOMIEŃ (BEZ ZMIAN) ---
-                    if (settings.WasWindowMaximized && appWindow.Presenter is OverlappedPresenter op)
+                    // --- LOGIKA DLA KOLEJNYCH URUCHOMIEŃ ---
+                    if (settings.WasWindowMaximized)
                     {
-                        op.Maximize();
+                        // Jeśli było zmaksymalizowane, maksymalizuj
+                        presenter.Maximize();
                     }
                     else
                     {
+                        // WAŻNE: Najpierw jawnie przywróć okno
+                        presenter.Restore();
+
+                        // Potem ustaw rozmiar i pozycję
                         var lastSize = settings.LastWindowSize;
                         var lastPos = settings.LastWindowPosition;
                         appWindow.Resize(new SizeInt32(Math.Max(1600, lastSize.Width), Math.Max(1000, lastSize.Height)));
                         appWindow.Move(new PointInt32(lastPos.X, lastPos.Y));
                     }
                 }
+
+                System.Diagnostics.Debug.WriteLine($"Window state applied: isFirstRun={isFirstRun}, wasMaximized={settings.WasWindowMaximized}, state={presenter.State}");
             }
         }
     }
