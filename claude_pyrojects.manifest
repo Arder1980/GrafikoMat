@@ -21,8 +21,8 @@
       "mtime": 1760721545.0
     },
     "claude_pyrojects.manifest": {
-      "hash": "4a14351a811354e800c9d023c8378acc25d68e55ab35c4aaead225f1f0505150",
-      "mtime": 1760826070.114098
+      "hash": "d214c3081fa1a36f1a896bdad283331dae5c72b06363d038a7af3c60b57bd6c0",
+      "mtime": 1760833495.5443747
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "5d31686b6cb4892da7f1b5a506135237416719275d57fe8bc3f2f33ba836a9e0",
-      "mtime": 1760828904.9875493
+      "mtime": 1760833475.6034062
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -69,8 +69,8 @@
       "mtime": 1760795890.2307587
     },
     "GrafikoMat\\MainWindow.xaml.cs": {
-      "hash": "11f1a6270878f78bf03be4394e7b4c0cd78d37f8d3e8f20c8e6a38cb9812af19",
-      "mtime": 1760828882.4259784
+      "hash": "d901c8c8569c60525002ba336831ae630c8067a5cd94565b4b53a71c507a4c9d",
+      "mtime": 1760829198.468574
     },
     "GrafikoMat\\Package.appxmanifest": {
       "hash": "93d142cda6a1423ba0c0fef96265e61ff6f13657e2f322549c23e661460934ed",
@@ -321,8 +321,8 @@
       "mtime": 1760716720.0
     },
     "GrafikoMat\\Views\\DeclarationsView.xaml.cs": {
-      "hash": "2d18f849a75c207cf96f49e86e646949da64649d9cafcb97b4cbbbdec9fd1775",
-      "mtime": 1760733443.0
+      "hash": "823ae6acf8b6ea5772ff39de064abd832537b1bbfd0bf70311b34ab483cec758",
+      "mtime": 1760829954.2930632
     },
     "GrafikoMat\\Views\\LoginView.xaml": {
       "hash": "025d9bef5186b9465d309f3856f94d337743587e9d6608d1b727c8f749b7ecdf",
@@ -721,5 +721,5 @@
       "mtime": 1757151896.0
     }
   },
-  "last_sync": "2025-10-19T01:08:37.636614"
+  "last_sync": "2025-10-19T02:26:18.711008"
 }

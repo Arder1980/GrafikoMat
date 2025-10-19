@@ -138,7 +138,7 @@ namespace GrafikoMat.ViewModels
 
             _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
-            BuildCalendarShell();
+            BuildCalendarShell();  // ✅ DODANE
             LoadDeclarationsForSelectedDoctor();
 
             OnPropertyChanged(nameof(Doctors));
@@ -374,10 +374,33 @@ namespace GrafikoMat.ViewModels
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        public Brush EffectiveBackground { get; set; }
-        public Brush EffectiveBorderBrush { get; set; }
-        public Brush DayNumberForeground { get; set; }
-        public Brush EffectiveHeaderBackground { get; set; }
+        private Brush _effectiveBackground = new SolidColorBrush();
+        public Brush EffectiveBackground
+        {
+            get => _effectiveBackground;
+            set => SetProperty(ref _effectiveBackground, value);
+        }
+
+        private Brush _effectiveBorderBrush = new SolidColorBrush();
+        public Brush EffectiveBorderBrush
+        {
+            get => _effectiveBorderBrush;
+            set => SetProperty(ref _effectiveBorderBrush, value);
+        }
+
+        private Brush _dayNumberForeground = new SolidColorBrush();
+        public Brush DayNumberForeground
+        {
+            get => _dayNumberForeground;
+            set => SetProperty(ref _dayNumberForeground, value);
+        }
+
+        private Brush _effectiveHeaderBackground = new SolidColorBrush();
+        public Brush EffectiveHeaderBackground
+        {
+            get => _effectiveHeaderBackground;
+            set => SetProperty(ref _effectiveHeaderBackground, value);
+        }
 
         private bool _isSplit;
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
@@ -450,18 +473,10 @@ namespace GrafikoMat.ViewModels
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            EffectiveBackground = new SolidColorBrush();
-            EffectiveBorderBrush = new SolidColorBrush();
-            DayNumberForeground = new SolidColorBrush();
-            EffectiveHeaderBackground = new SolidColorBrush();
-        }
-
-        public void NotifyBrushUpdate()
-        {
-            OnPropertyChanged(nameof(EffectiveBackground));
-            OnPropertyChanged(nameof(EffectiveBorderBrush));
-            OnPropertyChanged(nameof(DayNumberForeground));
-            OnPropertyChanged(nameof(EffectiveHeaderBackground));
+            _effectiveBackground = new SolidColorBrush();
+            _effectiveBorderBrush = new SolidColorBrush();
+            _dayNumberForeground = new SolidColorBrush();
+            _effectiveHeaderBackground = new SolidColorBrush();
         }
     }
 }
