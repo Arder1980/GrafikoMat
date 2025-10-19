@@ -51,6 +51,7 @@ namespace GrafikoMat
         private Storyboard? _activeStoryboard;
 
         private int _previousUnitIndex = -1;
+        private Guid? _previousUnitIdForDeclarations = null; // ✅ DODANE - osobne pole dla widoku deklaracji
         private bool _hamburgerEventsAttached = false;
 
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -136,6 +137,13 @@ namespace GrafikoMat
             }
             else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
+                // ✅ DODANE: Nie animuj nagłówka, gdy jesteśmy w widoku deklaracji
+                if (_currentDeclarationsView != null)
+                {
+                    // W widoku deklaracji - obsługa jest w OnMainViewModelPropertyChangedForDeclarations
+                    return;
+                }
+
                 if (ViewModel.IsUnitContextActive && _previousUnitIndex != -1)
                 {
                     int previousIndex = _previousUnitIndex;
@@ -174,34 +182,91 @@ namespace GrafikoMat
 
         private async void OnMainViewModelPropertyChangedForDeclarations(object? sender, PropertyChangedEventArgs e)
         {
+            System.Diagnostics.Debug.WriteLine($"[DECL] PropertyChanged: {e.PropertyName}");
+
             if (e.PropertyName != nameof(MainViewModel.ActiveUnit)) return;
             if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
 
+            Guid currentUnitId = ViewModel.ActiveUnit.Id;
             int currentIndex = ViewModel.CurrentUnitIndex;
 
-            if (_previousUnitIndex == -1)
+            System.Diagnostics.Debug.WriteLine($"[DECL] Unit change detected. Previous: {_previousUnitIdForDeclarations}, Current: {currentUnitId}");
+
+            // Jeśli nie mamy zapisanej poprzedniej jednostki - zapisz i nie animuj
+            if (_previousUnitIdForDeclarations == null)
             {
-                _previousUnitIndex = currentIndex;
+                System.Diagnostics.Debug.WriteLine($"[DECL] First time - saving unit ID without animation");
+                _previousUnitIdForDeclarations = currentUnitId;
                 return;
             }
-            if (_previousUnitIndex == currentIndex) return;
 
-            bool isNext = currentIndex > _previousUnitIndex ||
-                          (_previousUnitIndex == ViewModel.TotalUnitsCount - 1 && currentIndex == 0);
+            // Jeśli ta sama jednostka - nie animuj
+            if (_previousUnitIdForDeclarations == currentUnitId)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DECL] Same unit - no animation");
+                return;
+            }
 
-            _previousUnitIndex = currentIndex;
-            await AnimateUnitChangeInDeclarations(isNext);
+            System.Diagnostics.Debug.WriteLine($"[DECL] Different unit - animating!");
+
+            // Określ kierunek animacji
+            int previousIndex = ViewModel.GetUnitIndexById(_previousUnitIdForDeclarations.Value);
+            int totalUnits = ViewModel.TotalUnitsCount;
+
+            bool isNext;
+            if (currentIndex == 0 && previousIndex == totalUnits - 1)
+            {
+                // Przejście z ostatniej do pierwszej - w prawo
+                isNext = true;
+            }
+            else if (currentIndex == totalUnits - 1 && previousIndex == 0)
+            {
+                // Przejście z pierwszej do ostatniej - w lewo
+                isNext = false;
+            }
+            else
+            {
+                // Normalne porównanie
+                isNext = currentIndex > previousIndex;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[DECL] Animation direction: previousIndex={previousIndex}, currentIndex={currentIndex}, isNext={isNext}");
+
+            _previousUnitIdForDeclarations = currentUnitId;
+
+            // ✅ DODANE - animuj nagłówek równolegle z kalendarzem
+            var headerTask = AnimateUnitHeaderChange(isNext);
+            var calendarTask = AnimateUnitChangeInDeclarationsOnly(isNext);
+
+            // Czekaj na obie animacje
+            await Task.WhenAll(headerTask, calendarTask);
         }
 
-        private async Task AnimateUnitChangeInDeclarations(bool isNext)
+        private async Task AnimateUnitChangeInDeclarationsOnly(bool isNext)
         {
-            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Starting calendar animation, isNext: {isNext}");
 
+            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Aborted - view or unit is null");
+                return;
+            }
+
+            // Pobierz lekarzy dla NOWEJ jednostki
+            ViewModel.LoadDataForActiveUnit();
             var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
-            if (!doctorsForUnit.Any()) return;
+
+            if (!doctorsForUnit.Any())
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] No doctors - showing empty calendar");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Found {doctorsForUnit.Count} doctors for unit {ViewModel.ActiveUnit.Name}");
+            }
 
             int initialIndex = 0;
-            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null)
+            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null && doctorsForUnit.Any())
             {
                 try
                 {
@@ -215,16 +280,20 @@ namespace GrafikoMat
                 catch { initialIndex = 0; }
             }
 
-            var headerTask = AnimateUnitHeaderChange(isNext);
-
             var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
-            if (calendarGrid != null)
+            System.Diagnostics.Debug.WriteLine($"[ANIM] CalendarGrid found: {calendarGrid != null}");
+
+            // ✅ KLUCZOWA ZMIANA - animacja wyjścia TYLKO gdy kalendarz jest widoczny
+            if (calendarGrid != null && calendarGrid.Opacity > 0)
             {
                 if (calendarGrid.RenderTransform == null || calendarGrid.RenderTransform is not TranslateTransform)
                 {
                     calendarGrid.RenderTransform = new TranslateTransform();
                 }
 
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Starting slide-out animation");
+
+                // ANIMACJA WYJŚCIA
                 var storyboard = new Storyboard();
                 var duration = TimeSpan.FromMilliseconds(350);
                 var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
@@ -241,31 +310,54 @@ namespace GrafikoMat
                 storyboard.Children.Add(fadeOut);
 
                 var tcs = new TaskCompletionSource();
-                storyboard.Completed += (s, e) => tcs.TrySetResult();
+                storyboard.Completed += (s, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ANIM] Slide-out completed");
+                    tcs.TrySetResult();
+                };
+
                 try { storyboard.Begin(); await tcs.Task; }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (exit): {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (exit): {ex.Message}"); }
 
                 var transform = calendarGrid.RenderTransform as TranslateTransform;
                 if (transform != null) transform.X = isNext ? 600 : -600;
                 calendarGrid.Opacity = 0;
             }
 
-            _currentDeclarationsView.ViewModel?.ReloadForNewUnit(doctorsForUnit, initialIndex, ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, ViewModel.CurrentUnitIndex);
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calling ReloadForNewUnit");
+
+            // ✅ ZMIENIONE - użyj metody z blokowaniem
+            _currentDeclarationsView.ReloadWithoutAutomaticUpdate(() =>
+            {
+                _currentDeclarationsView.ViewModel?.ReloadForNewUnit(
+                    doctorsForUnit,
+                    initialIndex,
+                    ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
+                    ViewModel.CurrentUnitIndex);
+            });
+
+            // ✅ USUNIĘTE - nie resetuj ItemsSource, DayCells.Clear() w ReloadForNewUnit to załatwi
             await Task.Delay(150);
+
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calling UpdateAllCellBrushes");
             _currentDeclarationsView?.UpdateAllCellBrushes();
+
             await Task.Delay(50);
 
             if (calendarGrid != null)
             {
-                var storyboard2 = new Storyboard();
-                var duration = TimeSpan.FromMilliseconds(350);
-                var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Starting slide-in animation");
 
-                var slideInX = new DoubleAnimation { From = isNext ? 600 : -600, To = 0, Duration = duration, EasingFunction = easing };
+                // ANIMACJA WJAZDU
+                var storyboard2 = new Storyboard();
+                var duration2 = TimeSpan.FromMilliseconds(350);
+                var easing2 = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+                var slideInX = new DoubleAnimation { From = isNext ? 600 : -600, To = 0, Duration = duration2, EasingFunction = easing2 };
                 Storyboard.SetTarget(slideInX, calendarGrid);
                 Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration, EasingFunction = easing };
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration2, EasingFunction = easing2 };
                 Storyboard.SetTarget(fadeIn, calendarGrid);
                 Storyboard.SetTargetProperty(fadeIn, "Opacity");
 
@@ -273,12 +365,17 @@ namespace GrafikoMat
                 storyboard2.Children.Add(fadeIn);
 
                 var tcs2 = new TaskCompletionSource();
-                storyboard2.Completed += (s, e) => tcs2.TrySetResult();
+                storyboard2.Completed += (s, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ANIM] Slide-in completed");
+                    tcs2.TrySetResult();
+                };
+
                 try { storyboard2.Begin(); await tcs2.Task; }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (entry): {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (entry): {ex.Message}"); }
             }
 
-            await headerTask;
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calendar animation complete");
         }
 
         private async Task AnimateUnitHeaderChange(bool isNext)
@@ -764,7 +861,7 @@ namespace GrafikoMat
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
             _currentDeclarationsView = null;
-            _previousUnitIndex = -1;
+            _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
 
             await ViewModel.UpdateFooterFromSettingsAsync();
             await AnimateToAsync(_dashboardView, false);
@@ -777,8 +874,6 @@ namespace GrafikoMat
         {
             if (_isClosing || _isAnimating) return;
             if (ViewModel.ActiveUnit == null) return;
-
-            _previousUnitIndex = ViewModel.CurrentUnitIndex;
 
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
@@ -814,12 +909,16 @@ namespace GrafikoMat
 
             declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;
             var declarationsView = new DeclarationsView();
+
+            // ✅ ZMIENIONE: Zapisz aktualną jednostkę PRZED zarejestrowaniem handlera
+            _previousUnitIdForDeclarations = ViewModel.ActiveUnit.Id;
+
             ViewModel.PropertyChanged += OnMainViewModelPropertyChangedForDeclarations;
 
             void DeclCloseHandler()
             {
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1;
+                _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
                 SwitchToDashboard();
             }
 
@@ -827,7 +926,7 @@ namespace GrafikoMat
             {
                 declarationsView.ViewModel?.SaveCommand.Execute(null);
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1;
+                _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
                 SwitchToDashboard();
             }
 
@@ -1330,6 +1429,7 @@ namespace GrafikoMat
             ViewModel.IsUnitContextActive = false;
             ViewModel.CurrentViewTitle = string.Empty;
             _previousUnitIndex = -1;
+            _previousUnitIdForDeclarations = null; // ✅ DODANE
 
             InitialLoadingOverlay.Visibility = Visibility.Visible;
             await Task.Delay(50);

@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling; // ✅ DODANE
 using GrafikoMat.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -32,6 +33,7 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
         private bool _use12hShiftsByDefault;
+        private MonthLayout _monthLayout; // ✅ DODANE
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -62,7 +64,6 @@ namespace GrafikoMat.ViewModels
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
             Doctors[_selectedDoctorIndex].Profile : null;
 
-        // NOWA WŁAŚCIWOŚĆ: Zapamiętujemy aktualny indeks jednostki
         private int _currentUnitIndex;
         public int CurrentUnitIndex
         {
@@ -88,6 +89,9 @@ namespace GrafikoMat.ViewModels
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
 
+            // ✅ DODANE: Inicjalizacja MonthLayout
+            _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
+
             var duplicateFullNames = doctors
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
@@ -102,97 +106,133 @@ namespace GrafikoMat.ViewModels
                 Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
             }
 
-            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
-
-            SaveCommand = new RelayCommand(() => { CommitChangesToSharedState(); _onSaveCallback?.Invoke(); });
-            ClearSelectionCommand = new RelayCommand(ClearSelection);
-            SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
-            SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+            _selectedDoctorIndex = (Doctors.Count > 0) ?
+                Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
-        }
 
-        // NOWA METODA: Reload dla nowej jednostki
-        public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
-        {
-            CommitChangesToSharedState();
-
-            _currentUnitIndex = newUnitIndex;
-            _use12hShiftsByDefault = use12hShifts;
-
-            Doctors.Clear();
-            var duplicateFullNames = doctors
-                .GroupBy(d => d.FullName)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToHashSet();
-
-            foreach (var doc in doctors)
-            {
-                string displayName = duplicateFullNames.Contains(doc.FullName)
-                    ? $"{doc.FullName} ({doc.Abbreviation})"
-                    : doc.FullName;
-                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
-            }
-
-            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
-
-            BuildCalendarShell();  // ✅ DODANE
-            LoadDeclarationsForSelectedDoctor();
-
-            OnPropertyChanged(nameof(Doctors));
-            OnPropertyChanged(nameof(SelectedDoctor));
-            OnPropertyChanged(nameof(SelectedDoctorIndex));
+            SaveCommand = new RelayCommand(DoSave);
+            ClearSelectionCommand = new RelayCommand(ClearSelection);
+            SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+            SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
         }
 
         private void BuildCalendarShell()
         {
+            // ✅ ZMIENIONE - zapamiętaj stare cele jeśli istnieją (dla zachowania danych)
+            var oldCells = DayCells.ToList();
+
             DayCells.Clear();
+
             var firstDay = new DateTime(Year, MonthIndex + 1, 1);
             int offset = ((int)firstDay.DayOfWeek + 6) % 7;
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
             int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
             var startDate = firstDay.AddDays(-offset);
+
+            // ✅ DEBUG - sprawdź wartości
+            System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell START");
+            System.Diagnostics.Debug.WriteLine($"[BUILD] _use12hShiftsByDefault = {_use12hShiftsByDefault}");
+            System.Diagnostics.Debug.WriteLine($"[BUILD] _monthLayout Year={_monthLayout.Year}, Month={_monthLayout.Month}, UseTwelveHourByDefault={_monthLayout.UseTwelveHourByDefault}");
+
             for (int i = 0; i < weeks * 7; i++)
             {
                 var date = startDate.AddDays(i);
+
+                // ✅ KLUCZOWE - zawsze twórz NOWY obiekt DayCell
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     PolishHolidays.IsPublicHoliday(date),
                     PolishHolidays.GetHolidayName(date));
 
-                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
+                if (cell.InMonth)
+                {
+                    var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
+                    cell.IsSplit = _monthLayout.IsSplit(dateOnly);
+
+                    // ✅ DEBUG - sprawdź dla każdego dnia w miesiącu
+                    System.Diagnostics.Debug.WriteLine($"[BUILD] Day {date.Day}: IsSplit = {cell.IsSplit}");
+
+                    // ✅ Skopiuj dane z poprzedniego cell jeśli istniał
+                    var oldCell = oldCells.FirstOrDefault(c => c.Date.Date == date.Date);
+                    if (oldCell != null)
+                    {
+                        cell.SymbolFull = oldCell.SymbolFull;
+                        cell.SymbolDay = oldCell.SymbolDay;
+                        cell.SymbolNight = oldCell.SymbolNight;
+                    }
+                }
+
                 DayCells.Add(cell);
             }
+
+            System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell END - added {DayCells.Count} cells");
         }
 
         private void LoadDeclarationsForSelectedDoctor()
         {
             ClearSelection();
-            foreach (var cell in DayCells)
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
+
+            // ✅ Na początku ustaw domyślny tryb według jednostki
+            foreach (var cell in DayCells.Where(c => c.InMonth))
             {
-                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
+                var dateOnly = new DateOnly(cell.Date.Year, cell.Date.Month, cell.Date.Day);
+                cell.IsSplit = _monthLayout.IsSplit(dateOnly);
                 cell.ClearData();
             }
-            if (SelectedDoctor == null) return;
+
+            if (SelectedDoctor == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] No selected doctor");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] Selected doctor: {SelectedDoctor.FullName}");
 
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             if (_sharedDeclarations.TryGetValue(key, out var decl))
             {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] Found declarations for {key}");
+
                 foreach (var cell in DayCells.Where(c => c.InMonth))
                 {
                     int dayIdx = cell.Date.Day - 1;
                     if (dayIdx >= 0 && dayIdx < decl.Days.Length)
                     {
                         var d = decl.Days[dayIdx];
-                        cell.IsSplit = d.Mode == DayMode.Split12;
+
+                        // ✅ KLUCZOWA ZMIANA - użyj zapisanego Mode TYLKO jeśli dzień ma jakieś symbole
+                        bool hasSavedData = !string.IsNullOrWhiteSpace(d.Full) ||
+                                           !string.IsNullOrWhiteSpace(d.Day) ||
+                                           !string.IsNullOrWhiteSpace(d.Night);
+
+                        if (hasSavedData)
+                        {
+                            // Dzień ma zapisane dane - użyj zapisanego trybu
+                            cell.IsSplit = d.Mode == DayMode.Split12;
+                            System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Has saved data, Mode={d.Mode}, IsSplit={cell.IsSplit}");
+                        }
+                        else
+                        {
+                            // Dzień jest pusty - zostaw domyślny tryb jednostki (już ustawiony)
+                            System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Empty, keeping default IsSplit={cell.IsSplit}");
+                        }
+
                         cell.SymbolFull = d.Full ?? "";
                         cell.SymbolDay = d.Day ?? "";
                         cell.SymbolNight = d.Night ?? "";
                     }
                 }
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] No declarations found for {key}");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor END");
         }
 
         public void CommitChangesToSharedState()
@@ -225,68 +265,75 @@ namespace GrafikoMat.ViewModels
                     result.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
                 }
             }
+
             _sharedDeclarations[key] = result;
         }
 
-        private void SelectNextDoctor()
+        private void DoSave()
         {
-            if (Doctors.Count > 1)
-                SelectedDoctorIndex = (SelectedDoctorIndex + 1) % Doctors.Count;
-        }
-
-        private void SelectPrevDoctor()
-        {
-            if (Doctors.Count > 1)
-                SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
+            CommitChangesToSharedState();
+            _onSaveCallback?.Invoke();
         }
 
         public void SelectSingleSlot(int index, SlotPart part)
         {
+            System.Diagnostics.Debug.WriteLine($"[SELECT] SelectSingleSlot: index={index}, part={part}");
+
             SelectedSlots.Clear();
-            if (index >= 0 && index < DayCells.Count)
-            {
-                SelectedSlots.Add(new SelectedSlot(index, part));
-            }
+            SelectedSlots.Add(new SelectedSlot(index, part));
+
+            System.Diagnostics.Debug.WriteLine($"[SELECT] Added to SelectedSlots: {part}");
+
             UpdateSelectionVisuals();
         }
 
-        public void ToggleSlotSelection(int index, SlotPart part)
+        public void ToggleSlotSelection(int index, SlotPart part, bool isMultiSelect)
         {
-            if (index < 0 || index >= DayCells.Count) return;
+            System.Diagnostics.Debug.WriteLine($"[SELECT] ToggleSlotSelection: index={index}, part={part}, isMultiSelect={isMultiSelect}");
 
-            var slotToToggle = new SelectedSlot(index, part);
-            if (SelectedSlots.Contains(slotToToggle))
+            var slot = new SelectedSlot(index, part);
+
+            if (isMultiSelect)
             {
-                SelectedSlots.Remove(slotToToggle);
-            }
-            else
-            {
-                SelectedSlots.Add(slotToToggle);
-            }
-            UpdateSelectionVisuals();
-        }
-
-        public void SelectRange(int startIndex, int endIndex, SlotPart partToSelect)
-        {
-            SelectedSlots.Clear();
-            int start = Math.Min(startIndex, endIndex);
-            int end = Math.Max(startIndex, endIndex);
-
-            for (int i = start; i <= end; i++)
-            {
-                var cell = DayCells[i];
-                if (!cell.InMonth) continue;
-
-                if (cell.IsSplit)
+                // CTRL - dodaj/usuń z zaznaczenia
+                if (SelectedSlots.Contains(slot))
                 {
-                    if (partToSelect == SlotPart.Day || partToSelect == SlotPart.Night)
-                    {
-                        SelectedSlots.Add(new SelectedSlot(i, partToSelect));
-                    }
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Removing slot from selection");
+                    SelectedSlots.Remove(slot);
                 }
                 else
                 {
-                    if (partToSelect == SlotPart.Full)
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Adding slot to selection");
+                    SelectedSlots.Add(slot);
+                }
+            }
+            else
+            {
+                // Brak CTRL - zamień zaznaczenie na pojedynczy slot
+                System.Diagnostics.Debug.WriteLine($"[SELECT] Replacing selection with single slot");
+                SelectedSlots.Clear();
+                SelectedSlots.Add(slot);
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[SELECT] Total selected slots: {SelectedSlots.Count}");
+            UpdateSelectionVisuals();
+        }
+
+        public void SelectRangeOfSlots(int fromIndex, int toIndex)
+        {
+            SelectedSlots.Clear();
+            int start = Math.Min(fromIndex, toIndex);
+            int end = Math.Max(fromIndex, toIndex);
+            for (int i = start; i <= end; i++)
+            {
+                if (i >= 0 && i < DayCells.Count && DayCells[i].InMonth)
+                {
+                    if (DayCells[i].IsSplit)
+                    {
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
+                    }
+                    else
                     {
                         SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
                     }
@@ -295,6 +342,7 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
+        // ✅ DODANE: Metoda używana przez DeclarationsView - z 4 parametrami
         public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
         {
             SelectedSlots.Clear();
@@ -307,6 +355,7 @@ namespace GrafikoMat.ViewModels
 
             for (int i = start; i <= end; i++)
             {
+                if (i < 0 || i >= DayCells.Count) continue;
                 var cell = DayCells[i];
                 if (!cell.InMonth) continue;
 
@@ -322,6 +371,11 @@ namespace GrafikoMat.ViewModels
                         if (startPart == SlotPart.Day || startPart == SlotPart.Night)
                         {
                             SelectedSlots.Add(new SelectedSlot(i, startPart));
+                        }
+                        else
+                        {
+                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                         }
                     }
                     else
@@ -341,20 +395,78 @@ namespace GrafikoMat.ViewModels
 
         private void UpdateSelectionVisuals()
         {
-            var selectedByCellIndex = SelectedSlots.GroupBy(s => s.Index)
-                .ToDictionary(g => g.Key, g => g.Select(s => s.Part).ToHashSet());
+            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals: {SelectedSlots.Count} slots selected");
 
             foreach (var cell in DayCells)
             {
-                if (selectedByCellIndex.TryGetValue(cell.Index, out var selectedParts))
+                var selectedParts = new HashSet<SlotPart>();
+                foreach (var sel in SelectedSlots)
                 {
-                    cell.UpdateSelection(selectedParts);
+                    if (sel.Index == cell.Index)
+                    {
+                        selectedParts.Add(sel.Part);
+                        System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
+                    }
                 }
-                else
+                cell.UpdateSelection(selectedParts);
+
+                if (selectedParts.Count > 0)
                 {
-                    cell.UpdateSelection(new HashSet<SlotPart>());
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: IsFullSelected={cell.IsFullSelected}, IsDaySelected={cell.IsDaySelected}, IsNightSelected={cell.IsNightSelected}");
                 }
             }
+        }
+
+        private void SelectNextDoctor()
+        {
+            if (!CanSwitchDoctors || Doctors.Count <= 1) return;
+            SelectedDoctorIndex = (SelectedDoctorIndex + 1) % Doctors.Count;
+        }
+
+        private void SelectPrevDoctor()
+        {
+            if (!CanSwitchDoctors || Doctors.Count <= 1) return;
+            SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
+        }
+
+        // ✅ POPRAWIONE: Metoda do przeładowania dla nowej jednostki
+        public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
+        {
+            _use12hShiftsByDefault = use12hShifts;
+            _monthLayout = new MonthLayout(Year, MonthIndex + 1, use12hShifts);
+            _currentUnitIndex = newUnitIndex;
+
+            CommitChangesToSharedState();
+
+            Doctors.Clear();
+            var duplicateFullNames = doctors
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doc in doctors)
+            {
+                string displayName = duplicateFullNames.Contains(doc.FullName)
+                    ? $"{doc.FullName} ({doc.Abbreviation})"
+                    : doc.FullName;
+                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
+            }
+
+            _selectedDoctorIndex = (Doctors.Count > 0) ?
+                Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
+
+            // ✅ KLUCZOWE - WYCZYŚĆ kolekcję przed przebudową
+            DayCells.Clear();
+
+            BuildCalendarShell();
+            LoadDeclarationsForSelectedDoctor();
+
+            // ✅ Powiadom o zmianach
+            OnPropertyChanged(nameof(Doctors));
+            OnPropertyChanged(nameof(SelectedDoctor));
+            OnPropertyChanged(nameof(SelectedDoctorIndex));
+            OnPropertyChanged(nameof(DayCells)); // ✅ DODANE - wymuś odświeżenie bindingu
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];

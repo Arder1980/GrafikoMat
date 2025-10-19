@@ -227,6 +227,18 @@ namespace GrafikoMat.ViewModels
             LoadDataForActiveUnit();
         }
 
+        public int GetUnitIndexById(Guid unitId)
+        {
+            for (int i = 0; i < _userUnits.Count; i++)
+            {
+                if (_userUnits[i].Id == unitId)
+                {
+                    return i;
+                }
+            }
+            return -1; // Nie znaleziono jednostki
+        }
+
         public void LoadDataForActiveUnit()
         {
             DoctorRows.Clear();

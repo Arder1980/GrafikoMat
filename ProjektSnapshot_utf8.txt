@@ -1,8 +1,8 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-19 02:24:35
-# Katalog:    C:\Users\Shadow\OneDrive\Dokumenty\GrafikoMat
-# Maszyna:    SHADOW-F6TNGC78
-# Użytkownik: Shadow
+# Data:       2025-10-19 12:40:14
+# Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
+# Maszyna:    FRACTAL
+# Użytkownik: adaml
 # Kodowanie snapshotu: UTF-8 (z BOM)
 
 ## TREE (foldery)
@@ -43,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 176
+## FILES (liczba): 178
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -220,6 +220,8 @@ FILE grafikomat-web\snapshot.bat
 FILE grafikomat-web\supabase\functions\admin-reset-user-password\deno.json
 FILE grafikomat-web\tsconfig.json
 FILE update-claude-project.bat
+FILE UpdateProject.bat
+FILE UpdateProject-Silent.bat
 
 ===== FILE: claude_pyrojects.config (138 bytes)
 ----- BEGIN -----
@@ -5085,7 +5087,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (62759 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (67339 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -5140,6 +5142,7 @@ namespace GrafikoMat
         private Storyboard? _activeStoryboard;
 
         private int _previousUnitIndex = -1;
+        private Guid? _previousUnitIdForDeclarations = null; // ✅ DODANE - osobne pole dla widoku deklaracji
         private bool _hamburgerEventsAttached = false;
 
         private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -5225,6 +5228,13 @@ namespace GrafikoMat
             }
             else if (e.PropertyName == nameof(MainViewModel.ActiveUnit))
             {
+                // ✅ DODANE: Nie animuj nagłówka, gdy jesteśmy w widoku deklaracji
+                if (_currentDeclarationsView != null)
+                {
+                    // W widoku deklaracji - obsługa jest w OnMainViewModelPropertyChangedForDeclarations
+                    return;
+                }
+
                 if (ViewModel.IsUnitContextActive && _previousUnitIndex != -1)
                 {
                     int previousIndex = _previousUnitIndex;
@@ -5263,34 +5273,91 @@ namespace GrafikoMat
 
         private async void OnMainViewModelPropertyChangedForDeclarations(object? sender, PropertyChangedEventArgs e)
         {
+            System.Diagnostics.Debug.WriteLine($"[DECL] PropertyChanged: {e.PropertyName}");
+
             if (e.PropertyName != nameof(MainViewModel.ActiveUnit)) return;
             if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
 
+            Guid currentUnitId = ViewModel.ActiveUnit.Id;
             int currentIndex = ViewModel.CurrentUnitIndex;
 
-            if (_previousUnitIndex == -1)
+            System.Diagnostics.Debug.WriteLine($"[DECL] Unit change detected. Previous: {_previousUnitIdForDeclarations}, Current: {currentUnitId}");
+
+            // Jeśli nie mamy zapisanej poprzedniej jednostki - zapisz i nie animuj
+            if (_previousUnitIdForDeclarations == null)
             {
-                _previousUnitIndex = currentIndex;
+                System.Diagnostics.Debug.WriteLine($"[DECL] First time - saving unit ID without animation");
+                _previousUnitIdForDeclarations = currentUnitId;
                 return;
             }
-            if (_previousUnitIndex == currentIndex) return;
 
-            bool isNext = currentIndex > _previousUnitIndex ||
-                          (_previousUnitIndex == ViewModel.TotalUnitsCount - 1 && currentIndex == 0);
+            // Jeśli ta sama jednostka - nie animuj
+            if (_previousUnitIdForDeclarations == currentUnitId)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DECL] Same unit - no animation");
+                return;
+            }
 
-            _previousUnitIndex = currentIndex;
-            await AnimateUnitChangeInDeclarations(isNext);
+            System.Diagnostics.Debug.WriteLine($"[DECL] Different unit - animating!");
+
+            // Określ kierunek animacji
+            int previousIndex = ViewModel.GetUnitIndexById(_previousUnitIdForDeclarations.Value);
+            int totalUnits = ViewModel.TotalUnitsCount;
+
+            bool isNext;
+            if (currentIndex == 0 && previousIndex == totalUnits - 1)
+            {
+                // Przejście z ostatniej do pierwszej - w prawo
+                isNext = true;
+            }
+            else if (currentIndex == totalUnits - 1 && previousIndex == 0)
+            {
+                // Przejście z pierwszej do ostatniej - w lewo
+                isNext = false;
+            }
+            else
+            {
+                // Normalne porównanie
+                isNext = currentIndex > previousIndex;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[DECL] Animation direction: previousIndex={previousIndex}, currentIndex={currentIndex}, isNext={isNext}");
+
+            _previousUnitIdForDeclarations = currentUnitId;
+
+            // ✅ DODANE - animuj nagłówek równolegle z kalendarzem
+            var headerTask = AnimateUnitHeaderChange(isNext);
+            var calendarTask = AnimateUnitChangeInDeclarationsOnly(isNext);
+
+            // Czekaj na obie animacje
+            await Task.WhenAll(headerTask, calendarTask);
         }
 
-        private async Task AnimateUnitChangeInDeclarations(bool isNext)
+        private async Task AnimateUnitChangeInDeclarationsOnly(bool isNext)
         {
-            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null) return;
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Starting calendar animation, isNext: {isNext}");
 
+            if (_currentDeclarationsView == null || ViewModel.ActiveUnit == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Aborted - view or unit is null");
+                return;
+            }
+
+            // Pobierz lekarzy dla NOWEJ jednostki
+            ViewModel.LoadDataForActiveUnit();
             var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
-            if (!doctorsForUnit.Any()) return;
+
+            if (!doctorsForUnit.Any())
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] No doctors - showing empty calendar");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Found {doctorsForUnit.Count} doctors for unit {ViewModel.ActiveUnit.Name}");
+            }
 
             int initialIndex = 0;
-            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null)
+            if (!ViewModel.IsCurrentUserAdmin && _doctorRepository != null && doctorsForUnit.Any())
             {
                 try
                 {
@@ -5304,16 +5371,20 @@ namespace GrafikoMat
                 catch { initialIndex = 0; }
             }
 
-            var headerTask = AnimateUnitHeaderChange(isNext);
-
             var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
-            if (calendarGrid != null)
+            System.Diagnostics.Debug.WriteLine($"[ANIM] CalendarGrid found: {calendarGrid != null}");
+
+            // ✅ KLUCZOWA ZMIANA - animacja wyjścia TYLKO gdy kalendarz jest widoczny
+            if (calendarGrid != null && calendarGrid.Opacity > 0)
             {
                 if (calendarGrid.RenderTransform == null || calendarGrid.RenderTransform is not TranslateTransform)
                 {
                     calendarGrid.RenderTransform = new TranslateTransform();
                 }
 
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Starting slide-out animation");
+
+                // ANIMACJA WYJŚCIA
                 var storyboard = new Storyboard();
                 var duration = TimeSpan.FromMilliseconds(350);
                 var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
@@ -5330,31 +5401,54 @@ namespace GrafikoMat
                 storyboard.Children.Add(fadeOut);
 
                 var tcs = new TaskCompletionSource();
-                storyboard.Completed += (s, e) => tcs.TrySetResult();
+                storyboard.Completed += (s, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ANIM] Slide-out completed");
+                    tcs.TrySetResult();
+                };
+
                 try { storyboard.Begin(); await tcs.Task; }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (exit): {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (exit): {ex.Message}"); }
 
                 var transform = calendarGrid.RenderTransform as TranslateTransform;
                 if (transform != null) transform.X = isNext ? 600 : -600;
                 calendarGrid.Opacity = 0;
             }
 
-            _currentDeclarationsView.ViewModel?.ReloadForNewUnit(doctorsForUnit, initialIndex, ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault, ViewModel.CurrentUnitIndex);
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calling ReloadForNewUnit");
+
+            // ✅ ZMIENIONE - użyj metody z blokowaniem
+            _currentDeclarationsView.ReloadWithoutAutomaticUpdate(() =>
+            {
+                _currentDeclarationsView.ViewModel?.ReloadForNewUnit(
+                    doctorsForUnit,
+                    initialIndex,
+                    ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
+                    ViewModel.CurrentUnitIndex);
+            });
+
+            // ✅ USUNIĘTE - nie resetuj ItemsSource, DayCells.Clear() w ReloadForNewUnit to załatwi
             await Task.Delay(150);
+
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calling UpdateAllCellBrushes");
             _currentDeclarationsView?.UpdateAllCellBrushes();
+
             await Task.Delay(50);
 
             if (calendarGrid != null)
             {
-                var storyboard2 = new Storyboard();
-                var duration = TimeSpan.FromMilliseconds(350);
-                var easing = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Starting slide-in animation");
 
-                var slideInX = new DoubleAnimation { From = isNext ? 600 : -600, To = 0, Duration = duration, EasingFunction = easing };
+                // ANIMACJA WJAZDU
+                var storyboard2 = new Storyboard();
+                var duration2 = TimeSpan.FromMilliseconds(350);
+                var easing2 = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+                var slideInX = new DoubleAnimation { From = isNext ? 600 : -600, To = 0, Duration = duration2, EasingFunction = easing2 };
                 Storyboard.SetTarget(slideInX, calendarGrid);
                 Storyboard.SetTargetProperty(slideInX, "(UIElement.RenderTransform).(TranslateTransform.X)");
 
-                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration, EasingFunction = easing };
+                var fadeIn = new DoubleAnimation { From = 0, To = 1, Duration = duration2, EasingFunction = easing2 };
                 Storyboard.SetTarget(fadeIn, calendarGrid);
                 Storyboard.SetTargetProperty(fadeIn, "Opacity");
 
@@ -5362,12 +5456,17 @@ namespace GrafikoMat
                 storyboard2.Children.Add(fadeIn);
 
                 var tcs2 = new TaskCompletionSource();
-                storyboard2.Completed += (s, e) => tcs2.TrySetResult();
+                storyboard2.Completed += (s, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ANIM] Slide-in completed");
+                    tcs2.TrySetResult();
+                };
+
                 try { storyboard2.Begin(); await tcs2.Task; }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Error animating calendar (entry): {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (entry): {ex.Message}"); }
             }
 
-            await headerTask;
+            System.Diagnostics.Debug.WriteLine($"[ANIM] Calendar animation complete");
         }
 
         private async Task AnimateUnitHeaderChange(bool isNext)
@@ -5853,7 +5952,7 @@ namespace GrafikoMat
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
             _currentDeclarationsView = null;
-            _previousUnitIndex = -1;
+            _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
 
             await ViewModel.UpdateFooterFromSettingsAsync();
             await AnimateToAsync(_dashboardView, false);
@@ -5866,8 +5965,6 @@ namespace GrafikoMat
         {
             if (_isClosing || _isAnimating) return;
             if (ViewModel.ActiveUnit == null) return;
-
-            _previousUnitIndex = ViewModel.CurrentUnitIndex;
 
             var frozenYear = ViewModel.SelectedYear;
             var frozenMonthIndex = ViewModel.SelectedMonthIndex;
@@ -5903,12 +6000,16 @@ namespace GrafikoMat
 
             declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;
             var declarationsView = new DeclarationsView();
+
+            // ✅ ZMIENIONE: Zapisz aktualną jednostkę PRZED zarejestrowaniem handlera
+            _previousUnitIdForDeclarations = ViewModel.ActiveUnit.Id;
+
             ViewModel.PropertyChanged += OnMainViewModelPropertyChangedForDeclarations;
 
             void DeclCloseHandler()
             {
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1;
+                _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
                 SwitchToDashboard();
             }
 
@@ -5916,7 +6017,7 @@ namespace GrafikoMat
             {
                 declarationsView.ViewModel?.SaveCommand.Execute(null);
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIndex = -1;
+                _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
                 SwitchToDashboard();
             }
 
@@ -6419,6 +6520,7 @@ namespace GrafikoMat
             ViewModel.IsUnitContextActive = false;
             ViewModel.CurrentViewTitle = string.Empty;
             _previousUnitIndex = -1;
+            _previousUnitIdForDeclarations = null; // ✅ DODANE
 
             InitialLoadingOverlay.Visibility = Visibility.Visible;
             await Task.Delay(50);
@@ -7841,11 +7943,12 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (18558 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (24032 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling; // ✅ DODANE
 using GrafikoMat.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -7877,6 +7980,7 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
         private bool _use12hShiftsByDefault;
+        private MonthLayout _monthLayout; // ✅ DODANE
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -7907,7 +8011,6 @@ namespace GrafikoMat.ViewModels
             (_selectedDoctorIndex >= 0 && _selectedDoctorIndex < Doctors.Count) ?
             Doctors[_selectedDoctorIndex].Profile : null;
 
-        // NOWA WŁAŚCIWOŚĆ: Zapamiętujemy aktualny indeks jednostki
         private int _currentUnitIndex;
         public int CurrentUnitIndex
         {
@@ -7933,6 +8036,9 @@ namespace GrafikoMat.ViewModels
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
 
+            // ✅ DODANE: Inicjalizacja MonthLayout
+            _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
+
             var duplicateFullNames = doctors
                 .GroupBy(d => d.FullName)
                 .Where(g => g.Count() > 1)
@@ -7947,97 +8053,133 @@ namespace GrafikoMat.ViewModels
                 Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
             }
 
-            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
+            _selectedDoctorIndex = (Doctors.Count > 0) ?
+                Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
-            SaveCommand = new RelayCommand(() => { CommitChangesToSharedState(); _onSaveCallback?.Invoke(); });
+            BuildCalendarShell();
+            LoadDeclarationsForSelectedDoctor();
+
+            SaveCommand = new RelayCommand(DoSave);
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
-
-            BuildCalendarShell();
-            LoadDeclarationsForSelectedDoctor();
-        }
-
-        // NOWA METODA: Reload dla nowej jednostki
-        public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
-        {
-            CommitChangesToSharedState();
-
-            _currentUnitIndex = newUnitIndex;
-            _use12hShiftsByDefault = use12hShifts;
-
-            Doctors.Clear();
-            var duplicateFullNames = doctors
-                .GroupBy(d => d.FullName)
-                .Where(g => g.Count() > 1)
-                .Select(g => g.Key)
-                .ToHashSet();
-
-            foreach (var doc in doctors)
-            {
-                string displayName = duplicateFullNames.Contains(doc.FullName)
-                    ? $"{doc.FullName} ({doc.Abbreviation})"
-                    : doc.FullName;
-                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
-            }
-
-            _selectedDoctorIndex = (Doctors.Count > 0) ? Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
-
-            BuildCalendarShell();
-            LoadDeclarationsForSelectedDoctor();
-
-            OnPropertyChanged(nameof(Doctors));
-            OnPropertyChanged(nameof(SelectedDoctor));
-            OnPropertyChanged(nameof(SelectedDoctorIndex));
         }
 
         private void BuildCalendarShell()
         {
+            // ✅ ZMIENIONE - zapamiętaj stare cele jeśli istnieją (dla zachowania danych)
+            var oldCells = DayCells.ToList();
+
             DayCells.Clear();
+
             var firstDay = new DateTime(Year, MonthIndex + 1, 1);
             int offset = ((int)firstDay.DayOfWeek + 6) % 7;
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
             int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
             var startDate = firstDay.AddDays(-offset);
+
+            // ✅ DEBUG - sprawdź wartości
+            System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell START");
+            System.Diagnostics.Debug.WriteLine($"[BUILD] _use12hShiftsByDefault = {_use12hShiftsByDefault}");
+            System.Diagnostics.Debug.WriteLine($"[BUILD] _monthLayout Year={_monthLayout.Year}, Month={_monthLayout.Month}, UseTwelveHourByDefault={_monthLayout.UseTwelveHourByDefault}");
+
             for (int i = 0; i < weeks * 7; i++)
             {
                 var date = startDate.AddDays(i);
+
+                // ✅ KLUCZOWE - zawsze twórz NOWY obiekt DayCell
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     PolishHolidays.IsPublicHoliday(date),
                     PolishHolidays.GetHolidayName(date));
 
-                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
+                if (cell.InMonth)
+                {
+                    var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
+                    cell.IsSplit = _monthLayout.IsSplit(dateOnly);
+
+                    // ✅ DEBUG - sprawdź dla każdego dnia w miesiącu
+                    System.Diagnostics.Debug.WriteLine($"[BUILD] Day {date.Day}: IsSplit = {cell.IsSplit}");
+
+                    // ✅ Skopiuj dane z poprzedniego cell jeśli istniał
+                    var oldCell = oldCells.FirstOrDefault(c => c.Date.Date == date.Date);
+                    if (oldCell != null)
+                    {
+                        cell.SymbolFull = oldCell.SymbolFull;
+                        cell.SymbolDay = oldCell.SymbolDay;
+                        cell.SymbolNight = oldCell.SymbolNight;
+                    }
+                }
+
                 DayCells.Add(cell);
             }
+
+            System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell END - added {DayCells.Count} cells");
         }
 
         private void LoadDeclarationsForSelectedDoctor()
         {
             ClearSelection();
-            foreach (var cell in DayCells)
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
+
+            // ✅ Na początku ustaw domyślny tryb według jednostki
+            foreach (var cell in DayCells.Where(c => c.InMonth))
             {
-                if (cell.InMonth) cell.IsSplit = _use12hShiftsByDefault;
+                var dateOnly = new DateOnly(cell.Date.Year, cell.Date.Month, cell.Date.Day);
+                cell.IsSplit = _monthLayout.IsSplit(dateOnly);
                 cell.ClearData();
             }
-            if (SelectedDoctor == null) return;
+
+            if (SelectedDoctor == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] No selected doctor");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] Selected doctor: {SelectedDoctor.FullName}");
 
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             if (_sharedDeclarations.TryGetValue(key, out var decl))
             {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] Found declarations for {key}");
+
                 foreach (var cell in DayCells.Where(c => c.InMonth))
                 {
                     int dayIdx = cell.Date.Day - 1;
                     if (dayIdx >= 0 && dayIdx < decl.Days.Length)
                     {
                         var d = decl.Days[dayIdx];
-                        cell.IsSplit = d.Mode == DayMode.Split12;
+
+                        // ✅ KLUCZOWA ZMIANA - użyj zapisanego Mode TYLKO jeśli dzień ma jakieś symbole
+                        bool hasSavedData = !string.IsNullOrWhiteSpace(d.Full) ||
+                                           !string.IsNullOrWhiteSpace(d.Day) ||
+                                           !string.IsNullOrWhiteSpace(d.Night);
+
+                        if (hasSavedData)
+                        {
+                            // Dzień ma zapisane dane - użyj zapisanego trybu
+                            cell.IsSplit = d.Mode == DayMode.Split12;
+                            System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Has saved data, Mode={d.Mode}, IsSplit={cell.IsSplit}");
+                        }
+                        else
+                        {
+                            // Dzień jest pusty - zostaw domyślny tryb jednostki (już ustawiony)
+                            System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Empty, keeping default IsSplit={cell.IsSplit}");
+                        }
+
                         cell.SymbolFull = d.Full ?? "";
                         cell.SymbolDay = d.Day ?? "";
                         cell.SymbolNight = d.Night ?? "";
                     }
                 }
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD] No declarations found for {key}");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor END");
         }
 
         public void CommitChangesToSharedState()
@@ -8070,68 +8212,61 @@ namespace GrafikoMat.ViewModels
                     result.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
                 }
             }
+
             _sharedDeclarations[key] = result;
         }
 
-        private void SelectNextDoctor()
+        private void DoSave()
         {
-            if (Doctors.Count > 1)
-                SelectedDoctorIndex = (SelectedDoctorIndex + 1) % Doctors.Count;
-        }
-
-        private void SelectPrevDoctor()
-        {
-            if (Doctors.Count > 1)
-                SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
+            CommitChangesToSharedState();
+            _onSaveCallback?.Invoke();
         }
 
         public void SelectSingleSlot(int index, SlotPart part)
         {
+            System.Diagnostics.Debug.WriteLine($"[SELECT] SelectSingleSlot: index={index}, part={part}");
+
             SelectedSlots.Clear();
-            if (index >= 0 && index < DayCells.Count)
-            {
-                SelectedSlots.Add(new SelectedSlot(index, part));
-            }
+            SelectedSlots.Add(new SelectedSlot(index, part));
+
+            System.Diagnostics.Debug.WriteLine($"[SELECT] Added to SelectedSlots: {part}");
+
             UpdateSelectionVisuals();
         }
 
-        public void ToggleSlotSelection(int index, SlotPart part)
+        public void ToggleSlotSelection(int index, SlotPart part, bool shiftPressed)
         {
-            if (index < 0 || index >= DayCells.Count) return;
-
-            var slotToToggle = new SelectedSlot(index, part);
-            if (SelectedSlots.Contains(slotToToggle))
+            var slot = new SelectedSlot(index, part);
+            if (shiftPressed)
             {
-                SelectedSlots.Remove(slotToToggle);
+                if (SelectedSlots.Contains(slot))
+                    SelectedSlots.Remove(slot);
+                else
+                    SelectedSlots.Add(slot);
             }
             else
             {
-                SelectedSlots.Add(slotToToggle);
+                SelectedSlots.Clear();
+                SelectedSlots.Add(slot);
             }
             UpdateSelectionVisuals();
         }
 
-        public void SelectRange(int startIndex, int endIndex, SlotPart partToSelect)
+        public void SelectRangeOfSlots(int fromIndex, int toIndex)
         {
             SelectedSlots.Clear();
-            int start = Math.Min(startIndex, endIndex);
-            int end = Math.Max(startIndex, endIndex);
-
+            int start = Math.Min(fromIndex, toIndex);
+            int end = Math.Max(fromIndex, toIndex);
             for (int i = start; i <= end; i++)
             {
-                var cell = DayCells[i];
-                if (!cell.InMonth) continue;
-
-                if (cell.IsSplit)
+                if (i >= 0 && i < DayCells.Count && DayCells[i].InMonth)
                 {
-                    if (partToSelect == SlotPart.Day || partToSelect == SlotPart.Night)
+                    if (DayCells[i].IsSplit)
                     {
-                        SelectedSlots.Add(new SelectedSlot(i, partToSelect));
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                     }
-                }
-                else
-                {
-                    if (partToSelect == SlotPart.Full)
+                    else
                     {
                         SelectedSlots.Add(new SelectedSlot(i, SlotPart.Full));
                     }
@@ -8140,6 +8275,7 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
+        // ✅ DODANE: Metoda używana przez DeclarationsView - z 4 parametrami
         public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
         {
             SelectedSlots.Clear();
@@ -8152,6 +8288,7 @@ namespace GrafikoMat.ViewModels
 
             for (int i = start; i <= end; i++)
             {
+                if (i < 0 || i >= DayCells.Count) continue;
                 var cell = DayCells[i];
                 if (!cell.InMonth) continue;
 
@@ -8167,6 +8304,11 @@ namespace GrafikoMat.ViewModels
                         if (startPart == SlotPart.Day || startPart == SlotPart.Night)
                         {
                             SelectedSlots.Add(new SelectedSlot(i, startPart));
+                        }
+                        else
+                        {
+                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                         }
                     }
                     else
@@ -8186,20 +8328,78 @@ namespace GrafikoMat.ViewModels
 
         private void UpdateSelectionVisuals()
         {
-            var selectedByCellIndex = SelectedSlots.GroupBy(s => s.Index)
-                .ToDictionary(g => g.Key, g => g.Select(s => s.Part).ToHashSet());
+            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals: {SelectedSlots.Count} slots selected");
 
             foreach (var cell in DayCells)
             {
-                if (selectedByCellIndex.TryGetValue(cell.Index, out var selectedParts))
+                var selectedParts = new HashSet<SlotPart>();
+                foreach (var sel in SelectedSlots)
                 {
-                    cell.UpdateSelection(selectedParts);
+                    if (sel.Index == cell.Index)
+                    {
+                        selectedParts.Add(sel.Part);
+                        System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
+                    }
                 }
-                else
+                cell.UpdateSelection(selectedParts);
+
+                if (selectedParts.Count > 0)
                 {
-                    cell.UpdateSelection(new HashSet<SlotPart>());
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: IsFullSelected={cell.IsFullSelected}, IsDaySelected={cell.IsDaySelected}, IsNightSelected={cell.IsNightSelected}");
                 }
             }
+        }
+
+        private void SelectNextDoctor()
+        {
+            if (!CanSwitchDoctors || Doctors.Count <= 1) return;
+            SelectedDoctorIndex = (SelectedDoctorIndex + 1) % Doctors.Count;
+        }
+
+        private void SelectPrevDoctor()
+        {
+            if (!CanSwitchDoctors || Doctors.Count <= 1) return;
+            SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
+        }
+
+        // ✅ POPRAWIONE: Metoda do przeładowania dla nowej jednostki
+        public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
+        {
+            _use12hShiftsByDefault = use12hShifts;
+            _monthLayout = new MonthLayout(Year, MonthIndex + 1, use12hShifts);
+            _currentUnitIndex = newUnitIndex;
+
+            CommitChangesToSharedState();
+
+            Doctors.Clear();
+            var duplicateFullNames = doctors
+                .GroupBy(d => d.FullName)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToHashSet();
+
+            foreach (var doc in doctors)
+            {
+                string displayName = duplicateFullNames.Contains(doc.FullName)
+                    ? $"{doc.FullName} ({doc.Abbreviation})"
+                    : doc.FullName;
+                Doctors.Add(new DoctorDeclarationViewModel(doc, displayName));
+            }
+
+            _selectedDoctorIndex = (Doctors.Count > 0) ?
+                Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
+
+            // ✅ KLUCZOWE - WYCZYŚĆ kolekcję przed przebudową
+            DayCells.Clear();
+
+            BuildCalendarShell();
+            LoadDeclarationsForSelectedDoctor();
+
+            // ✅ Powiadom o zmianach
+            OnPropertyChanged(nameof(Doctors));
+            OnPropertyChanged(nameof(SelectedDoctor));
+            OnPropertyChanged(nameof(SelectedDoctorIndex));
+            OnPropertyChanged(nameof(DayCells)); // ✅ DODANE - wymuś odświeżenie bindingu
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
@@ -8219,10 +8419,33 @@ namespace GrafikoMat.ViewModels
         public string? HolidayName { get; }
         public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
 
-        public Brush EffectiveBackground { get; set; }
-        public Brush EffectiveBorderBrush { get; set; }
-        public Brush DayNumberForeground { get; set; }
-        public Brush EffectiveHeaderBackground { get; set; }
+        private Brush _effectiveBackground = new SolidColorBrush();
+        public Brush EffectiveBackground
+        {
+            get => _effectiveBackground;
+            set => SetProperty(ref _effectiveBackground, value);
+        }
+
+        private Brush _effectiveBorderBrush = new SolidColorBrush();
+        public Brush EffectiveBorderBrush
+        {
+            get => _effectiveBorderBrush;
+            set => SetProperty(ref _effectiveBorderBrush, value);
+        }
+
+        private Brush _dayNumberForeground = new SolidColorBrush();
+        public Brush DayNumberForeground
+        {
+            get => _dayNumberForeground;
+            set => SetProperty(ref _dayNumberForeground, value);
+        }
+
+        private Brush _effectiveHeaderBackground = new SolidColorBrush();
+        public Brush EffectiveHeaderBackground
+        {
+            get => _effectiveHeaderBackground;
+            set => SetProperty(ref _effectiveHeaderBackground, value);
+        }
 
         private bool _isSplit;
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
@@ -8295,18 +8518,10 @@ namespace GrafikoMat.ViewModels
             IsHoliday = isHoliday;
             HolidayName = holidayName;
 
-            EffectiveBackground = new SolidColorBrush();
-            EffectiveBorderBrush = new SolidColorBrush();
-            DayNumberForeground = new SolidColorBrush();
-            EffectiveHeaderBackground = new SolidColorBrush();
-        }
-
-        public void NotifyBrushUpdate()
-        {
-            OnPropertyChanged(nameof(EffectiveBackground));
-            OnPropertyChanged(nameof(EffectiveBorderBrush));
-            OnPropertyChanged(nameof(DayNumberForeground));
-            OnPropertyChanged(nameof(EffectiveHeaderBackground));
+            _effectiveBackground = new SolidColorBrush();
+            _effectiveBorderBrush = new SolidColorBrush();
+            _dayNumberForeground = new SolidColorBrush();
+            _effectiveHeaderBackground = new SolidColorBrush();
         }
     }
 }
@@ -8845,7 +9060,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (22309 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (22639 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -9074,6 +9289,18 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
             OnPropertyChanged(nameof(CurrentUnitIndex));
             LoadDataForActiveUnit();
+        }
+
+        public int GetUnitIndexById(Guid unitId)
+        {
+            for (int i = 0; i < _userUnits.Count; i++)
+            {
+                if (_userUnits[i].Id == unitId)
+                {
+                    return i;
+                }
+            }
+            return -1; // Nie znaleziono jednostki
         }
 
         public void LoadDataForActiveUnit()
@@ -10509,7 +10736,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (12641 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (13373 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -10635,12 +10862,14 @@ namespace GrafikoMat.Views
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
                         <Border IsHitTestVisible="False" Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.5}"
-                                Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
+                Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
+
+                                <!-- NAGŁÓWEK -->
                                 <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
@@ -10650,10 +10879,15 @@ namespace GrafikoMat.Views
                                     <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" FontSize="11" Opacity="0.9" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"/>
                                 </Grid>
+
+                                <!-- CONTENT (SLOTY) -->
                                 <Grid Grid.Row="1" MinHeight="48">
+                                    <!-- SLOT 24h -->
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                                         <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"/>
                                     </Grid>
+
+                                    <!-- SLOTY 12h -->
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="*"/>
@@ -10671,24 +10905,32 @@ namespace GrafikoMat.Views
                                     </Grid>
                                 </Grid>
 
-                                <Border BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
+                                <!-- RAMKI -->
+                                <!-- Ramka nagłówka -->
+                                <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
 
-                                <Border BorderBrush="#FF3399FF" CornerRadius="4" BorderThickness="4"
-                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                <!-- Ramka contentu -->
+                                <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
 
-                                <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay}">
+                                <!-- ZAZNACZENIA -->
+                                <!-- Zaznaczenie Full (24h) -->
+                                <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
+                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                <!-- Zaznaczenia Day/Night (12h) -->
+                                <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
 
                                     <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
-                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                                     <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
-                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -10700,7 +10942,7 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (18866 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (19288 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
@@ -10740,6 +10982,9 @@ namespace GrafikoMat.Views
 
         // Flaga zapobiegająca podwójnej obsłudze Ctrl+Click
         private bool _handledCtrlClickInPointerPressed = false;
+
+        // ✅ DODANE - flaga blokująca automatyczne odświeżanie
+        private bool _suppressAutomaticBrushUpdate = false;
 
         // P/Invoke dla pewnej detekcji klawiszy
         [DllImport("user32.dll")]
@@ -10786,7 +11031,26 @@ namespace GrafikoMat.Views
             if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
                 _lastClickedSlot = null;
-                UpdateAllCellBrushes();
+
+                // ✅ ZMIENIONE - nie odświeżaj jeśli jest flaga blokująca
+                if (!_suppressAutomaticBrushUpdate)
+                {
+                    UpdateAllCellBrushes();
+                }
+            }
+        }
+
+        // ✅ DODANE - metoda do przeładowania z blokowaniem auto-update
+        public void ReloadWithoutAutomaticUpdate(Action reloadAction)
+        {
+            _suppressAutomaticBrushUpdate = true;
+            try
+            {
+                reloadAction();
+            }
+            finally
+            {
+                _suppressAutomaticBrushUpdate = false;
             }
         }
 
@@ -10805,8 +11069,12 @@ namespace GrafikoMat.Views
                     if (bounds.Contains(p))
                     {
                         var cellVM = ViewModel.DayCells[i];
+
+                        System.Diagnostics.Debug.WriteLine($"[CLICK] Cell {i}: IsSplit={cellVM.IsSplit}, Point=({p.X},{p.Y}), Bounds=({bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height})");
+
                         if (!cellVM.IsSplit)
                         {
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] Returning Full for 24h cell");
                             return (i, SlotPart.Full);
                         }
                         else
@@ -10814,14 +11082,26 @@ namespace GrafikoMat.Views
                             var relativeY = p.Y - bounds.Top;
                             var headerHeight = 24;
                             var contentHeight = container.ActualHeight - headerHeight;
-                            if (relativeY < headerHeight) return (i, SlotPart.Day);
+
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] 12h cell: relativeY={relativeY}, headerHeight={headerHeight}, contentHeight={contentHeight}");
+
+                            if (relativeY < headerHeight)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[CLICK] Returning Day (header)");
+                                return (i, SlotPart.Day);
+                            }
+
                             var part = (relativeY < headerHeight + contentHeight / 2) ?
                                 SlotPart.Day : SlotPart.Night;
+
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] Returning {part}");
                             return (i, part);
                         }
                     }
                 }
             }
+
+            System.Diagnostics.Debug.WriteLine($"[CLICK] No cell found at point ({p.X},{p.Y})");
             return (-1, SlotPart.Full);
         }
 
@@ -10867,7 +11147,7 @@ namespace GrafikoMat.Views
             {
                 _isDragging = false;
                 _handledCtrlClickInPointerPressed = true; // Oznacz że obsłużyliśmy
-                ViewModel.ToggleSlotSelection(index, slotPart);
+                ViewModel.ToggleSlotSelection(index, slotPart, _shiftDown);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
                 e.Handled = true; // Blokuj tylko dla Ctrl
                 return;
@@ -10998,7 +11278,7 @@ namespace GrafikoMat.Views
 
             if (index >= 0 && index < ViewModel.DayCells.Count && ViewModel.DayCells[index].InMonth)
             {
-                ViewModel.ToggleSlotSelection(index, slotPart);
+                ViewModel.ToggleSlotSelection(index, slotPart, _shiftDown);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
             }
 
@@ -11027,7 +11307,8 @@ namespace GrafikoMat.Views
                 return;
             }
 
-            var currentTheme = this.ActualTheme;
+            bool isDark = this.ActualTheme == ElementTheme.Dark ||
+                          (this.ActualTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
             foreach (var cell in ViewModel.DayCells)
             {
@@ -11036,60 +11317,37 @@ namespace GrafikoMat.Views
                 Brush dayNumberFg;
                 Brush headerBg;
 
-                if (!cell.InMonth)
+                if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
+                {
+                    effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
+                    effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
+                    dayNumberFg = new SolidColorBrush(Colors.White);
+                    headerBg = new SolidColorBrush(Color.FromArgb(255, 50, 110, 200));
+                }
+                else if (!cell.InMonth)
                 {
                     effectiveBackground = new SolidColorBrush(Colors.Transparent);
                     effectiveBorder = new SolidColorBrush(Colors.Transparent);
-                    dayNumberFg = new SolidColorBrush(Colors.Transparent);
+                    dayNumberFg = new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
                     headerBg = new SolidColorBrush(Colors.Transparent);
-                }
-                else if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
-                {
-                    if (currentTheme == ElementTheme.Dark)
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 40, 90, 160));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 60, 130, 200));
-                        dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 30, 70, 130));
-                    }
-                    else
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 200, 230, 255));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 100, 170, 240));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 0, 60, 120));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 180, 220, 255));
-                    }
-                }
-                else if (cell.IsDayOff)
-                {
-                    if (currentTheme == ElementTheme.Dark)
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 35, 35, 40));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 50, 50, 55));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 150, 150, 160));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 30, 30, 35));
-                    }
-                    else
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 245, 245, 248));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 225, 225, 230));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 130, 130, 140));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 235, 235, 240));
-                    }
                 }
                 else
                 {
-                    if (currentTheme == ElementTheme.Dark)
+                    if (isDark)
                     {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 60, 60, 65));
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(255, 40, 40, 45)) :
+                            new SolidColorBrush(Color.FromArgb(255, 32, 32, 36));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
                         dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 38, 38, 42));
+                        headerBg = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
                     }
                     else
                     {
-                        effectiveBackground = new SolidColorBrush(Colors.White);
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 225, 225, 230));
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(255, 240, 240, 245)) :
+                            new SolidColorBrush(Color.FromArgb(255, 250, 250, 252));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
                         dayNumberFg = new SolidColorBrush(Colors.Black);
                         headerBg = new SolidColorBrush(Color.FromArgb(255, 248, 248, 250));
                     }
@@ -20843,5 +21101,124 @@ echo   Teraz wejdz do Claude Projects
 echo   i otworz projekt "GrafikoMat"
 echo ========================================
 pause
+----- END -----
+
+===== FILE: UpdateProject.bat (2140 bytes)
+----- BEGIN -----
+@echo off
+setlocal EnableExtensions
+chcp 65001 >nul
+
+echo ========================================
+echo   GrafikoMat - Aktualizacja Projektu
+echo ========================================
+echo.
+
+set "ROOT_DIR=%~dp0"
+set "PS1=%ROOT_DIR%ExportProject.ps1"
+set "LOG=%ROOT_DIR%ExportProject.lastlog.txt"
+set "SNAPSHOT=%ROOT_DIR%ProjektSnapshot_utf8.txt"
+
+REM ========================================
+REM KROK 1: Generowanie snapshotu
+REM ========================================
+echo [1/2] Generowanie snapshotu projektu...
+
+if not exist "%PS1%" (
+  echo [BLAD] Brak pliku: "%PS1%"
+  pause
+  exit /b 1
+)
+
+REM Preferuj PowerShell 7, w razie braku Windows PowerShell
+set "PSCORE=%ProgramFiles%\PowerShell\7\pwsh.exe"
+set "PSWIN=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+REM POPRAWKA: Użyj pojedynczych cudzysłowów wewnątrz PowerShell
+if exist "%PSCORE%" (
+  "%PSCORE%" -NoProfile -ExecutionPolicy Bypass -Command "& '%PS1%' -Root '%ROOT_DIR%' -OutputFile '%SNAPSHOT%'" 1> "%LOG%" 2>&1
+) else (
+  "%PSWIN%" -NoProfile -ExecutionPolicy Bypass -Command "& '%PS1%' -Root '%ROOT_DIR%' -OutputFile '%SNAPSHOT%'" 1> "%LOG%" 2>&1
+)
+
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" (
+  echo [BLAD] Generowanie snapshotu zakonczylo sie kodem %ERR%
+  echo Szczegoly w: "%LOG%"
+  type "%LOG%"
+  pause
+  exit /b %ERR%
+)
+
+echo [OK] Snapshot wygenerowany: %SNAPSHOT%
+echo.
+
+REM ========================================
+REM KROK 2: Aktualizacja Claude Project
+REM ========================================
+echo [2/2] Aktualizacja Claude Project...
+
+cd /d "%ROOT_DIR%"
+python -m claude-pyrojects.cli update
+
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" (
+  echo [BLAD] Aktualizacja Claude Project zakonczyla sie kodem %ERR%
+  pause
+  exit /b %ERR%
+)
+
+echo.
+echo ========================================
+echo   SUKCES!
+echo ========================================
+echo   1. Snapshot utworzony:
+echo      %SNAPSHOT%
+echo   2. Claude Project zaktualizowany
+echo ========================================
+echo.
+echo Mozesz teraz otworzyc projekt w Claude.
+echo.
+pause
+exit /b 0
+----- END -----
+
+===== FILE: UpdateProject-Silent.bat (1063 bytes)
+----- BEGIN -----
+@echo off
+setlocal EnableExtensions
+chcp 65001 >nul
+
+set "ROOT_DIR=%~dp0"
+set "PS1=%ROOT_DIR%ExportProject.ps1"
+set "LOG=%ROOT_DIR%ExportProject.lastlog.txt"
+set "SNAPSHOT=%ROOT_DIR%ProjektSnapshot_utf8.txt"
+
+REM Generowanie snapshotu
+set "PSCORE=%ProgramFiles%\PowerShell\7\pwsh.exe"
+set "PSWIN=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+if exist "%PSCORE%" (
+  "%PSCORE%" -NoProfile -ExecutionPolicy Bypass -Command "& '%PS1%' -Root '%ROOT_DIR%' -OutputFile '%SNAPSHOT%'" 1> "%LOG%" 2>&1
+) else (
+  "%PSWIN%" -NoProfile -ExecutionPolicy Bypass -Command "& '%PS1%' -Root '%ROOT_DIR%' -OutputFile '%SNAPSHOT%'" 1> "%LOG%" 2>&1
+)
+
+if not "%ERRORLEVEL%"=="0" (
+  echo [BLAD] Generowanie snapshotu niepomyslne. Zobacz: %LOG%
+  exit /b 1
+)
+
+REM Aktualizacja Claude Project (ciche, bez outputu)
+cd /d "%ROOT_DIR%"
+python -m claude-pyrojects.cli update >nul 2>&1
+
+if not "%ERRORLEVEL%"=="0" (
+  echo [BLAD] Aktualizacja Claude Project niepomyslna
+  exit /b 1
+)
+
+echo [OK] Projekt zaktualizowany: %SNAPSHOT%
+exit /b 0
 ----- END -----
 

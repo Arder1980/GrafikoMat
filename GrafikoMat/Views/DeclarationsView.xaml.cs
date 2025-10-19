@@ -37,6 +37,9 @@ namespace GrafikoMat.Views
         // Flaga zapobiegająca podwójnej obsłudze Ctrl+Click
         private bool _handledCtrlClickInPointerPressed = false;
 
+        // ✅ DODANE - flaga blokująca automatyczne odświeżanie
+        private bool _suppressAutomaticBrushUpdate = false;
+
         // P/Invoke dla pewnej detekcji klawiszy
         [DllImport("user32.dll")]
         private static extern short GetKeyState(int nVirtKey);
@@ -82,7 +85,26 @@ namespace GrafikoMat.Views
             if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
                 _lastClickedSlot = null;
-                UpdateAllCellBrushes();
+
+                // ✅ ZMIENIONE - nie odświeżaj jeśli jest flaga blokująca
+                if (!_suppressAutomaticBrushUpdate)
+                {
+                    UpdateAllCellBrushes();
+                }
+            }
+        }
+
+        // ✅ DODANE - metoda do przeładowania z blokowaniem auto-update
+        public void ReloadWithoutAutomaticUpdate(Action reloadAction)
+        {
+            _suppressAutomaticBrushUpdate = true;
+            try
+            {
+                reloadAction();
+            }
+            finally
+            {
+                _suppressAutomaticBrushUpdate = false;
             }
         }
 
@@ -101,8 +123,12 @@ namespace GrafikoMat.Views
                     if (bounds.Contains(p))
                     {
                         var cellVM = ViewModel.DayCells[i];
+
+                        System.Diagnostics.Debug.WriteLine($"[CLICK] Cell {i}: IsSplit={cellVM.IsSplit}, Point=({p.X},{p.Y}), Bounds=({bounds.Left},{bounds.Top},{bounds.Width},{bounds.Height})");
+
                         if (!cellVM.IsSplit)
                         {
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] Returning Full for 24h cell");
                             return (i, SlotPart.Full);
                         }
                         else
@@ -110,14 +136,26 @@ namespace GrafikoMat.Views
                             var relativeY = p.Y - bounds.Top;
                             var headerHeight = 24;
                             var contentHeight = container.ActualHeight - headerHeight;
-                            if (relativeY < headerHeight) return (i, SlotPart.Day);
+
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] 12h cell: relativeY={relativeY}, headerHeight={headerHeight}, contentHeight={contentHeight}");
+
+                            if (relativeY < headerHeight)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[CLICK] Returning Day (header)");
+                                return (i, SlotPart.Day);
+                            }
+
                             var part = (relativeY < headerHeight + contentHeight / 2) ?
                                 SlotPart.Day : SlotPart.Night;
+
+                            System.Diagnostics.Debug.WriteLine($"[CLICK] Returning {part}");
                             return (i, part);
                         }
                     }
                 }
             }
+
+            System.Diagnostics.Debug.WriteLine($"[CLICK] No cell found at point ({p.X},{p.Y})");
             return (-1, SlotPart.Full);
         }
 
@@ -158,14 +196,24 @@ namespace GrafikoMat.Views
             bool isCtrlPressed = IsCtrlPressedCombined(mods, _ctrlDown);
             bool isShiftPressed = IsShiftPressedCombined(mods, _shiftDown);
 
+            // ✅ DODANE - szczegółowe logowanie
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] mods={mods}, _ctrlDown={_ctrlDown}");
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] IsCtrlPressedCombined result: {isCtrlPressed}");
+
+            var byMods = (mods & VirtualKeyModifiers.Control) == VirtualKeyModifiers.Control;
+            var byWinUI = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+            var byNative = IsCtrlDownNative();
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] byMods={byMods}, byWinUI={byWinUI}, byNative={byNative}");
+
             // CTRL - toggle bez drag
             if (isCtrlPressed)
             {
+                System.Diagnostics.Debug.WriteLine($"[CTRL] Detected Ctrl+Click on index={index}, part={slotPart}");
                 _isDragging = false;
-                _handledCtrlClickInPointerPressed = true; // Oznacz że obsłużyliśmy
-                ViewModel.ToggleSlotSelection(index, slotPart);
+                _handledCtrlClickInPointerPressed = true;
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
-                e.Handled = true; // Blokuj tylko dla Ctrl
+                e.Handled = true;
                 return;
             }
 
@@ -174,7 +222,7 @@ namespace GrafikoMat.Views
             {
                 _isDragging = false;
                 ViewModel.SelectDragRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part, slotPart);
-                e.Handled = true; // Blokuj dla Shift
+                e.Handled = true;
                 return;
             }
 
@@ -186,7 +234,7 @@ namespace GrafikoMat.Views
 
             ViewModel.SelectSingleSlot(index, slotPart);
             _lastClickedSlot = new SelectedSlot(index, slotPart);
-            e.Handled = true; // Blokuj dla drag
+            e.Handled = true;
         }
 
         private void Calendar_PointerMoved(object sender, PointerRoutedEventArgs e)
@@ -266,16 +314,15 @@ namespace GrafikoMat.Views
 
         private void Calendar_Tapped(object sender, TappedRoutedEventArgs e)
         {
-            // ZMIANA: Tapped jest safety net tylko dla Ctrl+Click
             // Jeśli PointerPressed obsłużył Ctrl, ignore
             if (_handledCtrlClickInPointerPressed)
             {
-                _handledCtrlClickInPointerPressed = false; // Reset flagi
+                _handledCtrlClickInPointerPressed = false;
                 e.Handled = true;
                 return;
             }
 
-            // Sprawdź stan Ctrl globalnie (bez KeyModifiers z eventu)
+            // ✅ ZMIENIONE - sprawdź CTRL również w Tapped
             bool isCtrlPressed = _ctrlDown ||
                                 (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down ||
                                 IsCtrlDownNative();
@@ -294,7 +341,8 @@ namespace GrafikoMat.Views
 
             if (index >= 0 && index < ViewModel.DayCells.Count && ViewModel.DayCells[index].InMonth)
             {
-                ViewModel.ToggleSlotSelection(index, slotPart);
+                System.Diagnostics.Debug.WriteLine($"[TAPPED] Handling Ctrl+Click in Tapped fallback");
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true); // ✅ ZMIENIONE
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
             }
 
@@ -323,7 +371,8 @@ namespace GrafikoMat.Views
                 return;
             }
 
-            var currentTheme = this.ActualTheme;
+            bool isDark = this.ActualTheme == ElementTheme.Dark ||
+                          (this.ActualTheme == ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
             foreach (var cell in ViewModel.DayCells)
             {
@@ -332,60 +381,37 @@ namespace GrafikoMat.Views
                 Brush dayNumberFg;
                 Brush headerBg;
 
-                if (!cell.InMonth)
+                if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
+                {
+                    effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
+                    effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
+                    dayNumberFg = new SolidColorBrush(Colors.White);
+                    headerBg = new SolidColorBrush(Color.FromArgb(255, 50, 110, 200));
+                }
+                else if (!cell.InMonth)
                 {
                     effectiveBackground = new SolidColorBrush(Colors.Transparent);
                     effectiveBorder = new SolidColorBrush(Colors.Transparent);
-                    dayNumberFg = new SolidColorBrush(Colors.Transparent);
+                    dayNumberFg = new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
                     headerBg = new SolidColorBrush(Colors.Transparent);
-                }
-                else if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
-                {
-                    if (currentTheme == ElementTheme.Dark)
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 40, 90, 160));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 60, 130, 200));
-                        dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 30, 70, 130));
-                    }
-                    else
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 200, 230, 255));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 100, 170, 240));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 0, 60, 120));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 180, 220, 255));
-                    }
-                }
-                else if (cell.IsDayOff)
-                {
-                    if (currentTheme == ElementTheme.Dark)
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 35, 35, 40));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 50, 50, 55));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 150, 150, 160));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 30, 30, 35));
-                    }
-                    else
-                    {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 245, 245, 248));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 225, 225, 230));
-                        dayNumberFg = new SolidColorBrush(Color.FromArgb(255, 130, 130, 140));
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 235, 235, 240));
-                    }
                 }
                 else
                 {
-                    if (currentTheme == ElementTheme.Dark)
+                    if (isDark)
                     {
-                        effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 60, 60, 65));
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(255, 40, 40, 45)) :
+                            new SolidColorBrush(Color.FromArgb(255, 32, 32, 36));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
                         dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 38, 38, 42));
+                        headerBg = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
                     }
                     else
                     {
-                        effectiveBackground = new SolidColorBrush(Colors.White);
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 225, 225, 230));
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(255, 240, 240, 245)) :
+                            new SolidColorBrush(Color.FromArgb(255, 250, 250, 252));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
                         dayNumberFg = new SolidColorBrush(Colors.Black);
                         headerBg = new SolidColorBrush(Color.FromArgb(255, 248, 248, 250));
                     }
