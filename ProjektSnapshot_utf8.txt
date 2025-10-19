@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-19 12:40:14
+# Data:       2025-10-19 18:28:35
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -43,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 178
+## FILES (liczba): 177
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -219,7 +219,6 @@ FILE grafikomat-web\README.md
 FILE grafikomat-web\snapshot.bat
 FILE grafikomat-web\supabase\functions\admin-reset-user-password\deno.json
 FILE grafikomat-web\tsconfig.json
-FILE update-claude-project.bat
 FILE UpdateProject.bat
 FILE UpdateProject-Silent.bat
 
@@ -3667,7 +3666,7 @@ namespace GrafikoMat.Common
 
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (6126 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (7077 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -3681,10 +3680,35 @@ namespace GrafikoMat.Common
 {
     public class BooleanToOpacityConverter : IValueConverter
     {
-        public double TrueValue { get; set; } = 0.5;
-        public double FalseValue { get; set; } = 1.0;
-        public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? TrueValue : FalseValue;
-        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+        public double TrueValue { get; set; } = 1.0;   // Domyślnie: true = pełna widoczność
+        public double FalseValue { get; set; } = 0.5;  // Domyślnie: false = przygaszone
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool boolValue = value is bool b && b;
+
+            // Obsługa parametru w formacie "FalseValue;TrueValue"
+            if (parameter is string paramStr && !string.IsNullOrEmpty(paramStr))
+            {
+                var parts = paramStr.Split(';');
+                if (parts.Length == 2 &&
+                    double.TryParse(parts[0], out double falseVal) &&
+                    double.TryParse(parts[1], out double trueVal))
+                {
+                    return boolValue ? trueVal : falseVal;
+                }
+                // Jeśli tylko jedna wartość, użyj jej jako FalseValue
+                if (parts.Length == 1 && double.TryParse(parts[0], out double singleVal))
+                {
+                    return boolValue ? 1.0 : singleVal;
+                }
+            }
+
+            return boolValue ? TrueValue : FalseValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
     }
 
     public class BooleanToVisibilityConverter : IValueConverter
@@ -7943,7 +7967,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (24032 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (24784 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -8234,21 +8258,35 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
-        public void ToggleSlotSelection(int index, SlotPart part, bool shiftPressed)
+        public void ToggleSlotSelection(int index, SlotPart part, bool isMultiSelect)
         {
+            System.Diagnostics.Debug.WriteLine($"[SELECT] ToggleSlotSelection: index={index}, part={part}, isMultiSelect={isMultiSelect}");
+
             var slot = new SelectedSlot(index, part);
-            if (shiftPressed)
+
+            if (isMultiSelect)
             {
+                // CTRL - dodaj/usuń z zaznaczenia
                 if (SelectedSlots.Contains(slot))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Removing slot from selection");
                     SelectedSlots.Remove(slot);
+                }
                 else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Adding slot to selection");
                     SelectedSlots.Add(slot);
+                }
             }
             else
             {
+                // Brak CTRL - zamień zaznaczenie na pojedynczy slot
+                System.Diagnostics.Debug.WriteLine($"[SELECT] Replacing selection with single slot");
                 SelectedSlots.Clear();
                 SelectedSlots.Add(slot);
             }
+
+            System.Diagnostics.Debug.WriteLine($"[SELECT] Total selected slots: {SelectedSlots.Count}");
             UpdateSelectionVisuals();
         }
 
@@ -10736,7 +10774,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (13373 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (16951 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -10782,15 +10820,23 @@ namespace GrafikoMat.Views
             <ColumnDefinition Width="0.75*"/>
         </Grid.ColumnDefinitions>
 
+        <!-- LEWA KOLUMNA -->
         <Grid x:Name="LeftColumnGrid" Grid.Column="0" RowSpacing="10" Padding="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <!-- Spacer (margines górny) -->
                 <RowDefinition Height="Auto"/>
+                <!-- Wybór dyżurnego -->
                 <RowDefinition Height="Auto"/>
+                <!-- Limity -->
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" FontSize="18" FontWeight="SemiBold" TextWrapping="WrapWholeWords" MaxLines="2" Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}"/>
+
+            <!-- Spacer żeby wyrównać z nagłówkiem kalendarza + dniami tygodnia -->
+            <Grid Grid.Row="0" Height="54"/>
+
+            <!-- Wybór dyżurnego -->
             <Grid Grid.Row="1">
                 <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.CanSwitchDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Button Content="&#xE0E2;" FontFamily="Segoe MDL2 Assets" Command="{x:Bind ViewModel.SelectPrevDoctorCommand}" ToolTipService.ToolTip="Poprzedni lekarz"/>
@@ -10811,18 +10857,33 @@ namespace GrafikoMat.Views
                     <TextBlock Text="{x:Bind ViewModel.SelectedDoctor.FullName, Mode=OneWay, FallbackValue='.'}" VerticalAlignment="Center" FontWeight="SemiBold"/>
                 </StackPanel>
             </Grid>
+
+            <!-- Limity -->
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="Limity:" VerticalAlignment="Center" Opacity="0.85"/>
                 <TextBox Width="120" IsEnabled="False" PlaceholderText="wkrótce."/>
             </StackPanel>
         </Grid>
 
+        <!-- PRAWA KOLUMNA -->
         <Grid Grid.Column="1" Padding="0,12,12,12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <!-- Nagłówek -->
+                <RowDefinition Height="Auto"/>
+                <!-- Dni tygodnia -->
                 <RowDefinition Height="*"/>
+                <!-- Kalendarz -->
             </Grid.RowDefinitions>
-            <Grid Padding="0,0,0,4">
+
+            <!-- Nagłówek nad kalendarzem -->
+            <TextBlock Grid.Row="0" Text="{x:Bind ViewModel.MonthHeader, Mode=OneWay}" 
+                       FontSize="18" FontWeight="SemiBold" 
+                       HorizontalAlignment="Center" 
+                       Margin="0,4,0,16"/>
+
+            <!-- Dni tygodnia -->
+            <Grid Grid.Row="1" Padding="0,0,0,12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
@@ -10841,7 +10902,8 @@ namespace GrafikoMat.Views
                 <TextBlock Grid.Column="6" Text="Niedziela" HorizontalAlignment="Center" Opacity="0.6"/>
             </Grid>
 
-            <GridView Grid.Row="1" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
+            <!-- Kalendarz -->
+            <GridView Grid.Row="2" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
                 <GridView.RenderTransform>
                     <TranslateTransform X="0"/>
                 </GridView.RenderTransform>
@@ -10861,30 +10923,55 @@ namespace GrafikoMat.Views
                 </GridView.ItemContainerStyle>
                 <GridView.ItemTemplate>
                     <DataTemplate x:DataType="vm:DayCell">
-                        <Border IsHitTestVisible="False" Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.5}"
-                Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
+                        <!-- Border z tłem - ZAWSZE widoczny -->
+                        <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="24"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
-                                <!-- NAGŁÓWEK -->
+                                <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
                                 <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
+
+                                <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
                                 <Grid Grid.Row="0" Padding="6,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" FontSize="11" Opacity="0.9" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                    <!-- ✅ Opacity: 0.5 dla InMonth=true, 0.25 dla InMonth=false -->
+                                    <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
+                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
+                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
+
+                                    <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
+                                              Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
+                                              FontSize="11" 
+                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
+                                              HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
+                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
                                 </Grid>
 
                                 <!-- CONTENT (SLOTY) -->
                                 <Grid Grid.Row="1" MinHeight="48">
                                     <!-- SLOT 24h -->
                                     <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
-                                        <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"/>
+                                        <!-- Glify TYLKO dla dni w miesiącu -->
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                                                    Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Viewbox MaxHeight="24" MaxWidth="24">
+                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                            </Viewbox>
+                                            <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
+                                            <Viewbox MaxHeight="22" MaxWidth="22">
+                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                            </Viewbox>
+                                        </StackPanel>
+
+                                        <!-- Symbol deklaracji z Opacity -->
+                                        <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
+                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
                                     </Grid>
 
                                     <!-- SLOTY 12h -->
@@ -10893,31 +10980,32 @@ namespace GrafikoMat.Views
                                             <RowDefinition Height="*"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-                                        <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- Glify TYLKO dla dni w miesiącu -->
+                                        <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
                                         </Viewbox>
-                                        <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                             <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
                                         </Viewbox>
                                         <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-                                        <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"/>
-                                        <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"/>
+                                        <!-- Symbole z Opacity -->
+                                        <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
+                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
+                                        <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
+                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
                                     </Grid>
                                 </Grid>
 
-                                <!-- RAMKI -->
-                                <!-- Ramka nagłówka -->
+                                <!-- RAMKI - ZAWSZE widoczne -->
                                 <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
-
-                                <!-- Ramka contentu -->
                                 <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
 
                                 <!-- ZAZNACZENIA -->
-                                <!-- Zaznaczenie Full (24h) -->
                                 <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
-                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-                                <!-- Zaznaczenia Day/Night (12h) -->
                                 <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>
@@ -10925,12 +11013,12 @@ namespace GrafikoMat.Views
                                     </Grid.RowDefinitions>
 
                                     <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
-                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
-                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                                     <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
-                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
-                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -10942,7 +11030,7 @@ namespace GrafikoMat.Views
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (19288 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (21395 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
@@ -11142,14 +11230,24 @@ namespace GrafikoMat.Views
             bool isCtrlPressed = IsCtrlPressedCombined(mods, _ctrlDown);
             bool isShiftPressed = IsShiftPressedCombined(mods, _shiftDown);
 
+            // ✅ DODANE - szczegółowe logowanie
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] mods={mods}, _ctrlDown={_ctrlDown}");
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] IsCtrlPressedCombined result: {isCtrlPressed}");
+
+            var byMods = (mods & VirtualKeyModifiers.Control) == VirtualKeyModifiers.Control;
+            var byWinUI = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
+            var byNative = IsCtrlDownNative();
+            System.Diagnostics.Debug.WriteLine($"[CTRL-DEBUG] byMods={byMods}, byWinUI={byWinUI}, byNative={byNative}");
+
             // CTRL - toggle bez drag
             if (isCtrlPressed)
             {
+                System.Diagnostics.Debug.WriteLine($"[CTRL] Detected Ctrl+Click on index={index}, part={slotPart}");
                 _isDragging = false;
-                _handledCtrlClickInPointerPressed = true; // Oznacz że obsłużyliśmy
-                ViewModel.ToggleSlotSelection(index, slotPart, _shiftDown);
+                _handledCtrlClickInPointerPressed = true;
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
-                e.Handled = true; // Blokuj tylko dla Ctrl
+                e.Handled = true;
                 return;
             }
 
@@ -11158,7 +11256,7 @@ namespace GrafikoMat.Views
             {
                 _isDragging = false;
                 ViewModel.SelectDragRange(_lastClickedSlot.Index, index, _lastClickedSlot.Part, slotPart);
-                e.Handled = true; // Blokuj dla Shift
+                e.Handled = true;
                 return;
             }
 
@@ -11170,7 +11268,7 @@ namespace GrafikoMat.Views
 
             ViewModel.SelectSingleSlot(index, slotPart);
             _lastClickedSlot = new SelectedSlot(index, slotPart);
-            e.Handled = true; // Blokuj dla drag
+            e.Handled = true;
         }
 
         private void Calendar_PointerMoved(object sender, PointerRoutedEventArgs e)
@@ -11250,16 +11348,15 @@ namespace GrafikoMat.Views
 
         private void Calendar_Tapped(object sender, TappedRoutedEventArgs e)
         {
-            // ZMIANA: Tapped jest safety net tylko dla Ctrl+Click
             // Jeśli PointerPressed obsłużył Ctrl, ignore
             if (_handledCtrlClickInPointerPressed)
             {
-                _handledCtrlClickInPointerPressed = false; // Reset flagi
+                _handledCtrlClickInPointerPressed = false;
                 e.Handled = true;
                 return;
             }
 
-            // Sprawdź stan Ctrl globalnie (bez KeyModifiers z eventu)
+            // ✅ ZMIENIONE - sprawdź CTRL również w Tapped
             bool isCtrlPressed = _ctrlDown ||
                                 (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down ||
                                 IsCtrlDownNative();
@@ -11278,7 +11375,8 @@ namespace GrafikoMat.Views
 
             if (index >= 0 && index < ViewModel.DayCells.Count && ViewModel.DayCells[index].InMonth)
             {
-                ViewModel.ToggleSlotSelection(index, slotPart, _shiftDown);
+                System.Diagnostics.Debug.WriteLine($"[TAPPED] Handling Ctrl+Click in Tapped fallback");
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true); // ✅ ZMIENIONE
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
             }
 
@@ -11319,6 +11417,7 @@ namespace GrafikoMat.Views
 
                 if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
                 {
+                    // Zaznaczone komórki
                     effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
                     effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
                     dayNumberFg = new SolidColorBrush(Colors.White);
@@ -11326,30 +11425,50 @@ namespace GrafikoMat.Views
                 }
                 else if (!cell.InMonth)
                 {
-                    effectiveBackground = new SolidColorBrush(Colors.Transparent);
-                    effectiveBorder = new SolidColorBrush(Colors.Transparent);
-                    dayNumberFg = new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
-                    headerBg = new SolidColorBrush(Colors.Transparent);
-                }
-                else
-                {
+                    // ✅ DNI SPOZA MIESIĄCA
+                    // Tło: Alpha=40, Ramki: Alpha=10
+                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.6)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(255, 40, 40, 45)) :
-                            new SolidColorBrush(Color.FromArgb(255, 32, 32, 36));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
+                            new SolidColorBrush(Color.FromArgb(40, 60, 60, 60)) :
+                            new SolidColorBrush(Color.FromArgb(40, 50, 50, 50));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
+                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
+                        headerBg = new SolidColorBrush(Color.FromArgb(40, 70, 70, 70));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(255, 240, 240, 245)) :
-                            new SolidColorBrush(Color.FromArgb(255, 250, 250, 252));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 248, 248, 250));
+                            new SolidColorBrush(Color.FromArgb(40, 220, 220, 220)) :
+                            new SolidColorBrush(Color.FromArgb(40, 240, 240, 240));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 0, 0, 0));
+                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
+                        headerBg = new SolidColorBrush(Color.FromArgb(40, 230, 230, 230));
+                    }
+                }
+                else
+                {
+                    // ✅ DNI W MIESIĄCU
+                    // Tło: Alpha=150, Ramki: Alpha=80
+                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.8)
+                    if (isDark)
+                    {
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(150, 50, 50, 50)) :
+                            new SolidColorBrush(Color.FromArgb(150, 40, 40, 40));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
+                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
+                        headerBg = new SolidColorBrush(Color.FromArgb(150, 60, 60, 60));
+                    }
+                    else
+                    {
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(150, 235, 235, 235)) :
+                            new SolidColorBrush(Color.FromArgb(150, 250, 250, 250));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
+                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
+                        headerBg = new SolidColorBrush(Color.FromArgb(150, 245, 245, 245));
                     }
                 }
 
@@ -11359,7 +11478,6 @@ namespace GrafikoMat.Views
                 cell.EffectiveHeaderBackground = headerBg;
             }
         }
-
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
         {
             if (ViewModel != null)
@@ -21080,27 +21198,6 @@ pause
   ]
 }
 
------ END -----
-
-===== FILE: update-claude-project.bat (507 bytes)
------ BEGIN -----
-@echo off
-echo ========================================
-echo   Aktualizacja Claude Project
-echo ========================================
-echo.
-
-cd /d "C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat"
-python -m claude-pyrojects.cli update
-
-echo.
-echo ========================================
-echo   Projekt zaktualizowany!
-echo ========================================
-echo   Teraz wejdz do Claude Projects
-echo   i otworz projekt "GrafikoMat"
-echo ========================================
-pause
 ----- END -----
 
 ===== FILE: UpdateProject.bat (2140 bytes)

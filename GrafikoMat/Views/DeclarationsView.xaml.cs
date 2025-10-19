@@ -383,6 +383,7 @@ namespace GrafikoMat.Views
 
                 if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
                 {
+                    // Zaznaczone komórki
                     effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
                     effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
                     dayNumberFg = new SolidColorBrush(Colors.White);
@@ -390,30 +391,50 @@ namespace GrafikoMat.Views
                 }
                 else if (!cell.InMonth)
                 {
-                    effectiveBackground = new SolidColorBrush(Colors.Transparent);
-                    effectiveBorder = new SolidColorBrush(Colors.Transparent);
-                    dayNumberFg = new SolidColorBrush(Color.FromArgb(100, 128, 128, 128));
-                    headerBg = new SolidColorBrush(Colors.Transparent);
-                }
-                else
-                {
+                    // ✅ DNI SPOZA MIESIĄCA
+                    // Tło: Alpha=40, Ramki: Alpha=10
+                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.6)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(255, 40, 40, 45)) :
-                            new SolidColorBrush(Color.FromArgb(255, 32, 32, 36));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 45, 45, 50));
+                            new SolidColorBrush(Color.FromArgb(40, 60, 60, 60)) :
+                            new SolidColorBrush(Color.FromArgb(40, 50, 50, 50));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
+                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
+                        headerBg = new SolidColorBrush(Color.FromArgb(40, 70, 70, 70));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(255, 240, 240, 245)) :
-                            new SolidColorBrush(Color.FromArgb(255, 250, 250, 252));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(50, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);
-                        headerBg = new SolidColorBrush(Color.FromArgb(255, 248, 248, 250));
+                            new SolidColorBrush(Color.FromArgb(40, 220, 220, 220)) :
+                            new SolidColorBrush(Color.FromArgb(40, 240, 240, 240));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 0, 0, 0));
+                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
+                        headerBg = new SolidColorBrush(Color.FromArgb(40, 230, 230, 230));
+                    }
+                }
+                else
+                {
+                    // ✅ DNI W MIESIĄCU
+                    // Tło: Alpha=150, Ramki: Alpha=80
+                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.8)
+                    if (isDark)
+                    {
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(150, 50, 50, 50)) :
+                            new SolidColorBrush(Color.FromArgb(150, 40, 40, 40));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
+                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
+                        headerBg = new SolidColorBrush(Color.FromArgb(150, 60, 60, 60));
+                    }
+                    else
+                    {
+                        effectiveBackground = cell.IsDayOff ?
+                            new SolidColorBrush(Color.FromArgb(150, 235, 235, 235)) :
+                            new SolidColorBrush(Color.FromArgb(150, 250, 250, 250));
+                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
+                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
+                        headerBg = new SolidColorBrush(Color.FromArgb(150, 245, 245, 245));
                     }
                 }
 
@@ -423,7 +444,6 @@ namespace GrafikoMat.Views
                 cell.EffectiveHeaderBackground = headerBg;
             }
         }
-
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
         {
             if (ViewModel != null)

@@ -21,8 +21,8 @@
       "mtime": 1760721545.021529
     },
     "claude_pyrojects.manifest": {
-      "hash": "ca654fbca01c812d7d57499840b33a6caf06ca4f5900db7003712ae0151bb014",
-      "mtime": 1760865643.0311656
+      "hash": "89f6ca7d4ec0b351676bdcde99bca5545d388cf29e49cc33a92d2c8c15b49493",
+      "mtime": 1760881500.5581763
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1760870414.28362
+      "mtime": 1760891315.2077477
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -43,10 +43,6 @@
     "supabase_schema.sql": {
       "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "mtime": 1757152025.6021419
-    },
-    "update-claude-project.bat": {
-      "hash": "6b27a7539972ca3a5449be04b6196a04dc0a24a0d62fdb08c2127b8fb0fb576e",
-      "mtime": 1760721811.7173817
     },
     "UpdateProject-Silent.bat": {
       "hash": "f40d2011f6647fafa230987d2f8ffcaf22b4e5619b4cf077836f23723aea4aaf",
@@ -125,8 +121,8 @@
       "mtime": 1760476716.7740734
     },
     "GrafikoMat\\Common\\Converters.cs": {
-      "hash": "8bc1c82582b7e8c037f10899c2c1f94b31b3a0e1bacd54dc8e15f2d17f90597b",
-      "mtime": 1760419851.4957306
+      "hash": "628a8b938bf8eeeb210d0b5a1e390641e5dae647d8f0abb9f412d5c5bd873154",
+      "mtime": 1760890367.13486
     },
     "GrafikoMat\\Common\\DispatcherQueueExtensions.cs": {
       "hash": "c17c89f0188e5a55c28034f78b3ada4ad08cc934672dbe25091569e735e1288e",
@@ -265,8 +261,8 @@
       "mtime": 1757436088.2497106
     },
     "GrafikoMat\\ViewModels\\DeclarationsViewModel.cs": {
-      "hash": "b77d984a7b961a9eca44bdddd7abfc7a9ef601db1c1602a20e257f7a911535d3",
-      "mtime": 1760869701.2994487
+      "hash": "613eea7c39d67670b52a9b4183f87e0940c6fd1095c28ac5c7abe39cbd2c731d",
+      "mtime": 1760870648.6461194
     },
     "GrafikoMat\\ViewModels\\DoctorEditorViewModel.cs": {
       "hash": "1e190e2c4132357e517a14641906d8f71ce4db52235f711b3fddb1ea78fb341a",
@@ -325,12 +321,12 @@
       "mtime": 1760459172.8365133
     },
     "GrafikoMat\\Views\\DeclarationsView.xaml": {
-      "hash": "2bf6e12308491fa3d56d330e75c1b4f95c679c56884d55fdeb7f364a26b5c819",
-      "mtime": 1760870299.4330323
+      "hash": "eaa75fc6b4016e612816cfa07974eed902297eef5c337fae3cbd8c986fab7cdd",
+      "mtime": 1760891199.993607
     },
     "GrafikoMat\\Views\\DeclarationsView.xaml.cs": {
-      "hash": "71643e116fcfa8fa4d79beb319ca00c753ac79162a84c02ca3b2a343ce02e9d2",
-      "mtime": 1760868327.2530093
+      "hash": "a874d693aac079a4d49efa595d5a320dd6a91fcd8a17c4a2d9a81953ddb7014b",
+      "mtime": 1760889999.7974494
     },
     "GrafikoMat\\Views\\LoginView.xaml": {
       "hash": "025d9bef5186b9465d309f3856f94d337743587e9d6608d1b727c8f749b7ecdf",
@@ -729,5 +725,5 @@
       "mtime": 1757151896.199422
     }
   },
-  "last_sync": "2025-10-19T12:40:26.551989"
+  "last_sync": "2025-10-19T18:28:57.324550"
 }

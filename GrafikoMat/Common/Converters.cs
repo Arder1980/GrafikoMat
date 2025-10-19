@@ -10,12 +10,37 @@ namespace GrafikoMat.Common
 {
     public class BooleanToOpacityConverter : IValueConverter
     {
-        public double TrueValue { get; set; } = 0.5;
-        public double FalseValue { get; set; } = 1.0;
-        public object Convert(object value, Type targetType, object parameter, string language) => (value is bool b && b) ? TrueValue : FalseValue;
-        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
-    }
+        public double TrueValue { get; set; } = 1.0;
+        public double FalseValue { get; set; } = 0.5;
 
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            bool boolValue = value is bool b && b;
+
+            // Obsługa parametru w formacie "FalseValue;TrueValue"
+            if (parameter is string paramStr && !string.IsNullOrEmpty(paramStr))
+            {
+                var parts = paramStr.Split(';');
+                // ✅ DODANE - użyj InvariantCulture dla kropki dziesiętnej
+                if (parts.Length == 2 &&
+                    double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double falseVal) &&
+                    double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double trueVal))
+                {
+                    return boolValue ? trueVal : falseVal;
+                }
+                // Jeśli tylko jedna wartość, użyj jej jako FalseValue
+                if (parts.Length == 1 && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double singleVal))
+                {
+                    return boolValue ? 1.0 : singleVal;
+                }
+            }
+
+            return boolValue ? TrueValue : FalseValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
