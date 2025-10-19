@@ -46,6 +46,7 @@ namespace GrafikoMat.ViewModels
 
         public bool CanSwitchDoctors { get; }
 
+
         private int _selectedDoctorIndex;
         public int SelectedDoctorIndex
         {
@@ -116,6 +117,25 @@ namespace GrafikoMat.ViewModels
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+        }
+
+        // ✅ DODAJ tę metodę do klasy DeclarationsViewModel (np. pod metodą ClearSelection)
+        public bool HasDeclarationInSlot(int cellIndex, SlotPart slotPart)
+        {
+            if (cellIndex < 0 || cellIndex >= DayCells.Count)
+                return false;
+
+            var cell = DayCells[cellIndex];
+            if (!cell.InMonth)
+                return false;
+
+            return slotPart switch
+            {
+                SlotPart.Full => !string.IsNullOrWhiteSpace(cell.SymbolFull),
+                SlotPart.Day => !string.IsNullOrWhiteSpace(cell.SymbolDay),
+                SlotPart.Night => !string.IsNullOrWhiteSpace(cell.SymbolNight),
+                _ => false
+            };
         }
 
         private void BuildCalendarShell()

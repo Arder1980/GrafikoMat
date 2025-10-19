@@ -8,10 +8,16 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
+using WinUIBrush = Microsoft.UI.Xaml.Media.Brush;
+using WinUISolidColorBrush = Microsoft.UI.Xaml.Media.SolidColorBrush;
+using WinUIColor = Windows.UI.Color;
+using WinUIColors = Microsoft.UI.Colors;
 
 namespace GrafikoMat.Views
 {
@@ -279,7 +285,6 @@ namespace GrafikoMat.Views
             var point = e.GetPosition(CalendarGridView);
             var (index, slotPart) = GetIndexAndSlotFromPoint(point);
 
-            // Jeśli kliknięto na slot poza miesiącem lub poza siatką, ignoruj
             if (index == -1 || index >= ViewModel.DayCells.Count || !ViewModel.DayCells[index].InMonth)
             {
                 return;
@@ -287,31 +292,171 @@ namespace GrafikoMat.Views
 
             var clickedSlot = new SelectedSlot(index, slotPart);
 
-            // Jeśli kliknięty slot NIE jest w zaznaczeniu, zaznacz tylko jego
             if (!ViewModel.SelectedSlots.Contains(clickedSlot))
             {
                 ViewModel.SelectSingleSlot(index, slotPart);
                 _lastClickedSlot = clickedSlot;
             }
 
-            // Utwórz menu kontekstowe
             var contextMenu = new MenuFlyout();
             contextMenu.Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.RightEdgeAlignedTop;
 
-            var placeholderItem = new MenuFlyoutItem
+            // ✅ Styl dla przesunięcia w prawo (wyrównanie z resztą)
+            var indentedStyle = new Style(typeof(MenuFlyoutItem));
+            indentedStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(12, 12, 12, 12)));
+
+            // ✅ Styl nagłówka z tłem
+            var headerStyle = new Style(typeof(MenuFlyoutItem));
+            headerStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(12, 12, 12, 12)));
+            headerStyle.Setters.Add(new Setter(Control.BackgroundProperty,
+                new WinUISolidColorBrush(WinUIColor.FromArgb(60, 128, 128, 128))));
+            headerStyle.Setters.Add(new Setter(MenuFlyoutItem.FontWeightProperty, Microsoft.UI.Text.FontWeights.SemiBold));
+
+            // ============================================
+            // SEKCJA 1: Nagłówek - wyróżniony tłem
+            // ============================================
+            var addDeclarationHeader = new MenuFlyoutItem
             {
-                Text = "Tu znajdą się funkcje dodawania deklaracji",
-                IsEnabled = false
+                Text = "Dodaj deklarację:",
+                IsEnabled = false,
+                Style = headerStyle
+            };
+            contextMenu.Items.Add(addDeclarationHeader);
+
+            // ============================================
+            // SEKCJA 2: Typy deklaracji - PRZESUNIĘTE W PRAWO
+            // ============================================
+            var mogeItem = new MenuFlyoutItem
+            {
+                Text = "        Mogę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(mogeItem);
+
+            var chceItem = new MenuFlyoutItem
+            {
+                Text = "        Chcę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(chceItem);
+
+            var warunkowoItem = new MenuFlyoutItem
+            {
+                Text = "        Mogę warunkowo",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(warunkowoItem);
+
+            var rezerwacjaItem = new MenuFlyoutItem
+            {
+                Text = "        Rezerwacja",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(rezerwacjaItem);
+
+            var nieMogeItem = new MenuFlyoutItem
+            {
+                Text = "        Nie mogę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(nieMogeItem);
+
+            var innyDyzurItem = new MenuFlyoutItem
+            {
+                Text = "        Inny dyżur",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(innyDyzurItem);
+
+            var urlopItem = new MenuFlyoutItem
+            {
+                Text = "        Urlop",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(urlopItem);
+
+            contextMenu.Items.Add(new MenuFlyoutSeparator());
+
+            // ============================================
+            // SEKCJA 3: Współdyżurny z rozwijaną listą
+            // ============================================
+
+            // ✅ SPRAWDŹ czy w zaznaczonych slotach są deklaracje
+            bool hasDeclarationInSelection = ViewModel.SelectedSlots
+                .Any(slot => ViewModel.HasDeclarationInSlot(slot.Index, slot.Part));
+
+            var addCoWorkerSubItem = new MenuFlyoutSubItem
+            {
+                Text = "Dodaj współdyżurnego"
+                // ✅ SubItem ZAWSZE aktywne (można rozwinąć)
             };
 
-            contextMenu.Items.Add(placeholderItem);
+            if (!hasDeclarationInSelection)
+            {
+                // ✅ Pokaż komunikat zamiast listy lekarzy
+                var hintItem = new MenuFlyoutItem
+                {
+                    Text = "Najpierw wstaw deklarację",
+                    IsEnabled = false
+                };
+                addCoWorkerSubItem.Items.Add(hintItem);
+            }
+            else
+            {
+                // ✅ Pokaż listę lekarzy tylko gdy są deklaracje
+                var currentDoctorId = ViewModel.SelectedDoctor?.Id;
+                var doctorsInUnit = ViewModel.Doctors
+                    .Where(d => d.Profile.Id != currentDoctorId)
+                    .ToList();
 
-            // Pokaż menu w miejscu kliknięcia
+                if (doctorsInUnit.Any())
+                {
+                    foreach (var doctor in doctorsInUnit)
+                    {
+                        var doctorItem = new MenuFlyoutItem
+                        {
+                            Text = doctor.DisplayName,
+                            IsEnabled = false  // 🔧 PLACEHOLDER - na razie bez akcji
+                        };
+                        addCoWorkerSubItem.Items.Add(doctorItem);
+                    }
+                }
+                else
+                {
+                    var nodoctorsItem = new MenuFlyoutItem
+                    {
+                        Text = "(brak innych dyżurnych)",
+                        IsEnabled = false
+                    };
+                    addCoWorkerSubItem.Items.Add(nodoctorsItem);
+                }
+            }
+
+            contextMenu.Items.Add(addCoWorkerSubItem);
+
+            contextMenu.Items.Add(new MenuFlyoutSeparator());
+
+            // ============================================
+            // SEKCJA 4: Przełącznik trybu
+            // ============================================
+            var toggleModeItem = new MenuFlyoutItem
+            {
+                Text = "Przełącz tryb (12h/24h)",
+                IsEnabled = false  // 🔧 PLACEHOLDER
+            };
+            contextMenu.Items.Add(toggleModeItem);
+
             contextMenu.ShowAt(CalendarGridView, point);
 
             e.Handled = true;
         }
-
         private void Calendar_Tapped(object sender, TappedRoutedEventArgs e)
         {
             // Jeśli PointerPressed obsłużył Ctrl, ignore
@@ -376,65 +521,58 @@ namespace GrafikoMat.Views
 
             foreach (var cell in ViewModel.DayCells)
             {
-                Brush effectiveBackground;
-                Brush effectiveBorder;
-                Brush dayNumberFg;
-                Brush headerBg;
+                WinUIBrush effectiveBackground;
+                WinUIBrush effectiveBorder;
+                WinUIBrush dayNumberFg;
+                WinUIBrush headerBg;
 
                 if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
                 {
-                    // Zaznaczone komórki
-                    effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
-                    effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
-                    dayNumberFg = new SolidColorBrush(Colors.White);
-                    headerBg = new SolidColorBrush(Color.FromArgb(255, 50, 110, 200));
+                    effectiveBackground = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
+                    effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
+                    dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                    headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 50, 110, 200));
                 }
                 else if (!cell.InMonth)
                 {
-                    // ✅ DNI SPOZA MIESIĄCA
-                    // Tło: Alpha=40, Ramki: Alpha=10
-                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.6)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(40, 60, 60, 60)) :
-                            new SolidColorBrush(Color.FromArgb(40, 50, 50, 50));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
-                        headerBg = new SolidColorBrush(Color.FromArgb(40, 70, 70, 70));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 60, 60, 60)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 50, 50, 50));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 255, 255, 255));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 70, 70, 70));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(40, 220, 220, 220)) :
-                            new SolidColorBrush(Color.FromArgb(40, 240, 240, 240));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
-                        headerBg = new SolidColorBrush(Color.FromArgb(40, 230, 230, 230));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 220, 220, 220)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 240, 240, 240));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 0, 0, 0));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 230, 230, 230));
                     }
                 }
                 else
                 {
-                    // ✅ DNI W MIESIĄCU
-                    // Tło: Alpha=150, Ramki: Alpha=80
-                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.8)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(150, 50, 50, 50)) :
-                            new SolidColorBrush(Color.FromArgb(150, 40, 40, 40));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
-                        headerBg = new SolidColorBrush(Color.FromArgb(150, 60, 60, 60));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 50, 50, 50)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 40, 40, 40));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 255, 255, 255));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 60, 60, 60));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(150, 235, 235, 235)) :
-                            new SolidColorBrush(Color.FromArgb(150, 250, 250, 250));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
-                        headerBg = new SolidColorBrush(Color.FromArgb(150, 245, 245, 245));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 235, 235, 235)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 250, 250, 250));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 0, 0, 0));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 245, 245, 245));
                     }
                 }
 
