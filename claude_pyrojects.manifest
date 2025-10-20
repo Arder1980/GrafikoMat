@@ -21,8 +21,8 @@
       "mtime": 1760721545.021529
     },
     "claude_pyrojects.manifest": {
-      "hash": "631637b7ab821b3c80492dc0728a3bf82b6b46f271bb2149643350553088d268",
-      "mtime": 1760996296.6202886
+      "hash": "45e144e8e25cbb0dbb2fd8ae21d0f4facff1eadcb327d42d47c65656f650a3b2",
+      "mtime": 1760996857.1902404
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1760996840.3686485
+      "mtime": 1760997084.0389187
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -657,8 +657,8 @@
       "mtime": 1760996834.344729
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\TabuSearchSolver.cs": {
-      "hash": "8c16b7a8dcd151c921a3d6e5a007ba3cca0f46440dd93df9a14ebb7eef5c217b",
-      "mtime": 1760167630.8648107
+      "hash": "6d7794becccf73dcb3802950c9649a533b5c1bac4c1fe9a1469a4fa35656695c",
+      "mtime": 1760997040.93986
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\Algorithms\\FlowUpperBound.cs": {
       "hash": "71b2f48bc9ad4ab151e6b2e36e951b8d26e325686439ee10c9bfeb1013d2423a",
@@ -693,8 +693,8 @@
       "mtime": 1760994094.15357
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverParameters.cs": {
-      "hash": "b41190c95d1f4f6a6afd448191d1a0a75b892f7be379617861de78161e1fdaa4",
-      "mtime": 1760996154.7089257
+      "hash": "de9847f2a8cbc0dd2965d34c238b10db7e6d5c07fbeaac962e3800986fa9026d",
+      "mtime": 1760997040.9238517
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverPriority.cs": {
       "hash": "4d7877ac003d4f66389a67dec78d6636c22ead89c351b1aad598202d3c45f529",
@@ -737,5 +737,5 @@
       "mtime": 1757151896.199422
     }
   },
-  "last_sync": "2025-10-20T23:47:37.188606"
+  "last_sync": "2025-10-20T23:51:33.908459"
 }

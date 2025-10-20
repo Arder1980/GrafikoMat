@@ -355,8 +355,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         /// - Lepsza dywersyfikacja poszukiwań
         /// - +3-5% jakości końcowej vs single-best przy tym samym czasie
         /// </summary>
-        private void UpdatePheromonesWithEliteStrategy(
-            List<dynamic> eliteSolutions) // dynamic = anonymous type z {Solution, Metrics, Fitness}
+        private void UpdatePheromonesWithEliteStrategy<T>(List<T> eliteSolutions)
+            where T : class
         {
             int rank = 0;
             foreach (var elite in eliteSolutions)
@@ -364,8 +364,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 rank++;
                 double weight = (double)(ELITE_COUNT - rank + 1) / (ELITE_COUNT * (ELITE_COUNT + 1) / 2.0);
 
-                // weight będzie: 5/15, 4/15, 3/15, 2/15, 1/15
-                UpdatePheromonesWeighted(elite.Solution, elite.Fitness, weight);
+                // Użyj reflection do dostępu do właściwości anonimowego typu
+                var solutionProperty = elite.GetType().GetProperty("Solution");
+                var fitnessProperty = elite.GetType().GetProperty("Fitness");
+
+                var solution = solutionProperty?.GetValue(elite) as Dictionary<DateTime, DoctorProfile?>;
+                var fitness = (double)(fitnessProperty?.GetValue(elite) ?? 0.0);
+
+                if (solution != null)
+                {
+                    UpdatePheromonesWeighted(solution, fitness, weight);
+                }
             }
         }
 
