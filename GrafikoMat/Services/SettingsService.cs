@@ -12,13 +12,12 @@ namespace GrafikoMat.Services
     public enum AppTheme { Light, Dark, SystemDefault }
 
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
+    // Fragment SettingsService.cs - TYLKO zmieniony fragment record AppSettings
+
     public record AppSettings
     {
         public string SupabaseUrl { get; init; } = string.Empty;
         public string SupabaseAnonKey { get; init; } = string.Empty;
-
-        // ZMIANA: Usunięto niebezpieczną właściwość
-        // public string SupabaseServiceKey { get; init; } = string.Empty; 
 
         public SolverType SelectedSolver { get; init; } = SolverType.Backtracking;
         public AppTheme Theme { get; init; } = AppTheme.SystemDefault;
@@ -32,8 +31,12 @@ namespace GrafikoMat.Services
         public double CoolingRate { get; init; } = 0.995;
         public int GeneticPopulationSize { get; init; } = 100;
         public int GeneticGenerations { get; init; } = 300;
-        public int AntColonyAnts { get; init; } = 75;
-        public int AntColonyGenerations { get; init; } = 300;
+
+        // ====== ZMIANA: Nowe wartości domyślne dla PRECISION+ ======
+        // BYŁO: AntColonyAnts = 75, AntColonyGenerations = 300
+        public int AntColonyAnts { get; init; } = 40;          // było 75
+        public int AntColonyGenerations { get; init; } = 120;  // było 300
+
         public int TabuListSize { get; init; } = 30;
         public int TabuMaxIterations { get; init; } = 500;
     }

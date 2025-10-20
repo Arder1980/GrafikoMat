@@ -21,8 +21,8 @@
       "mtime": 1760721545.021529
     },
     "claude_pyrojects.manifest": {
-      "hash": "b226ba20dc7f95a679ed08169d567edadce3369e0f694d66f65f6b18203f4bc8",
-      "mtime": 1760968693.4973493
+      "hash": "a3ecec39b0b4b912bbb23aae4f69bc5810980f2ddff7d3c78974b42e898458d4",
+      "mtime": 1760994172.2633157
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1760974440.4543178
+      "mtime": 1760995481.984143
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -237,8 +237,8 @@
       "mtime": 1757538368.2759707
     },
     "GrafikoMat\\Services\\SettingsService.cs": {
-      "hash": "3ba2af86a74fceae94b8c5e1b50c82061d256bb8592aa75a0e1be87563c853b1",
-      "mtime": 1760248636.099378
+      "hash": "a5f3a53862f42d803bd32142cdada7d4ccfabc69f03e6951e6835b95c53bcbd4",
+      "mtime": 1760995454.5381546
     },
     "GrafikoMat\\Services\\SnapshotBlurService.cs": {
       "hash": "b1b58a6457ebcb202f85b336349975dec9c7307fa0a683226f1d9c3d8983649d",
@@ -281,8 +281,8 @@
       "mtime": 1757606523.067359
     },
     "GrafikoMat\\ViewModels\\EngineSettingsViewModel.cs": {
-      "hash": "da7e7baf1905dea676e64373257dcd44eac3863736d7dbc28b3d8ffb0e9cef68",
-      "mtime": 1760172617.1829016
+      "hash": "e4d3bd1f0516c1c41830fa60fe628792d031ee2822e780ee62333863304cf52b",
+      "mtime": 1760995454.555162
     },
     "GrafikoMat\\ViewModels\\MainViewModel.cs": {
       "hash": "b6805c5f8ef48260b9445e86d93dc3350b8309275b4929c5a6e4af9a402a408f",
@@ -609,16 +609,16 @@
       "mtime": 1757516144.0341723
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\AntColonySolver.cs": {
-      "hash": "45a9dc7d0368152ddd78d130ed8fc9f0a48123c109accb22094da4cc34b422cf",
-      "mtime": 1760167630.875821
+      "hash": "88503605af46f4c722f8ad60227e8236c5ea331dfc0f3b2a6d3f1d7dedea752f",
+      "mtime": 1760995454.5816607
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\AStarSolver.cs": {
-      "hash": "5f0a18f3c12fcfcfee10eacc544fb847b9978692f252679843ffa4c0bc9622d4",
-      "mtime": 1757530924.1894498
+      "hash": "ced827e4a64c6c1c61c5444bd7bab74ddc64befaafa2b039d1c7758022e3e0e9",
+      "mtime": 1760994094.1685874
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\BacktrackingSolver.cs": {
-      "hash": "d6e08e9914f6e662e49cb1399701065e07c2ea9ceed49bf4d6a7d5896013d6b1",
-      "mtime": 1760974430.608679
+      "hash": "fde8d7586c023cae893af136cdd66b162ac26279a8ac69723a8e39c434fb3cf5",
+      "mtime": 1760994094.1165397
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\GeneticSolver.cs": {
       "hash": "650cc42b7956e4c7b519380e4a526591760adeb02742025cfe60723d727f99cb",
@@ -627,6 +627,10 @@
     "GrafikoMat.Core\\Scheduling\\Engines\\IScheduleSolver.cs": {
       "hash": "f1dd68283cba591d4bddd560539c5def23f63b697a5c15e6df1c9ada5a1122fb",
       "mtime": 1757528012.576375
+    },
+    "GrafikoMat.Core\\Scheduling\\Engines\\PartialSolutionEvaluator.cs": {
+      "hash": "d1782be6b29bd3c218f3085bac8f6836f85e27fffa87c1f1e5b5e2d4529134b3",
+      "mtime": 1760994094.1370597
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\ScheduleSolverFactory.cs": {
       "hash": "6bb66011e518ff7f3da52169a2d7c10927ec68386b1b4a9ad1a28c5b201d32cf",
@@ -677,12 +681,12 @@
       "mtime": 1757525125.191073
     },
     "GrafikoMat.Core\\Scheduling\\Models\\ScheduleSolution.cs": {
-      "hash": "6fcc12e9c1f86c8dce8a912fd26011bf361987e2b3bf97924430a7422d90c518",
-      "mtime": 1757525125.1615727
+      "hash": "61bd6be9bf9cd56df131eb15b211f4fb82f1127b75e028cfe2353d92702c340e",
+      "mtime": 1760994094.15357
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverParameters.cs": {
-      "hash": "d384702e6ce8822bae3faf1e8eaece4ad8febde9f8856bb8e945245d1d779be6",
-      "mtime": 1760167630.8853345
+      "hash": "3fadf037f28e7b298ff387e03b12514c5dcf828dfd417b274721c3574bf77c28",
+      "mtime": 1760995454.570164
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverPriority.cs": {
       "hash": "4d7877ac003d4f66389a67dec78d6636c22ead89c351b1aad598202d3c45f529",
@@ -725,5 +729,5 @@
       "mtime": 1757151896.199422
     }
   },
-  "last_sync": "2025-10-20T17:34:07.799864"
+  "last_sync": "2025-10-20T23:24:59.416556"
 }
