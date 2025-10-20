@@ -21,8 +21,8 @@
       "mtime": 1760721545.021529
     },
     "claude_pyrojects.manifest": {
-      "hash": "89f6ca7d4ec0b351676bdcde99bca5545d388cf29e49cc33a92d2c8c15b49493",
-      "mtime": 1760881500.5581763
+      "hash": "b226ba20dc7f95a679ed08169d567edadce3369e0f694d66f65f6b18203f4bc8",
+      "mtime": 1760968693.4973493
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1760891315.2077477
+      "mtime": 1760974440.4543178
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -73,8 +73,8 @@
       "mtime": 1760795890.0
     },
     "GrafikoMat\\MainWindow.xaml.cs": {
-      "hash": "5b84ecae6f54c08a5c7d978f0b04c8a016566c814752ea3723d2eed3d6a772e4",
-      "mtime": 1760867501.021827
+      "hash": "dc4fa7e4dc55585ab3d3d7d2c42145acad1c9f4e72731a0edf0bf95bc8fcede7",
+      "mtime": 1760968394.4669502
     },
     "GrafikoMat\\Package.appxmanifest": {
       "hash": "93d142cda6a1423ba0c0fef96265e61ff6f13657e2f322549c23e661460934ed",
@@ -121,8 +121,8 @@
       "mtime": 1760476716.7740734
     },
     "GrafikoMat\\Common\\Converters.cs": {
-      "hash": "628a8b938bf8eeeb210d0b5a1e390641e5dae647d8f0abb9f412d5c5bd873154",
-      "mtime": 1760890367.13486
+      "hash": "8afc7efd6c005d4e6dc695a9a7f288c5710c1aebd966adf54c02e43b6ba59b8b",
+      "mtime": 1760891429.1789703
     },
     "GrafikoMat\\Common\\DispatcherQueueExtensions.cs": {
       "hash": "c17c89f0188e5a55c28034f78b3ada4ad08cc934672dbe25091569e735e1288e",
@@ -261,8 +261,8 @@
       "mtime": 1757436088.2497106
     },
     "GrafikoMat\\ViewModels\\DeclarationsViewModel.cs": {
-      "hash": "613eea7c39d67670b52a9b4183f87e0940c6fd1095c28ac5c7abe39cbd2c731d",
-      "mtime": 1760870648.6461194
+      "hash": "303776d0451bdde4579409b50dfd8931a40c8e752acf734eea0541f7763a55b4",
+      "mtime": 1760967369.3424137
     },
     "GrafikoMat\\ViewModels\\DoctorEditorViewModel.cs": {
       "hash": "1e190e2c4132357e517a14641906d8f71ce4db52235f711b3fddb1ea78fb341a",
@@ -321,12 +321,12 @@
       "mtime": 1760459172.8365133
     },
     "GrafikoMat\\Views\\DeclarationsView.xaml": {
-      "hash": "eaa75fc6b4016e612816cfa07974eed902297eef5c337fae3cbd8c986fab7cdd",
-      "mtime": 1760891199.993607
+      "hash": "a1c1333b53b8190aec8d667298be02f1bb1e09541ced85eafd56558786707f9d",
+      "mtime": 1760968561.8092182
     },
     "GrafikoMat\\Views\\DeclarationsView.xaml.cs": {
-      "hash": "a874d693aac079a4d49efa595d5a320dd6a91fcd8a17c4a2d9a81953ddb7014b",
-      "mtime": 1760889999.7974494
+      "hash": "761c566b407ab3e90f230e188bb084d0129221e33d3cd9f0aa0942404da7d2c2",
+      "mtime": 1760968394.4759655
     },
     "GrafikoMat\\Views\\LoginView.xaml": {
       "hash": "025d9bef5186b9465d309f3856f94d337743587e9d6608d1b727c8f749b7ecdf",
@@ -617,8 +617,8 @@
       "mtime": 1757530924.1894498
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\BacktrackingSolver.cs": {
-      "hash": "430596ac70cb31d51ae4c15658f5b25960972d5b38726e667738f1d8ded985ff",
-      "mtime": 1757528012.4948626
+      "hash": "d6e08e9914f6e662e49cb1399701065e07c2ea9ceed49bf4d6a7d5896013d6b1",
+      "mtime": 1760974430.608679
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\GeneticSolver.cs": {
       "hash": "650cc42b7956e4c7b519380e4a526591760adeb02742025cfe60723d727f99cb",
@@ -649,8 +649,8 @@
       "mtime": 1760167630.8648107
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\Algorithms\\FlowUpperBound.cs": {
-      "hash": "c2d69aab9dee81ff3c9e4e0a56cbc7a35fa141559feac43c5409601d5e14c3e6",
-      "mtime": 1757528012.5218625
+      "hash": "71b2f48bc9ad4ab151e6b2e36e951b8d26e325686439ee10c9bfeb1013d2423a",
+      "mtime": 1760974430.5896616
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\Algorithms\\MaxFlowDinic.cs": {
       "hash": "81c55c32d2ac359e9d9479ea852801520e0f92e6701823607e19557e8d258580",
@@ -725,5 +725,5 @@
       "mtime": 1757151896.199422
     }
   },
-  "last_sync": "2025-10-19T18:28:57.324550"
+  "last_sync": "2025-10-20T17:34:07.799864"
 }

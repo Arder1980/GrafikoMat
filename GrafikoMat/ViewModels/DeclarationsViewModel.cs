@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Scheduling; // ✅ DODANE
+using GrafikoMat.Core.Scheduling;
 using GrafikoMat.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -33,7 +33,7 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
         private bool _use12hShiftsByDefault;
-        private MonthLayout _monthLayout; // ✅ DODANE
+        private MonthLayout _monthLayout;
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -46,6 +46,9 @@ namespace GrafikoMat.ViewModels
 
         public bool CanSwitchDoctors { get; }
 
+        // ✅ DODANE - właściwości sprawdzające czy są lekarze
+        public bool HasNoDoctors => Doctors.Count == 0;
+        public bool HasDoctors => Doctors.Count > 0;
 
         private int _selectedDoctorIndex;
         public int SelectedDoctorIndex
@@ -90,7 +93,6 @@ namespace GrafikoMat.ViewModels
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
 
-            // ✅ DODANE: Inicjalizacja MonthLayout
             _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
 
             var duplicateFullNames = doctors
@@ -117,30 +119,14 @@ namespace GrafikoMat.ViewModels
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
-        }
 
-        // ✅ DODAJ tę metodę do klasy DeclarationsViewModel (np. pod metodą ClearSelection)
-        public bool HasDeclarationInSlot(int cellIndex, SlotPart slotPart)
-        {
-            if (cellIndex < 0 || cellIndex >= DayCells.Count)
-                return false;
-
-            var cell = DayCells[cellIndex];
-            if (!cell.InMonth)
-                return false;
-
-            return slotPart switch
-            {
-                SlotPart.Full => !string.IsNullOrWhiteSpace(cell.SymbolFull),
-                SlotPart.Day => !string.IsNullOrWhiteSpace(cell.SymbolDay),
-                SlotPart.Night => !string.IsNullOrWhiteSpace(cell.SymbolNight),
-                _ => false
-            };
+            // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
+            OnPropertyChanged(nameof(HasNoDoctors));
+            OnPropertyChanged(nameof(HasDoctors));
         }
 
         private void BuildCalendarShell()
         {
-            // ✅ ZMIENIONE - zapamiętaj stare cele jeśli istnieją (dla zachowania danych)
             var oldCells = DayCells.ToList();
 
             DayCells.Clear();
@@ -151,7 +137,6 @@ namespace GrafikoMat.ViewModels
             int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
             var startDate = firstDay.AddDays(-offset);
 
-            // ✅ DEBUG - sprawdź wartości
             System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell START");
             System.Diagnostics.Debug.WriteLine($"[BUILD] _use12hShiftsByDefault = {_use12hShiftsByDefault}");
             System.Diagnostics.Debug.WriteLine($"[BUILD] _monthLayout Year={_monthLayout.Year}, Month={_monthLayout.Month}, UseTwelveHourByDefault={_monthLayout.UseTwelveHourByDefault}");
@@ -160,7 +145,6 @@ namespace GrafikoMat.ViewModels
             {
                 var date = startDate.AddDays(i);
 
-                // ✅ KLUCZOWE - zawsze twórz NOWY obiekt DayCell
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     PolishHolidays.IsPublicHoliday(date),
@@ -171,10 +155,8 @@ namespace GrafikoMat.ViewModels
                     var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
                     cell.IsSplit = _monthLayout.IsSplit(dateOnly);
 
-                    // ✅ DEBUG - sprawdź dla każdego dnia w miesiącu
                     System.Diagnostics.Debug.WriteLine($"[BUILD] Day {date.Day}: IsSplit = {cell.IsSplit}");
 
-                    // ✅ Skopiuj dane z poprzedniego cell jeśli istniał
                     var oldCell = oldCells.FirstOrDefault(c => c.Date.Date == date.Date);
                     if (oldCell != null)
                     {
@@ -196,7 +178,6 @@ namespace GrafikoMat.ViewModels
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
 
-            // ✅ Na początku ustaw domyślny tryb według jednostki
             foreach (var cell in DayCells.Where(c => c.InMonth))
             {
                 var dateOnly = new DateOnly(cell.Date.Year, cell.Date.Month, cell.Date.Day);
@@ -224,20 +205,17 @@ namespace GrafikoMat.ViewModels
                     {
                         var d = decl.Days[dayIdx];
 
-                        // ✅ KLUCZOWA ZMIANA - użyj zapisanego Mode TYLKO jeśli dzień ma jakieś symbole
                         bool hasSavedData = !string.IsNullOrWhiteSpace(d.Full) ||
                                            !string.IsNullOrWhiteSpace(d.Day) ||
                                            !string.IsNullOrWhiteSpace(d.Night);
 
                         if (hasSavedData)
                         {
-                            // Dzień ma zapisane dane - użyj zapisanego trybu
                             cell.IsSplit = d.Mode == DayMode.Split12;
                             System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Has saved data, Mode={d.Mode}, IsSplit={cell.IsSplit}");
                         }
                         else
                         {
-                            // Dzień jest pusty - zostaw domyślny tryb jednostki (już ustawiony)
                             System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Empty, keeping default IsSplit={cell.IsSplit}");
                         }
 
@@ -315,7 +293,6 @@ namespace GrafikoMat.ViewModels
 
             if (isMultiSelect)
             {
-                // CTRL - dodaj/usuń z zaznaczenia
                 if (SelectedSlots.Contains(slot))
                 {
                     System.Diagnostics.Debug.WriteLine($"[SELECT] Removing slot from selection");
@@ -329,7 +306,6 @@ namespace GrafikoMat.ViewModels
             }
             else
             {
-                // Brak CTRL - zamień zaznaczenie na pojedynczy slot
                 System.Diagnostics.Debug.WriteLine($"[SELECT] Replacing selection with single slot");
                 SelectedSlots.Clear();
                 SelectedSlots.Add(slot);
@@ -362,7 +338,6 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
-        // ✅ DODANE: Metoda używana przez DeclarationsView - z 4 parametrami
         public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
         {
             SelectedSlots.Clear();
@@ -384,19 +359,24 @@ namespace GrafikoMat.ViewModels
                     SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
                     SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                 }
+                else if (i == startIndex && i == endIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, startPart));
+                }
+                else if (i == startIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, startPart));
+                }
+                else if (i == endIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, endPart));
+                }
                 else
                 {
                     if (cell.IsSplit)
                     {
-                        if (startPart == SlotPart.Day || startPart == SlotPart.Night)
-                        {
-                            SelectedSlots.Add(new SelectedSlot(i, startPart));
-                        }
-                        else
-                        {
-                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
-                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
-                        }
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                     }
                     else
                     {
@@ -404,6 +384,7 @@ namespace GrafikoMat.ViewModels
                     }
                 }
             }
+
             UpdateSelectionVisuals();
         }
 
@@ -415,19 +396,18 @@ namespace GrafikoMat.ViewModels
 
         private void UpdateSelectionVisuals()
         {
-            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals: {SelectedSlots.Count} slots selected");
+            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals START, SelectedSlots.Count = {SelectedSlots.Count}");
 
             foreach (var cell in DayCells)
             {
                 var selectedParts = new HashSet<SlotPart>();
-                foreach (var sel in SelectedSlots)
+
+                foreach (var sel in SelectedSlots.Where(s => s.Index == cell.Index))
                 {
-                    if (sel.Index == cell.Index)
-                    {
-                        selectedParts.Add(sel.Part);
-                        System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
-                    }
+                    selectedParts.Add(sel.Part);
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
                 }
+
                 cell.UpdateSelection(selectedParts);
 
                 if (selectedParts.Count > 0)
@@ -449,7 +429,24 @@ namespace GrafikoMat.ViewModels
             SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
         }
 
-        // ✅ POPRAWIONE: Metoda do przeładowania dla nowej jednostki
+        public bool HasDeclarationInSlot(int cellIndex, SlotPart slotPart)
+        {
+            if (cellIndex < 0 || cellIndex >= DayCells.Count)
+                return false;
+
+            var cell = DayCells[cellIndex];
+            if (!cell.InMonth)
+                return false;
+
+            return slotPart switch
+            {
+                SlotPart.Full => !string.IsNullOrWhiteSpace(cell.SymbolFull),
+                SlotPart.Day => !string.IsNullOrWhiteSpace(cell.SymbolDay),
+                SlotPart.Night => !string.IsNullOrWhiteSpace(cell.SymbolNight),
+                _ => false
+            };
+        }
+
         public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
         {
             _use12hShiftsByDefault = use12hShifts;
@@ -476,17 +473,19 @@ namespace GrafikoMat.ViewModels
             _selectedDoctorIndex = (Doctors.Count > 0) ?
                 Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
-            // ✅ KLUCZOWE - WYCZYŚĆ kolekcję przed przebudową
             DayCells.Clear();
 
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
 
-            // ✅ Powiadom o zmianach
             OnPropertyChanged(nameof(Doctors));
             OnPropertyChanged(nameof(SelectedDoctor));
             OnPropertyChanged(nameof(SelectedDoctorIndex));
-            OnPropertyChanged(nameof(DayCells)); // ✅ DODANE - wymuś odświeżenie bindingu
+            OnPropertyChanged(nameof(DayCells));
+            
+            // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
+            OnPropertyChanged(nameof(HasNoDoctors));
+            OnPropertyChanged(nameof(HasDoctors));
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
@@ -604,11 +603,6 @@ namespace GrafikoMat.ViewModels
             IsWeekend = isWeekend;
             IsHoliday = isHoliday;
             HolidayName = holidayName;
-
-            _effectiveBackground = new SolidColorBrush();
-            _effectiveBorderBrush = new SolidColorBrush();
-            _dayNumberForeground = new SolidColorBrush();
-            _effectiveHeaderBackground = new SolidColorBrush();
         }
     }
 }

@@ -47,5 +47,30 @@ namespace GrafikoMat.Core.Scheduling.Models
         /// Klucz: Symbol (Abbreviation), Wartość: Liczba dyżurów.
         /// </summary>
         public Dictionary<string, int> FinalWorkload { get; set; } = new();
+
+        // ====== NOWE POLA DIAGNOSTYCZNE ======
+
+        /// <summary>
+        /// Flaga wskazująca, czy rozwiązanie jest matematycznie optymalne (przeszukano całą przestrzeń stanów).
+        /// TRUE = gwarantowana optymalność, FALSE = najlepsze znalezione, ale mogą istnieć lepsze.
+        /// </summary>
+        public bool IsProvablyOptimal { get; init; } = false;
+
+        /// <summary>
+        /// Liczba węzłów (stanów) rozwiniętych przez algorytm podczas przeszukiwania.
+        /// Miara złożoności obliczeniowej.
+        /// </summary>
+        public long NodesExpanded { get; init; } = 0;
+
+        /// <summary>
+        /// Całkowity czas obliczeń spędzony na generowaniu tego rozwiązania.
+        /// </summary>
+        public TimeSpan ComputationTime { get; init; } = TimeSpan.Zero;
+
+        /// <summary>
+        /// Tekstowa notatka o statusie optymalności, np.:
+        /// "Optimal solution found", "Search exhausted", "Computation cancelled", "Best found within time limit".
+        /// </summary>
+        public string OptimalityNote { get; init; } = string.Empty;
     }
 }

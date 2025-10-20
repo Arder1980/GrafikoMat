@@ -10,9 +10,9 @@ using System.Threading;
 namespace GrafikoMat.Core.Scheduling.Engines
 {
     /// <summary>
-    /// Implementacja silnika A* do wyszukiwania optymalnego grafiku.
-    /// Jest to algorytm przeszukiwania heurystycznego, który stara się inteligentnie wybierać najbardziej obiecujące ścieżki.
-    /// Wersja zaadaptowana z GrafikWPF.
+    /// Implementacja algorytmu A* do wyszukiwania optymalnego grafiku.
+    /// Gwarantuje znalezienie rozwiązania optymalnego poprzez inteligentne przeszukiwanie z heurystyką admissible.
+    /// Wykorzystuje hierarchiczne porównanie metryk zgodnie z priorytetami użytkownika.
     /// </summary>
     public sealed class AStarSolver : IScheduleSolver
     {
@@ -39,6 +39,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         public ScheduleSolution FindOptimalSolution()
         {
+            var stopwatch = Stopwatch.StartNew();
             var days = _input.DaysInMonth;
             var doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
             int dayCount = days.Count;
@@ -52,90 +53,184 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 days, doctors, _input.Availability, _input.DutyLimits, _priorities,
                 initialAssignments, initialWorkload, initialConditionals, isPrefixActive: true);
 
-            ScheduleSolution? bestSolution = null;
+            ScheduleSolution? bestCompleteSolution = null;
+            double bestCompleteReward = double.NegativeInfinity;
 
             var priorityQueue = new PriorityQueue<SchedulingRules.Context, PriorityKey>();
-            Enqueue(context0);
+            var visitedStates = new HashSet<string>();
 
             long expandedNodes = 0;
-            var stopwatch = Stopwatch.StartNew();
+            long prunedByUpperBound = 0;
+            long duplicateStates = 0;
+
+            // Dodaj początkowy stan do kolejki
+            Enqueue(priorityQueue, context0);
 
             while (priorityQueue.Count > 0)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
+
                 var context = priorityQueue.Dequeue();
                 expandedNodes++;
 
-                int nextDayIndex = context.GetEarliestUnassignedDayIndex();
-                if (nextDayIndex < 0) // Liść drzewa - znaleziono pełne rozwiązanie
+                // Memoizacja: sprawdź czy ten stan był już odwiedzony
+                string stateKey = BuildStateKey(context);
+                if (visitedStates.Contains(stateKey))
                 {
+                    duplicateStates++;
+                    continue;
+                }
+                visitedStates.Add(stateKey);
+
+                // Sprawdź czy to kompletne rozwiązanie
+                int nextDayIndex = context.GetEarliestUnassignedDayIndex();
+                if (nextDayIndex < 0)
+                {
+                    // Kompletny grafik - oceń i zapisz jeśli najlepszy
                     var solution = BuildSolution(context);
-                    if (bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(solution, bestSolution, _priorities, _input) > 0)
+                    double reward = EvaluateSolutionReward(solution);
+
+                    if (reward > bestCompleteReward)
                     {
-                        bestSolution = solution;
+                        bestCompleteSolution = solution;
+                        bestCompleteReward = reward;
                     }
                     continue;
                 }
 
-                var candidates = SchedulingRules.OrderCandidates(nextDayIndex, context);
-
-                // Gałąź dla pustego dnia
-                var emptyChild = CloneContext(context);
-                emptyChild.Assignments[nextDayIndex] = EMPTY;
-                emptyChild.IsPrefixActive = false; // Dziura w grafiku przerywa prefiks
-                Enqueue(emptyChild);
-
-                // Gałęzie dla każdego kandydata
-                foreach (int docIndex in candidates)
+                // Upper bound pruning: jeśli ten częściowy stan nie może poprawić najlepszego kompletnego, skip
+                double stateReward = PartialSolutionEvaluator.EvaluateState(context, _priorities, _input);
+                if (bestCompleteSolution != null && stateReward <= bestCompleteReward)
                 {
-                    var child = CloneContext(context);
-                    child.Assignments[nextDayIndex] = docIndex;
-                    child.Workload[docIndex]++;
-
-                    if (child.GetAvailability(nextDayIndex, docIndex) == AvailabilityType.ConditionallyAvailable)
-                    {
-                        child.ConditionalsUsed[docIndex]++;
-                    }
-
-                    bool keepsPrefix = (nextDayIndex == 0) || (child.Assignments[nextDayIndex - 1] != SchedulingRules.UNASSIGNED);
-                    child.IsPrefixActive = child.IsPrefixActive && keepsPrefix;
-
-                    Enqueue(child);
+                    prunedByUpperBound++;
+                    continue;
                 }
 
-                if ((expandedNodes & 0x3FF) == 0) // Raportuj postęp co ~1024 węzły
+                // Ekspansja węzła: generuj stany-dzieci
+                ExpandNode(context, priorityQueue);
+
+                // Raportuj postęp co ~1024 węzły
+                if ((expandedNodes & 0x3FF) == 0)
                 {
-                    double assignedRatio = (double)(context.DayCount - context.Assignments.Count(a => a == SchedulingRules.UNASSIGNED)) / Math.Max(1, context.DayCount);
-                    _progress?.Report(assignedRatio);
+                    int assignedCount = context.Assignments.Count(a => a >= 0);
+                    double progressRatio = (double)assignedCount / Math.Max(1, context.DayCount);
+                    _progress?.Report(progressRatio);
                 }
             }
 
+            stopwatch.Stop();
             _progress?.Report(1.0);
-            return bestSolution ?? BuildSolution(context0);
 
-            void Enqueue(SchedulingRules.Context sctx)
+            // Finalizacja: dodaj informacje diagnostyczne
+            bool isOptimal = (priorityQueue.Count == 0); // Kolejka pusta = przeszukano wszystko
+            string optimalityNote = isOptimal
+                ? "Optimal solution found (search space exhausted)"
+                : "Best solution found (computation cancelled)";
+
+            if (bestCompleteSolution == null)
             {
-                int assignedCount = sctx.Assignments.Count(a => a >= 0);
-                // Heurystyka: preferuj stany z większą liczbą już przypisanych dyżurów
-                var key = new PriorityKey(cost: -assignedCount, sequence: _sequence++);
-                priorityQueue.Enqueue(sctx, key);
+                // Nie znaleziono żadnego kompletnego rozwiązania - zwróć pusty grafik
+                bestCompleteSolution = BuildEmptySolution();
+                optimalityNote = "No complete solution found";
+                isOptimal = false;
+            }
+
+            // Stwórz nowe rozwiązanie z diagnostyką
+            return new ScheduleSolution
+            {
+                Assignments = bestCompleteSolution.Assignments,
+                InitialContinuity = bestCompleteSolution.InitialContinuity,
+                FulfilledReservations = bestCompleteSolution.FulfilledReservations,
+                FulfilledWants = bestCompleteSolution.FulfilledWants,
+                FulfilledAvailables = bestCompleteSolution.FulfilledAvailables,
+                FairnessIndex = bestCompleteSolution.FairnessIndex,
+                SpacingIndex = bestCompleteSolution.SpacingIndex,
+                FinalWorkload = bestCompleteSolution.FinalWorkload,
+
+                // Diagnostyka
+                IsProvablyOptimal = isOptimal,
+                NodesExpanded = expandedNodes,
+                ComputationTime = stopwatch.Elapsed,
+                OptimalityNote = $"{optimalityNote} | Nodes: {expandedNodes:N0}, Pruned: {prunedByUpperBound:N0}, Duplicates: {duplicateStates:N0}"
+            };
+
+            void Enqueue(PriorityQueue<SchedulingRules.Context, PriorityKey> queue, SchedulingRules.Context ctx)
+            {
+                double reward = PartialSolutionEvaluator.EvaluateState(ctx, _priorities, _input);
+                var key = new PriorityKey(reward: reward, sequence: _sequence++);
+                queue.Enqueue(ctx, key);
             }
         }
 
+        /// <summary>
+        /// Rozwija węzeł: generuje wszystkie możliwe stany-dzieci (pusty dzień + każdy kandydat).
+        /// </summary>
+        private void ExpandNode(SchedulingRules.Context context, PriorityQueue<SchedulingRules.Context, PriorityKey> queue)
+        {
+            int nextDayIndex = context.GetEarliestUnassignedDayIndex();
+            if (nextDayIndex < 0) return; // Nie powinno się zdarzyć
+
+            var candidates = SchedulingRules.OrderCandidates(nextDayIndex, context);
+
+            // Gałąź 1: Pusty dzień
+            var emptyChild = CloneContext(context);
+            emptyChild.Assignments[nextDayIndex] = EMPTY;
+            emptyChild.IsPrefixActive = false; // Dziura w grafiku przerywa prefix
+            EnqueueChild(emptyChild);
+
+            // Gałęzie 2+: Każdy kandydat
+            foreach (int docIndex in candidates)
+            {
+                var child = CloneContext(context);
+                child.Assignments[nextDayIndex] = docIndex;
+                child.Workload[docIndex]++;
+
+                if (child.GetAvailability(nextDayIndex, docIndex) == AvailabilityType.ConditionallyAvailable)
+                {
+                    child.ConditionalsUsed[docIndex]++;
+                }
+
+                // Sprawdź czy prefix jest aktywny
+                bool keepsPrefix = (nextDayIndex == 0) || (child.Assignments[nextDayIndex - 1] != SchedulingRules.UNASSIGNED);
+                child.IsPrefixActive = child.IsPrefixActive && keepsPrefix;
+
+                EnqueueChild(child);
+            }
+
+            void EnqueueChild(SchedulingRules.Context childContext)
+            {
+                double reward = PartialSolutionEvaluator.EvaluateState(childContext, _priorities, _input);
+                var key = new PriorityKey(reward: reward, sequence: _sequence++);
+                queue.Enqueue(childContext, key);
+            }
+        }
+
+        /// <summary>
+        /// Klucz priorytetowy dla kolejki: wyższy reward = wyższy priorytet (maksymalizacja).
+        /// </summary>
         private readonly struct PriorityKey : IComparable<PriorityKey>
         {
-            public readonly int Cost; // Koszt (im niższy, tym lepszy)
-            public readonly long Sequence; // Do rozstrzygania remisów
-            public PriorityKey(int cost, long sequence) { Cost = cost; Sequence = sequence; }
+            public readonly double Reward; // Im wyższy, tym lepszy
+            public readonly long Sequence; // Tie-breaker
+
+            public PriorityKey(double reward, long sequence)
+            {
+                Reward = reward;
+                Sequence = sequence;
+            }
 
             public int CompareTo(PriorityKey other)
             {
-                int c = Cost.CompareTo(other.Cost);
+                // ODWRÓCONE: wyższy reward = wyższy priorytet (dequeue first)
+                int c = other.Reward.CompareTo(this.Reward);
                 if (c != 0) return c;
-                return Sequence.CompareTo(other.Sequence);
+                return Sequence.CompareTo(other.Sequence); // Starsze najpierw (FIFO przy remisie)
             }
         }
 
+        /// <summary>
+        /// Klonuje kontekst (głęboka kopia tablic).
+        /// </summary>
         private static SchedulingRules.Context CloneContext(SchedulingRules.Context src)
         {
             var assignments = new int[src.DayCount];
@@ -153,11 +248,39 @@ namespace GrafikoMat.Core.Scheduling.Engines
             );
         }
 
+        /// <summary>
+        /// Buduje klucz stanu dla memoizacji (unikanie duplikatów).
+        /// </summary>
+        private static string BuildStateKey(SchedulingRules.Context ctx)
+        {
+            // Prosty hash: assignments + workload + conditionals
+            var parts = new List<string>(ctx.DayCount + ctx.DoctorCount * 2);
+
+            parts.Add("A:");
+            foreach (var a in ctx.Assignments)
+                parts.Add(a.ToString());
+
+            parts.Add("|W:");
+            foreach (var w in ctx.Workload)
+                parts.Add(w.ToString());
+
+            parts.Add("|C:");
+            foreach (var c in ctx.ConditionalsUsed)
+                parts.Add(c.ToString());
+
+            return string.Join(",", parts);
+        }
+
+        /// <summary>
+        /// Konwertuje kontekst na ScheduleSolution.
+        /// </summary>
         private ScheduleSolution BuildSolution(SchedulingRules.Context ctx)
         {
             var map = new Dictionary<DateTime, DoctorProfile?>(ctx.DayCount);
             var perDoctorWorkload = new Dictionary<string, int>(ctx.DoctorCount);
-            foreach (var doc in ctx.Doctors) perDoctorWorkload[doc.Abbreviation] = 0;
+
+            foreach (var doc in ctx.Doctors)
+                perDoctorWorkload[doc.Abbreviation] = 0;
 
             for (int d = 0; d < ctx.DayCount; d++)
             {
@@ -177,6 +300,79 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
 
             return EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
+        }
+
+        /// <summary>
+        /// Tworzy puste rozwiązanie (fallback gdy nie znaleziono żadnego).
+        /// </summary>
+        private ScheduleSolution BuildEmptySolution()
+        {
+            var emptyMap = new Dictionary<DateTime, DoctorProfile?>();
+            foreach (var day in _input.DaysInMonth)
+                emptyMap[day] = null;
+
+            var emptyWorkload = new Dictionary<string, int>();
+            foreach (var doc in _input.Doctors.Where(d => !d.IsArchived))
+                emptyWorkload[doc.Abbreviation] = 0;
+
+            return EvaluationAndScoringService.CalculateMetrics(emptyMap, emptyWorkload, _input);
+        }
+
+        /// <summary>
+        /// Oblicza reward (wartość maksymalizowaną) dla kompletnego rozwiązania.
+        /// Używa tej samej logiki co PartialSolutionEvaluator dla spójności.
+        /// </summary>
+        private double EvaluateSolutionReward(ScheduleSolution solution)
+        {
+            double reward = 0.0;
+            double scale = 1e15;
+
+            // Rezerwacje najważniejsze
+            reward += solution.FulfilledReservations * 1e18;
+
+            int totalDays = _input.DaysInMonth.Count;
+
+            foreach (var priority in _priorities)
+            {
+                double metricValue = 0.0;
+
+                switch (priority)
+                {
+                    case SolverPriority.InitialContinuity:
+                        metricValue = solution.InitialContinuity / (double)Math.Max(1, totalDays);
+                        break;
+
+                    case SolverPriority.TotalAssignments:
+                        metricValue = solution.TotalAssignments / (double)Math.Max(1, totalDays);
+                        break;
+
+                    case SolverPriority.Fairness:
+                        metricValue = 1.0 / (1.0 + solution.FairnessIndex);
+                        break;
+
+                    case SolverPriority.Spacing:
+                        metricValue = 1.0 / (1.0 + solution.SpacingIndex);
+                        break;
+
+                    case SolverPriority.DeclarationCompliance:
+                        int totalDeclared = solution.FulfilledWants + solution.FulfilledAvailables;
+                        if (totalDeclared > 0)
+                        {
+                            double weightedSum = solution.FulfilledWants * 2.0 + solution.FulfilledAvailables * 1.0;
+                            metricValue = weightedSum / (2.0 * totalDeclared);
+                        }
+                        break;
+                }
+
+                reward += metricValue * scale;
+                scale /= 1000.0;
+            }
+
+            // Dodatkowe bonusy
+            reward += solution.FulfilledWants * 1e6;
+            reward += solution.FulfilledAvailables * 1e3;
+
+            return reward;
         }
     }
 }

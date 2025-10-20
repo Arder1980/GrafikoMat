@@ -283,6 +283,14 @@ namespace GrafikoMat
             var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
             System.Diagnostics.Debug.WriteLine($"[ANIM] CalendarGrid found: {calendarGrid != null}");
 
+            // ✅ DODANE - ukryj overlay PRZED wyjazdem
+            if (_currentDeclarationsView.ViewModel?.HasNoDoctors == true)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Hiding overlay before slide-out");
+                _currentDeclarationsView.HideOverlay();
+                await Task.Delay(200); // Poczekaj na fade-out
+            }
+
             // ✅ KLUCZOWA ZMIANA - animacja wyjścia TYLKO gdy kalendarz jest widoczny
             if (calendarGrid != null && calendarGrid.Opacity > 0)
             {
@@ -341,6 +349,7 @@ namespace GrafikoMat
 
             System.Diagnostics.Debug.WriteLine($"[ANIM] Calling UpdateAllCellBrushes");
             _currentDeclarationsView?.UpdateAllCellBrushes();
+            _currentDeclarationsView?.UpdateCalendarOpacity();
 
             await Task.Delay(50);
 
@@ -373,6 +382,13 @@ namespace GrafikoMat
 
                 try { storyboard2.Begin(); await tcs2.Task; }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (entry): {ex.Message}"); }
+            }
+
+            // ✅ DODANE - pokaż overlay PO wjeździe
+            if (_currentDeclarationsView.ViewModel?.HasNoDoctors == true)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Showing overlay after slide-in");
+                _currentDeclarationsView.ShowOverlay();
             }
 
             System.Diagnostics.Debug.WriteLine($"[ANIM] Calendar animation complete");

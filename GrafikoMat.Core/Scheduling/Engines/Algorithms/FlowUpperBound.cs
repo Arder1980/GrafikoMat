@@ -11,7 +11,9 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
     /// </summary>
     internal static class FlowUpperBound
     {
-        // Buduje graf: S -> dni -> lekarze -> T
+        /// <summary>
+        /// Buduje graf: S -> dni -> lekarze -> T i oblicza maksymalny przepływ.
+        /// </summary>
         public static int Calculate(
              int dayCount, int doctorCount,
              Func<int, int, AvailabilityMask> getAvailabilityMask, // (dzień, lekarz) -> Maska dostępności
@@ -53,6 +55,17 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
             }
 
             return dinic.GetMaxFlow(sourceNode, sinkNode);
+        }
+
+        /// <summary>
+        /// Uproszczona wersja bez predykatu isDayAllowed (wszystkie dni są dozwolone).
+        /// </summary>
+        public static int Calculate(
+             int dayCount, int doctorCount,
+             Func<int, int, AvailabilityMask> getAvailabilityMask,
+             Func<int, int> getRemainingCapacityPerDoctor)
+        {
+            return Calculate(dayCount, doctorCount, getAvailabilityMask, getRemainingCapacityPerDoctor, d => true);
         }
     }
 }

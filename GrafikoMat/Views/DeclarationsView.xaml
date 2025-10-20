@@ -26,6 +26,31 @@
             </ResourceDictionary.ThemeDictionaries>
 
             <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <common:BooleanToOpacityConverter x:Key="BooleanToOpacityConverter"/>
+
+            <!-- ✅ DODANE - Animacje overlaya -->
+            <Storyboard x:Name="OverlayFadeInStoryboard">
+                <DoubleAnimation Storyboard.TargetName="NoDoctorsOverlay"
+                               Storyboard.TargetProperty="Opacity"
+                               From="0.0"
+                               To="1.0"
+                               Duration="0:0:0.3">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <Storyboard x:Name="OverlayFadeOutStoryboard">
+                <DoubleAnimation Storyboard.TargetName="NoDoctorsOverlay"
+                               Storyboard.TargetProperty="Opacity"
+                               To="0.0"
+                               Duration="0:0:0.2">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
 
             <Style TargetType="TextBlock" x:Key="SymbolTextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
@@ -124,129 +149,198 @@
                 <TextBlock Grid.Column="6" Text="Niedziela" HorizontalAlignment="Center" Opacity="0.6"/>
             </Grid>
 
-            <!-- Kalendarz -->
-            <GridView Grid.Row="2" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
-                <GridView.RenderTransform>
-                    <TranslateTransform X="0"/>
-                </GridView.RenderTransform>
+            <!-- Kontener dla kalendarza z możliwością opacity NA CAŁOŚĆ -->
+            <Grid Grid.Row="2">
+                <!-- Wrapper z Opacity kontrolowanym dynamicznie w code-behind -->
+                <Grid x:Name="CalendarWrapper"
+                      IsHitTestVisible="{x:Bind ViewModel.HasDoctors, Mode=OneWay}">
 
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <GridView.ItemContainerStyle>
-                    <Style TargetType="GridViewItem">
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                    </Style>
-                </GridView.ItemContainerStyle>
-                <GridView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:DayCell">
-                        <!-- Border z tłem - ZAWSZE widoczny -->
-                        <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="24"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
+                    <!-- Kalendarz -->
+                    <GridView x:Name="CalendarGridView" 
+                              ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" 
+                              SelectionMode="None" 
+                              IsItemClickEnabled="False">
+                        <GridView.RenderTransform>
+                            <TranslateTransform X="0"/>
+                        </GridView.RenderTransform>
 
-                                <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
-                                <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
-
-                                <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
-                                <Grid Grid.Row="0" Padding="6,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <!-- ✅ ZMIENIONE: Opacity 0.35 dla dni poza miesiącem, 0.5 dla dni w miesiącu -->
-                                    <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
-                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
-                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-
-                                    <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
-                                              Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
-                                              FontSize="11" 
-                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
-                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-                                </Grid>
-
-                                <!-- CONTENT (SLOTY) -->
-                                <Grid Grid.Row="1" MinHeight="48">
-                                    <!-- SLOT 24h -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
-                                        <!-- Glify TYLKO dla dni w miesiącu -->
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
-                                                    Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <Viewbox MaxHeight="24" MaxWidth="24">
-                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
-                                            </Viewbox>
-                                            <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
-                                            <Viewbox MaxHeight="22" MaxWidth="22">
-                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
-                                            </Viewbox>
-                                        </StackPanel>
-
-                                        <!-- ✅ ZMIENIONE: Symbol deklaracji z Opacity 0.35/0.5 -->
-                                        <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-                                    </Grid>
-
-                                    <!-- SLOTY 12h -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DayCell">
+                                <!-- Border z tłem - ZAWSZE widoczny -->
+                                <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
+                                    <Grid>
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="24"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-                                        <!-- Glify TYLKO dla dni w miesiącu -->
-                                        <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
-                                        </Viewbox>
-                                        <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
-                                        </Viewbox>
-                                        <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-                                        <!-- ✅ ZMIENIONE: Symbole z Opacity 0.35/0.5 -->
-                                        <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-                                        <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+
+                                        <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
+                                        <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
+
+                                        <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
+                                        <Grid Grid.Row="0" Padding="6,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
+                                                      Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+
+                                            <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
+                                                      Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
+                                                      FontSize="11" 
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
+                                                      HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                      Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                        </Grid>
+
+                                        <!-- CONTENT (SLOTY) -->
+                                        <Grid Grid.Row="1" MinHeight="48">
+                                            <!-- SLOT 24h -->
+                                            <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                                                <!-- Glify TYLKO dla dni w miesiącu -->
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                                                            Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <Viewbox MaxHeight="24" MaxWidth="24">
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    </Viewbox>
+                                                    <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
+                                                    <Viewbox MaxHeight="22" MaxWidth="22">
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    </Viewbox>
+                                                </StackPanel>
+
+                                                <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                            </Grid>
+
+                                            <!-- SLOTY 12h -->
+                                            <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+                                                <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                         Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                </Viewbox>
+                                                <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                         Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                </Viewbox>
+                                                <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
+                                                <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                                <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                            </Grid>
+                                        </Grid>
+
+                                        <!-- RAMKI - ZAWSZE widoczne -->
+                                        <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
+                                        <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
+
+                                        <!-- ZAZNACZENIA -->
+                                        <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
+                                                Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                        <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
+                                                    BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                            <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
+                                                    BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        </Grid>
                                     </Grid>
-                                </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                </Grid>
 
-                                <!-- RAMKI - ZAWSZE widoczne -->
-                                <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
-                                <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
+                <!-- ✅ InfoBox z nazwą i początkową Opacity=0 -->
+                <Grid x:Name="NoDoctorsOverlay"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      MinWidth="340"
+                      MaxWidth="500"
+                      Opacity="0"
+                      Visibility="{x:Bind ViewModel.HasNoDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-                                <!-- ZAZNACZENIA -->
-                                <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
-                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                          Padding="0"
+                          CornerRadius="10">
 
-                                <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
+                        <!-- Miękki cień -->
+                        <Grid.Shadow>
+                            <ThemeShadow/>
+                        </Grid.Shadow>
 
-                                    <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
-                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        <!-- Subtelna ramka w kolorze systemowym -->
+                        <Border BorderThickness="1"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                CornerRadius="10"/>
 
-                                    <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
-                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Lewy pasek koloru - BURSZTYNOWY -->
+                            <Border Grid.Column="0"
+                                    Background="#FFB900"
+                                    CornerRadius="10,0,0,10"/>
+
+                            <!-- Ikona (wycentrowana) - BURSZTYNOWA -->
+                            <Grid Grid.Column="1" 
+                                  Width="64" 
+                                  Margin="16,16,16,16">
+                                <Viewbox Width="60" Height="60">
+                                    <FontIcon Glyph="&#xE7BA;" 
+                                              Foreground="#FFB900"/>
+                                </Viewbox>
                             </Grid>
-                        </Border>
-                    </DataTemplate>
-                </GridView.ItemTemplate>
-            </GridView>
+
+                            <!-- Treść -->
+                            <StackPanel Grid.Column="2" 
+                                        Margin="8,20,24,20"
+                                        Spacing="8">
+                                <TextBlock Text="Brak przypisanych dyżurnych"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock TextWrapping="Wrap"
+                                           Opacity="0.85"
+                                           FontSize="14">
+                                    Do tej jednostki nie są przypisani żadni dyżurni. Aby móc dodawać deklaracje, przejdź do zakładki 'Zarządzanie dyżurnymi' i przypisz lekarzy do tej jednostki.
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>

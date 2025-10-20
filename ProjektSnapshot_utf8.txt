@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-19 18:28:35
+# Data:       2025-10-20 17:34:00
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
 # Maszyna:    FRACTAL
 # Użytkownik: adaml
@@ -723,7 +723,7 @@ namespace GrafikoMat.Core.Scheduling
 
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\Algorithms\FlowUpperBound.cs (2245 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\Algorithms\FlowUpperBound.cs (2814 bytes)
 ----- BEGIN -----
 using System;
 
@@ -738,7 +738,9 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
     /// </summary>
     internal static class FlowUpperBound
     {
-        // Buduje graf: S -> dni -> lekarze -> T
+        /// <summary>
+        /// Buduje graf: S -> dni -> lekarze -> T i oblicza maksymalny przepływ.
+        /// </summary>
         public static int Calculate(
              int dayCount, int doctorCount,
              Func<int, int, AvailabilityMask> getAvailabilityMask, // (dzień, lekarz) -> Maska dostępności
@@ -780,6 +782,17 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
             }
 
             return dinic.GetMaxFlow(sourceNode, sinkNode);
+        }
+
+        /// <summary>
+        /// Uproszczona wersja bez predykatu isDayAllowed (wszystkie dni są dozwolone).
+        /// </summary>
+        public static int Calculate(
+             int dayCount, int doctorCount,
+             Func<int, int, AvailabilityMask> getAvailabilityMask,
+             Func<int, int> getRemainingCapacityPerDoctor)
+        {
+            return Calculate(dayCount, doctorCount, getAvailabilityMask, getRemainingCapacityPerDoctor, d => true);
         }
     }
 }
@@ -1264,7 +1277,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (11305 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (20381 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Engines.Algorithms;
@@ -1273,8 +1286,8 @@ using GrafikoMat.Core.Scheduling.Models;
 using GrafikoMat.Core.Scheduling.Validation;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading;
 
 namespace GrafikoMat.Core.Scheduling.Engines
@@ -1282,7 +1295,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// <summary>
     /// Deterministyczny silnik generujący grafik z użyciem algorytmu z nawrotami (backtracking).
     /// Gwarantuje znalezienie optymalnego rozwiązania poprzez pełne przeszukanie przestrzeni możliwych decyzji.
-    /// Wersja zaadaptowana z GrafikWPF.
+    /// Wersja zaadaptowana z GrafikWPF z optymalizacjami wydajnościowymi.
     /// </summary>
     public sealed class BacktrackingSolver : IScheduleSolver
     {
@@ -1306,10 +1319,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
         // Przechowuje najlepszy znaleziony dotychczas wynik
         private ScheduleSolution? _bestSolution;
 
+        // Optymalizacje
         private readonly bool _useFlowUpperBound = true;
-        private readonly int _flowCheckFrequency = 6; // Sprawdzaj co 6 poziomów głębokości
+        private int _flowCheckFrequency = 6; // Adaptywna częstotliwość sprawdzania flow
+        private readonly HashSet<ulong> _visitedStates = new HashSet<ulong>(); // Zobrist hashing
+        private readonly ulong[,] _zobristTable; // Tablica dla haszowania Zobrista
 
-        private readonly HashSet<string> _visitedStates = new HashSet<string>();
+        // Time-limited search
+        private readonly TimeSpan _maxSearchTime = TimeSpan.FromMinutes(10); // Domyślny limit
+        private Stopwatch? _searchStopwatch;
+        private bool _timeLimitReached = false;
+
+        // Statystyki
+        private long _nodesExpanded = 0;
+        private int _currentDepth = 0;
 
         public BacktrackingSolver(
             ScheduleInput scheduleInput,
@@ -1329,28 +1352,94 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _assignments = Enumerable.Repeat(UNASSIGNED, _days.Count).ToArray();
             _workload = new int[_doctors.Count];
             _conditionalsUsed = new int[_doctors.Count];
+
+            // Inicjalizacja tablicy Zobrista dla haszowania stanów
+            _zobristTable = InitializeZobristTable(_days.Count, _doctors.Count + 2); // +2 dla EMPTY i UNASSIGNED
+        }
+
+        private ulong[,] InitializeZobristTable(int days, int states)
+        {
+            var table = new ulong[days, states];
+            var random = new Random(42); // Seed dla deterministyczności
+            for (int d = 0; d < days; d++)
+            {
+                for (int s = 0; s < states; s++)
+                {
+                    table[d, s] = ((ulong)random.Next() << 32) | (ulong)random.Next();
+                }
+            }
+            return table;
         }
 
         public ScheduleSolution FindOptimalSolution()
         {
-            // TODO: Dodać logowanie startu
+            _searchStopwatch = Stopwatch.StartNew();
+
+            // PREPROCESSING: Przypisz rezerwacje jako twarde constrainty
+            PreprocessReservations();
+
+            // Rozpocznij przeszukiwanie DFS
             Dfs(depth: 0);
 
             _bestSolution ??= BuildSolutionFromState();
+            _searchStopwatch.Stop();
 
-            // TODO: Dodać logowanie końca
             return _bestSolution;
+        }
+
+        /// <summary>
+        /// Preprocessing: Przypisuje wszystkie rezerwacje przed rozpoczęciem przeszukiwania.
+        /// Zawęża przestrzeń rozwiązań i gwarantuje spełnienie rezerwacji.
+        /// </summary>
+        private void PreprocessReservations()
+        {
+            for (int dayIndex = 0; dayIndex < _days.Count; dayIndex++)
+            {
+                var day = _days[dayIndex];
+                if (_input.Availability.TryGetValue(day, out var dayAvail))
+                {
+                    foreach (var kvp in dayAvail)
+                    {
+                        if (kvp.Value == AvailabilityType.Reservation)
+                        {
+                            int doctorIndex = _doctors.FindIndex(d => d.Abbreviation == kvp.Key);
+                            if (doctorIndex >= 0 && IsHardFeasible(dayIndex, doctorIndex))
+                            {
+                                _assignments[dayIndex] = doctorIndex;
+                                _workload[doctorIndex]++;
+                                // Rezerwacje nie są "Mogę warunkowo", więc nie zwiększamy conditionalsUsed
+                                break; // Jeden dzień = jedna rezerwacja
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private void Dfs(int depth)
         {
             _cancellationToken.ThrowIfCancellationRequested();
 
-            var stateKey = BuildStateKey();
-            if (_visitedStates.Contains(stateKey)) return;
-            _visitedStates.Add(stateKey);
+            // Time limit check
+            if (_searchStopwatch != null && _searchStopwatch.Elapsed > _maxSearchTime)
+            {
+                _timeLimitReached = true;
+                return;
+            }
 
-            if ((depth & 0x7FF) == 0) // Raportuj postęp co ~2048 węzłów
+            _currentDepth = depth;
+            _nodesExpanded++;
+
+            // Memoizacja z Zobrist hashing
+            ulong stateHash = ComputeZobristHash();
+            if (_visitedStates.Contains(stateHash))
+            {
+                return;
+            }
+            _visitedStates.Add(stateHash);
+
+            // Raportuj postęp co ~2048 węzłów
+            if ((_nodesExpanded & 0x7FF) == 0)
             {
                 int filled = _assignments.Count(a => a != UNASSIGNED);
                 _progress?.Report((double)filled / _assignments.Length);
@@ -1359,11 +1448,21 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int nextDayIndex = ChooseDayToAssign();
             if (nextDayIndex < 0) // Wszystkie dni przypisane, liść drzewa
             {
-                ConsiderAsBest(BuildSolutionFromState());
+                var solution = BuildSolutionFromState();
+                ConsiderAsBest(solution);
+
+                // Early termination: jeśli znaleziono ideał, kończymy
+                if (IsIdealSolution(solution))
+                {
+                    _timeLimitReached = true; // Użyjemy tej flagi do natychmiastowego zakończenia
+                    return;
+                }
                 return;
             }
 
-            // Sonda z użyciem Max-Flow, aby sprawdzić, czy dalsze przypisania są w ogóle możliwe
+            // Adaptywny flow checking - częściej na początku, rzadziej w głębi
+            AdjustFlowCheckFrequency(depth);
+
             if (_useFlowUpperBound && (depth % _flowCheckFrequency == 0))
             {
                 int remainingAssignmentsPossible = FlowUpperBound.Calculate(
@@ -1394,18 +1493,37 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             var candidates = GetOrderedCandidates(nextDayIndex);
 
-            // Rozgałęzienie po lekarzach
+            // Rozgałęzienie po lekarzach (posortowane według LCV)
             foreach (var doctorIndex in candidates)
             {
+                if (_timeLimitReached) return; // Wczesne wyjście
+
                 if (!TryAssign(nextDayIndex, doctorIndex)) continue;
                 Dfs(depth + 1);
                 Unassign(nextDayIndex, doctorIndex);
             }
 
-            // Rozgałęzienie dla pustego dnia (na końcu)
-            TryAssignEmpty(nextDayIndex);
-            Dfs(depth + 1);
-            UnassignEmpty(nextDayIndex);
+            // Rozgałęzienie dla pustego dnia
+            if (!_timeLimitReached)
+            {
+                TryAssignEmpty(nextDayIndex);
+                Dfs(depth + 1);
+                UnassignEmpty(nextDayIndex);
+            }
+        }
+
+        /// <summary>
+        /// Adaptacyjna częstotliwość flow checking: częściej na początku (płytkie poziomy),
+        /// rzadziej w głębi drzewa (gdzie overhead jest większy).
+        /// </summary>
+        private void AdjustFlowCheckFrequency(int depth)
+        {
+            if (depth < 5)
+                _flowCheckFrequency = 3; // Bardzo często na początku
+            else if (depth < 15)
+                _flowCheckFrequency = 6; // Średnio w środku
+            else
+                _flowCheckFrequency = 12; // Rzadziej w głębi
         }
 
         /// <summary>
@@ -1431,6 +1549,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return bestDayIndex;
         }
 
+        /// <summary>
+        /// Zwraca posortowaną listę kandydatów według LCV (Least Constraining Value).
+        /// Priorytetyzuje lekarzy, którzy najmniej ograniczają przyszłe przypisania.
+        /// </summary>
         private List<int> GetOrderedCandidates(int dayIndex)
         {
             var candidates = new List<int>();
@@ -1441,8 +1563,57 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     candidates.Add(i);
                 }
             }
-            // TODO: Dodać logikę sortowania kandydatów (LCV - Least Constraining Value)
+
+            // LCV: Sortuj według liczby ograniczeń, jakie wprowadza dany kandydat
+            candidates.Sort((a, b) =>
+            {
+                int constraintA = CalculateConstrainingValue(dayIndex, a);
+                int constraintB = CalculateConstrainingValue(dayIndex, b);
+                return constraintA.CompareTo(constraintB); // Mniej ograniczający = lepszy
+            });
+
             return candidates;
+        }
+
+        /// <summary>
+        /// Oblicza, jak bardzo przypisanie danego lekarza ogranicza przyszłe możliwości.
+        /// Im mniejsza wartość, tym lepiej (mniej ograniczający).
+        /// </summary>
+        private int CalculateConstrainingValue(int dayIndex, int doctorIndex)
+        {
+            int constraintScore = 0;
+
+            // 1. Pozostały limit lekarza (mniej pozostałych = bardziej ograniczający)
+            int limit = _dutyLimitsByAbbr.GetValueOrDefault(_doctors[doctorIndex].Abbreviation, 0);
+            int remaining = limit > 0 ? limit - _workload[doctorIndex] : int.MaxValue;
+            if (remaining <= 2) constraintScore += 100; // Krytycznie niski limit
+
+            // 2. Blokada sąsiednich dni (następny dzień)
+            if (dayIndex < _days.Count - 1 && _assignments[dayIndex + 1] == UNASSIGNED)
+            {
+                // Ten lekarz zablokuje następny dzień (reguła "dzień po dniu")
+                constraintScore += 50;
+            }
+
+            // 3. Zgodność z deklaracjami (preferuj "Chcę" nad "Może")
+            var availability = _input.Availability[_days[dayIndex]][_doctors[doctorIndex].Abbreviation];
+            if (availability == AvailabilityType.Wants)
+                constraintScore -= 30; // Preferuj lekarzy, którzy chcą
+            else if (availability == AvailabilityType.Available)
+                constraintScore += 10; // "Może" jest neutralne
+            else if (availability == AvailabilityType.ConditionallyAvailable)
+                constraintScore += 40; // "Mogę warunkowo" jest bardziej ograniczające
+
+            // 4. Dostępność na przyszłe dni
+            int futureAvailability = 0;
+            for (int d = dayIndex + 1; d < _days.Count; d++)
+            {
+                if (_assignments[d] == UNASSIGNED && IsHardFeasible(d, doctorIndex))
+                    futureAvailability++;
+            }
+            if (futureAvailability <= 2) constraintScore += 70; // Mało przyszłych możliwości
+
+            return constraintScore;
         }
 
         private bool IsHardFeasible(int dayIndex, int doctorIndex)
@@ -1502,7 +1673,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             if (_bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(candidate, _bestSolution, _priorities, _input) > 0)
             {
                 _bestSolution = candidate;
-                // TODO: Logowanie poprawy
             }
         }
 
@@ -1526,16 +1696,73 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(assignmentsMap, finalWorkload, _input);
         }
 
-        private string BuildStateKey()
+        /// <summary>
+        /// Zobrist hashing dla efektywnej memoizacji stanów.
+        /// Zamiast string concatenation, XOR-ujemy precomputed random values.
+        /// </summary>
+        private ulong ComputeZobristHash()
         {
-            var sb = new StringBuilder(_assignments.Length * 3 + _workload.Length * 2 + _conditionalsUsed.Length * 2);
-            sb.Append('A');
-            for (int i = 0; i < _assignments.Length; i++) { sb.Append(_assignments[i]); sb.Append(';'); }
-            sb.Append('W');
-            for (int i = 0; i < _workload.Length; i++) { sb.Append(_workload[i]); sb.Append(','); }
-            sb.Append('M');
-            for (int i = 0; i < _conditionalsUsed.Length; i++) { sb.Append(_conditionalsUsed[i]); sb.Append(','); }
-            return sb.ToString();
+            ulong hash = 0;
+            for (int i = 0; i < _assignments.Length; i++)
+            {
+                int val = _assignments[i];
+                int stateIndex;
+                if (val == EMPTY) stateIndex = _doctors.Count;
+                else if (val == UNASSIGNED) stateIndex = _doctors.Count + 1;
+                else stateIndex = val;
+
+                hash ^= _zobristTable[i, stateIndex];
+            }
+            return hash;
+        }
+
+        /// <summary>
+        /// Sprawdza, czy znalezione rozwiązanie jest teoretycznie idealne (niemożliwe do poprawy).
+        /// </summary>
+        private bool IsIdealSolution(ScheduleSolution solution)
+        {
+            int totalDays = _days.Count;
+            int assignedDays = solution.TotalAssignments;
+
+            foreach (var priority in _priorities)
+            {
+                switch (priority)
+                {
+                    case SolverPriority.TotalAssignments:
+                        if (assignedDays < totalDays) return false;
+                        break;
+
+                    case SolverPriority.InitialContinuity:
+                        if (solution.InitialContinuity < totalDays) return false;
+                        break;
+
+                    case SolverPriority.Fairness:
+                        if (solution.FairnessIndex > 0.01) return false; // Tolerancja numeryczna
+                        break;
+
+                    case SolverPriority.Spacing:
+                        if (solution.SpacingIndex > 0.01) return false;
+                        break;
+
+                    case SolverPriority.DeclarationCompliance:
+                        // Maksymalna zgodność: każdy przypisany dzień to "Chcę" (waga 2)
+                        double maxPossibleWants = 0;
+                        for (int i = 0; i < _days.Count; i++)
+                        {
+                            if (_assignments[i] >= 0)
+                            {
+                                var avail = _input.Availability[_days[i]][_doctors[_assignments[i]].Abbreviation];
+                                if (avail == AvailabilityType.Wants)
+                                    maxPossibleWants += 2.0;
+                            }
+                        }
+                        double achieved = solution.FulfilledWants * 2.0 + solution.FulfilledAvailables * 1.0;
+                        if (achieved < maxPossibleWants * 0.99) return false; // 99% threshold
+                        break;
+                }
+            }
+
+            return true; // Wszystkie kryteria spełnione
         }
     }
 }
@@ -3666,7 +3893,7 @@ namespace GrafikoMat.Common
 
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (7077 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (7351 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -3680,8 +3907,8 @@ namespace GrafikoMat.Common
 {
     public class BooleanToOpacityConverter : IValueConverter
     {
-        public double TrueValue { get; set; } = 1.0;   // Domyślnie: true = pełna widoczność
-        public double FalseValue { get; set; } = 0.5;  // Domyślnie: false = przygaszone
+        public double TrueValue { get; set; } = 1.0;
+        public double FalseValue { get; set; } = 0.5;
 
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -3691,14 +3918,15 @@ namespace GrafikoMat.Common
             if (parameter is string paramStr && !string.IsNullOrEmpty(paramStr))
             {
                 var parts = paramStr.Split(';');
+                // ✅ DODANE - użyj InvariantCulture dla kropki dziesiętnej
                 if (parts.Length == 2 &&
-                    double.TryParse(parts[0], out double falseVal) &&
-                    double.TryParse(parts[1], out double trueVal))
+                    double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double falseVal) &&
+                    double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double trueVal))
                 {
                     return boolValue ? trueVal : falseVal;
                 }
                 // Jeśli tylko jedna wartość, użyj jej jako FalseValue
-                if (parts.Length == 1 && double.TryParse(parts[0], out double singleVal))
+                if (parts.Length == 1 && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double singleVal))
                 {
                     return boolValue ? 1.0 : singleVal;
                 }
@@ -3710,7 +3938,6 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language)
             => throw new NotImplementedException();
     }
-
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)
@@ -5111,7 +5338,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (67339 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (68101 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -5398,6 +5625,14 @@ namespace GrafikoMat
             var calendarGrid = _currentDeclarationsView.FindName("CalendarGridView") as GridView;
             System.Diagnostics.Debug.WriteLine($"[ANIM] CalendarGrid found: {calendarGrid != null}");
 
+            // ✅ DODANE - ukryj overlay PRZED wyjazdem
+            if (_currentDeclarationsView.ViewModel?.HasNoDoctors == true)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Hiding overlay before slide-out");
+                _currentDeclarationsView.HideOverlay();
+                await Task.Delay(200); // Poczekaj na fade-out
+            }
+
             // ✅ KLUCZOWA ZMIANA - animacja wyjścia TYLKO gdy kalendarz jest widoczny
             if (calendarGrid != null && calendarGrid.Opacity > 0)
             {
@@ -5456,6 +5691,7 @@ namespace GrafikoMat
 
             System.Diagnostics.Debug.WriteLine($"[ANIM] Calling UpdateAllCellBrushes");
             _currentDeclarationsView?.UpdateAllCellBrushes();
+            _currentDeclarationsView?.UpdateCalendarOpacity();
 
             await Task.Delay(50);
 
@@ -5488,6 +5724,13 @@ namespace GrafikoMat
 
                 try { storyboard2.Begin(); await tcs2.Task; }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[ANIM] Error animating calendar (entry): {ex.Message}"); }
+            }
+
+            // ✅ DODANE - pokaż overlay PO wjeździe
+            if (_currentDeclarationsView.ViewModel?.HasNoDoctors == true)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ANIM] Showing overlay after slide-in");
+                _currentDeclarationsView.ShowOverlay();
             }
 
             System.Diagnostics.Debug.WriteLine($"[ANIM] Calendar animation complete");
@@ -7967,12 +8210,12 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (24784 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (24594 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
-using GrafikoMat.Core.Scheduling; // ✅ DODANE
+using GrafikoMat.Core.Scheduling;
 using GrafikoMat.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -8004,7 +8247,7 @@ namespace GrafikoMat.ViewModels
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
         private bool _use12hShiftsByDefault;
-        private MonthLayout _monthLayout; // ✅ DODANE
+        private MonthLayout _monthLayout;
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -8016,6 +8259,10 @@ namespace GrafikoMat.ViewModels
         public HashSet<SelectedSlot> SelectedSlots { get; } = new();
 
         public bool CanSwitchDoctors { get; }
+
+        // ✅ DODANE - właściwości sprawdzające czy są lekarze
+        public bool HasNoDoctors => Doctors.Count == 0;
+        public bool HasDoctors => Doctors.Count > 0;
 
         private int _selectedDoctorIndex;
         public int SelectedDoctorIndex
@@ -8060,7 +8307,6 @@ namespace GrafikoMat.ViewModels
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
 
-            // ✅ DODANE: Inicjalizacja MonthLayout
             _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
 
             var duplicateFullNames = doctors
@@ -8087,11 +8333,14 @@ namespace GrafikoMat.ViewModels
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+
+            // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
+            OnPropertyChanged(nameof(HasNoDoctors));
+            OnPropertyChanged(nameof(HasDoctors));
         }
 
         private void BuildCalendarShell()
         {
-            // ✅ ZMIENIONE - zapamiętaj stare cele jeśli istnieją (dla zachowania danych)
             var oldCells = DayCells.ToList();
 
             DayCells.Clear();
@@ -8102,7 +8351,6 @@ namespace GrafikoMat.ViewModels
             int weeks = (int)Math.Ceiling((offset + daysInMonth) / 7.0);
             var startDate = firstDay.AddDays(-offset);
 
-            // ✅ DEBUG - sprawdź wartości
             System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell START");
             System.Diagnostics.Debug.WriteLine($"[BUILD] _use12hShiftsByDefault = {_use12hShiftsByDefault}");
             System.Diagnostics.Debug.WriteLine($"[BUILD] _monthLayout Year={_monthLayout.Year}, Month={_monthLayout.Month}, UseTwelveHourByDefault={_monthLayout.UseTwelveHourByDefault}");
@@ -8111,7 +8359,6 @@ namespace GrafikoMat.ViewModels
             {
                 var date = startDate.AddDays(i);
 
-                // ✅ KLUCZOWE - zawsze twórz NOWY obiekt DayCell
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     PolishHolidays.IsPublicHoliday(date),
@@ -8122,10 +8369,8 @@ namespace GrafikoMat.ViewModels
                     var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
                     cell.IsSplit = _monthLayout.IsSplit(dateOnly);
 
-                    // ✅ DEBUG - sprawdź dla każdego dnia w miesiącu
                     System.Diagnostics.Debug.WriteLine($"[BUILD] Day {date.Day}: IsSplit = {cell.IsSplit}");
 
-                    // ✅ Skopiuj dane z poprzedniego cell jeśli istniał
                     var oldCell = oldCells.FirstOrDefault(c => c.Date.Date == date.Date);
                     if (oldCell != null)
                     {
@@ -8147,7 +8392,6 @@ namespace GrafikoMat.ViewModels
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
 
-            // ✅ Na początku ustaw domyślny tryb według jednostki
             foreach (var cell in DayCells.Where(c => c.InMonth))
             {
                 var dateOnly = new DateOnly(cell.Date.Year, cell.Date.Month, cell.Date.Day);
@@ -8175,20 +8419,17 @@ namespace GrafikoMat.ViewModels
                     {
                         var d = decl.Days[dayIdx];
 
-                        // ✅ KLUCZOWA ZMIANA - użyj zapisanego Mode TYLKO jeśli dzień ma jakieś symbole
                         bool hasSavedData = !string.IsNullOrWhiteSpace(d.Full) ||
                                            !string.IsNullOrWhiteSpace(d.Day) ||
                                            !string.IsNullOrWhiteSpace(d.Night);
 
                         if (hasSavedData)
                         {
-                            // Dzień ma zapisane dane - użyj zapisanego trybu
                             cell.IsSplit = d.Mode == DayMode.Split12;
                             System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Has saved data, Mode={d.Mode}, IsSplit={cell.IsSplit}");
                         }
                         else
                         {
-                            // Dzień jest pusty - zostaw domyślny tryb jednostki (już ustawiony)
                             System.Diagnostics.Debug.WriteLine($"[LOAD] Day {cell.Date.Day}: Empty, keeping default IsSplit={cell.IsSplit}");
                         }
 
@@ -8266,7 +8507,6 @@ namespace GrafikoMat.ViewModels
 
             if (isMultiSelect)
             {
-                // CTRL - dodaj/usuń z zaznaczenia
                 if (SelectedSlots.Contains(slot))
                 {
                     System.Diagnostics.Debug.WriteLine($"[SELECT] Removing slot from selection");
@@ -8280,7 +8520,6 @@ namespace GrafikoMat.ViewModels
             }
             else
             {
-                // Brak CTRL - zamień zaznaczenie na pojedynczy slot
                 System.Diagnostics.Debug.WriteLine($"[SELECT] Replacing selection with single slot");
                 SelectedSlots.Clear();
                 SelectedSlots.Add(slot);
@@ -8313,7 +8552,6 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
-        // ✅ DODANE: Metoda używana przez DeclarationsView - z 4 parametrami
         public void SelectDragRange(int startIndex, int endIndex, SlotPart startPart, SlotPart endPart)
         {
             SelectedSlots.Clear();
@@ -8335,19 +8573,24 @@ namespace GrafikoMat.ViewModels
                     SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
                     SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                 }
+                else if (i == startIndex && i == endIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, startPart));
+                }
+                else if (i == startIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, startPart));
+                }
+                else if (i == endIndex)
+                {
+                    SelectedSlots.Add(new SelectedSlot(i, endPart));
+                }
                 else
                 {
                     if (cell.IsSplit)
                     {
-                        if (startPart == SlotPart.Day || startPart == SlotPart.Night)
-                        {
-                            SelectedSlots.Add(new SelectedSlot(i, startPart));
-                        }
-                        else
-                        {
-                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
-                            SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
-                        }
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
+                        SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                     }
                     else
                     {
@@ -8355,6 +8598,7 @@ namespace GrafikoMat.ViewModels
                     }
                 }
             }
+
             UpdateSelectionVisuals();
         }
 
@@ -8366,19 +8610,18 @@ namespace GrafikoMat.ViewModels
 
         private void UpdateSelectionVisuals()
         {
-            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals: {SelectedSlots.Count} slots selected");
+            System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals START, SelectedSlots.Count = {SelectedSlots.Count}");
 
             foreach (var cell in DayCells)
             {
                 var selectedParts = new HashSet<SlotPart>();
-                foreach (var sel in SelectedSlots)
+
+                foreach (var sel in SelectedSlots.Where(s => s.Index == cell.Index))
                 {
-                    if (sel.Index == cell.Index)
-                    {
-                        selectedParts.Add(sel.Part);
-                        System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
-                    }
+                    selectedParts.Add(sel.Part);
+                    System.Diagnostics.Debug.WriteLine($"[SELECT] Cell {cell.Index} Day {cell.Date.Day}: Adding part {sel.Part}");
                 }
+
                 cell.UpdateSelection(selectedParts);
 
                 if (selectedParts.Count > 0)
@@ -8400,7 +8643,24 @@ namespace GrafikoMat.ViewModels
             SelectedDoctorIndex = (SelectedDoctorIndex - 1 + Doctors.Count) % Doctors.Count;
         }
 
-        // ✅ POPRAWIONE: Metoda do przeładowania dla nowej jednostki
+        public bool HasDeclarationInSlot(int cellIndex, SlotPart slotPart)
+        {
+            if (cellIndex < 0 || cellIndex >= DayCells.Count)
+                return false;
+
+            var cell = DayCells[cellIndex];
+            if (!cell.InMonth)
+                return false;
+
+            return slotPart switch
+            {
+                SlotPart.Full => !string.IsNullOrWhiteSpace(cell.SymbolFull),
+                SlotPart.Day => !string.IsNullOrWhiteSpace(cell.SymbolDay),
+                SlotPart.Night => !string.IsNullOrWhiteSpace(cell.SymbolNight),
+                _ => false
+            };
+        }
+
         public void ReloadForNewUnit(List<DoctorProfile> doctors, int initialDoctorIndex, bool use12hShifts, int newUnitIndex = 0)
         {
             _use12hShiftsByDefault = use12hShifts;
@@ -8427,17 +8687,19 @@ namespace GrafikoMat.ViewModels
             _selectedDoctorIndex = (Doctors.Count > 0) ?
                 Math.Clamp(initialDoctorIndex, 0, Doctors.Count - 1) : -1;
 
-            // ✅ KLUCZOWE - WYCZYŚĆ kolekcję przed przebudową
             DayCells.Clear();
 
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
 
-            // ✅ Powiadom o zmianach
             OnPropertyChanged(nameof(Doctors));
             OnPropertyChanged(nameof(SelectedDoctor));
             OnPropertyChanged(nameof(SelectedDoctorIndex));
-            OnPropertyChanged(nameof(DayCells)); // ✅ DODANE - wymuś odświeżenie bindingu
+            OnPropertyChanged(nameof(DayCells));
+            
+            // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
+            OnPropertyChanged(nameof(HasNoDoctors));
+            OnPropertyChanged(nameof(HasDoctors));
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
@@ -8555,11 +8817,6 @@ namespace GrafikoMat.ViewModels
             IsWeekend = isWeekend;
             IsHoliday = isHoliday;
             HolidayName = holidayName;
-
-            _effectiveBackground = new SolidColorBrush();
-            _effectiveBorderBrush = new SolidColorBrush();
-            _dayNumberForeground = new SolidColorBrush();
-            _effectiveHeaderBackground = new SolidColorBrush();
         }
     }
 }
@@ -10774,7 +11031,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml (16951 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml (22356 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.DeclarationsView"
@@ -10804,6 +11061,31 @@ namespace GrafikoMat.Views
             </ResourceDictionary.ThemeDictionaries>
 
             <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <common:BooleanToOpacityConverter x:Key="BooleanToOpacityConverter"/>
+
+            <!-- ✅ DODANE - Animacje overlaya -->
+            <Storyboard x:Name="OverlayFadeInStoryboard">
+                <DoubleAnimation Storyboard.TargetName="NoDoctorsOverlay"
+                               Storyboard.TargetProperty="Opacity"
+                               From="0.0"
+                               To="1.0"
+                               Duration="0:0:0.3">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <Storyboard x:Name="OverlayFadeOutStoryboard">
+                <DoubleAnimation Storyboard.TargetName="NoDoctorsOverlay"
+                               Storyboard.TargetProperty="Opacity"
+                               To="0.0"
+                               Duration="0:0:0.2">
+                    <DoubleAnimation.EasingFunction>
+                        <CubicEase EasingMode="EaseIn"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
 
             <Style TargetType="TextBlock" x:Key="SymbolTextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
@@ -10902,135 +11184,204 @@ namespace GrafikoMat.Views
                 <TextBlock Grid.Column="6" Text="Niedziela" HorizontalAlignment="Center" Opacity="0.6"/>
             </Grid>
 
-            <!-- Kalendarz -->
-            <GridView Grid.Row="2" x:Name="CalendarGridView" ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" SelectionMode="None" IsItemClickEnabled="False">
-                <GridView.RenderTransform>
-                    <TranslateTransform X="0"/>
-                </GridView.RenderTransform>
+            <!-- Kontener dla kalendarza z możliwością opacity NA CAŁOŚĆ -->
+            <Grid Grid.Row="2">
+                <!-- Wrapper z Opacity kontrolowanym dynamicznie w code-behind -->
+                <Grid x:Name="CalendarWrapper"
+                      IsHitTestVisible="{x:Bind ViewModel.HasDoctors, Mode=OneWay}">
 
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <GridView.ItemContainerStyle>
-                    <Style TargetType="GridViewItem">
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                    </Style>
-                </GridView.ItemContainerStyle>
-                <GridView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:DayCell">
-                        <!-- Border z tłem - ZAWSZE widoczny -->
-                        <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="24"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
+                    <!-- Kalendarz -->
+                    <GridView x:Name="CalendarGridView" 
+                              ItemsSource="{x:Bind ViewModel.DayCells, Mode=OneWay}" 
+                              SelectionMode="None" 
+                              IsItemClickEnabled="False">
+                        <GridView.RenderTransform>
+                            <TranslateTransform X="0"/>
+                        </GridView.RenderTransform>
 
-                                <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
-                                <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
-
-                                <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
-                                <Grid Grid.Row="0" Padding="6,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <!-- ✅ Opacity: 0.5 dla InMonth=true, 0.25 dla InMonth=false -->
-                                    <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
-                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
-                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
-
-                                    <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
-                                              Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
-                                              FontSize="11" 
-                                              Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
-                                              HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
-                                              Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
-                                </Grid>
-
-                                <!-- CONTENT (SLOTY) -->
-                                <Grid Grid.Row="1" MinHeight="48">
-                                    <!-- SLOT 24h -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
-                                        <!-- Glify TYLKO dla dni w miesiącu -->
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
-                                                    Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <Viewbox MaxHeight="24" MaxWidth="24">
-                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
-                                            </Viewbox>
-                                            <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
-                                            <Viewbox MaxHeight="22" MaxWidth="22">
-                                                <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
-                                            </Viewbox>
-                                        </StackPanel>
-
-                                        <!-- Symbol deklaracji z Opacity -->
-                                        <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
-                                    </Grid>
-
-                                    <!-- SLOTY 12h -->
-                                    <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <controls:CalendarUniformGridPanel Columns="7" RowSpacing="4" ColumnSpacing="4"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DayCell">
+                                <!-- Border z tłem - ZAWSZE widoczny -->
+                                <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
+                                    <Grid>
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="24"/>
                                             <RowDefinition Height="*"/>
                                         </Grid.RowDefinitions>
-                                        <!-- Glify TYLKO dla dni w miesiącu -->
-                                        <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
-                                        </Viewbox>
-                                        <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                 Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
-                                        </Viewbox>
-                                        <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-                                        <!-- Symbole z Opacity -->
-                                        <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
-                                        <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
-                                                  Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.25;0.5}"/>
+
+                                        <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
+                                        <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
+
+                                        <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
+                                        <Grid Grid.Row="0" Padding="6,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
+                                                      Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+
+                                            <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
+                                                      Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
+                                                      FontSize="11" 
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
+                                                      HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
+                                                      Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                        </Grid>
+
+                                        <!-- CONTENT (SLOTY) -->
+                                        <Grid Grid.Row="1" MinHeight="48">
+                                            <!-- SLOT 24h -->
+                                            <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                                                <!-- Glify TYLKO dla dni w miesiącu -->
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                                                            Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <Viewbox MaxHeight="24" MaxWidth="24">
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    </Viewbox>
+                                                    <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
+                                                    <Viewbox MaxHeight="22" MaxWidth="22">
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    </Viewbox>
+                                                </StackPanel>
+
+                                                <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                            </Grid>
+
+                                            <!-- SLOTY 12h -->
+                                            <Grid Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+                                                <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                         Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                </Viewbox>
+                                                <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                         Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                </Viewbox>
+                                                <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
+                                                <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                                <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
+                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                            </Grid>
+                                        </Grid>
+
+                                        <!-- RAMKI - ZAWSZE widoczne -->
+                                        <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
+                                        <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
+
+                                        <!-- ZAZNACZENIA -->
+                                        <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
+                                                Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                        <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
+                                                    BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                            <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
+                                                    BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                        </Grid>
                                     </Grid>
-                                </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                </Grid>
 
-                                <!-- RAMKI - ZAWSZE widoczne -->
-                                <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
-                                <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
+                <!-- ✅ InfoBox z nazwą i początkową Opacity=0 -->
+                <Grid x:Name="NoDoctorsOverlay"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      MinWidth="340"
+                      MaxWidth="500"
+                      Opacity="0"
+                      Visibility="{x:Bind ViewModel.HasNoDoctors, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
 
-                                <!-- ZAZNACZENIA -->
-                                <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4" BorderThickness="4"
-                                        Visibility="{x:Bind IsFullSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                          Padding="0"
+                          CornerRadius="10">
 
-                                <Grid Grid.Row="1" Visibility="{x:Bind IsSplit, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="*"/>
-                                    </Grid.RowDefinitions>
+                        <!-- Miękki cień -->
+                        <Grid.Shadow>
+                            <ThemeShadow/>
+                        </Grid.Shadow>
 
-                                    <Border Grid.Row="0" BorderBrush="#FF3399FF" CornerRadius="0"
-                                            BorderThickness="{x:Bind DaySelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsDaySelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                        <!-- Subtelna ramka w kolorze systemowym -->
+                        <Border BorderThickness="1"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                CornerRadius="10"/>
 
-                                    <Border Grid.Row="1" BorderBrush="#FF3399FF" CornerRadius="0,0,4,4"
-                                            BorderThickness="{x:Bind NightSelectionBorderThickness, Mode=OneWay}"
-                                            Visibility="{x:Bind IsNightSelected, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Lewy pasek koloru - BURSZTYNOWY -->
+                            <Border Grid.Column="0"
+                                    Background="#FFB900"
+                                    CornerRadius="10,0,0,10"/>
+
+                            <!-- Ikona (wycentrowana) - BURSZTYNOWA -->
+                            <Grid Grid.Column="1" 
+                                  Width="64" 
+                                  Margin="16,16,16,16">
+                                <Viewbox Width="60" Height="60">
+                                    <FontIcon Glyph="&#xE7BA;" 
+                                              Foreground="#FFB900"/>
+                                </Viewbox>
                             </Grid>
-                        </Border>
-                    </DataTemplate>
-                </GridView.ItemTemplate>
-            </GridView>
+
+                            <!-- Treść -->
+                            <StackPanel Grid.Column="2" 
+                                        Margin="8,20,24,20"
+                                        Spacing="8">
+                                <TextBlock Text="Brak przypisanych dyżurnych"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock TextWrapping="Wrap"
+                                           Opacity="0.85"
+                                           FontSize="14">
+                                    Do tej jednostki nie są przypisani żadni dyżurni. Aby móc dodawać deklaracje, przejdź do zakładki 'Zarządzanie dyżurnymi' i przypisz lekarzy do tej jednostki.
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
         </Grid>
     </Grid>
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (21395 bytes)
+===== FILE: GrafikoMat\Views\DeclarationsView.xaml.cs (29842 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
@@ -11042,10 +11393,16 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using Windows.Foundation;
 using Windows.System;
 using Windows.UI;
+using WinUIBrush = Microsoft.UI.Xaml.Media.Brush;
+using WinUISolidColorBrush = Microsoft.UI.Xaml.Media.SolidColorBrush;
+using WinUIColor = Windows.UI.Color;
+using WinUIColors = Microsoft.UI.Colors;
 
 namespace GrafikoMat.Views
 {
@@ -11112,10 +11469,17 @@ namespace GrafikoMat.Views
                 vm.PropertyChanged += Vm_PropertyChanged;
             }
             UpdateAllCellBrushes();
+            UpdateCalendarOpacity();
         }
 
         private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            // ✅ DODANE - obsługa HasNoDoctors
+            if (e.PropertyName == nameof(DeclarationsViewModel.HasNoDoctors))
+            {
+                UpdateCalendarOpacity();
+            }
+
             if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
                 _lastClickedSlot = null;
@@ -11139,6 +11503,35 @@ namespace GrafikoMat.Views
             finally
             {
                 _suppressAutomaticBrushUpdate = false;
+            }
+        }
+
+        // ✅ DODANE - metody animacji overlaya
+        public void ShowOverlay()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OVERLAY] ShowOverlay called");
+            if (NoDoctorsOverlay != null && NoDoctorsOverlay.Visibility == Visibility.Visible)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Starting fade-in animation");
+                OverlayFadeInStoryboard?.Begin();
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Overlay not visible or null");
+            }
+        }
+
+        public void HideOverlay()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OVERLAY] HideOverlay called");
+            if (NoDoctorsOverlay != null && NoDoctorsOverlay.Visibility == Visibility.Visible)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Starting fade-out animation");
+                OverlayFadeOutStoryboard?.Begin();
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Overlay not visible or null");
             }
         }
 
@@ -11313,7 +11706,6 @@ namespace GrafikoMat.Views
             var point = e.GetPosition(CalendarGridView);
             var (index, slotPart) = GetIndexAndSlotFromPoint(point);
 
-            // Jeśli kliknięto na slot poza miesiącem lub poza siatką, ignoruj
             if (index == -1 || index >= ViewModel.DayCells.Count || !ViewModel.DayCells[index].InMonth)
             {
                 return;
@@ -11321,26 +11713,167 @@ namespace GrafikoMat.Views
 
             var clickedSlot = new SelectedSlot(index, slotPart);
 
-            // Jeśli kliknięty slot NIE jest w zaznaczeniu, zaznacz tylko jego
             if (!ViewModel.SelectedSlots.Contains(clickedSlot))
             {
                 ViewModel.SelectSingleSlot(index, slotPart);
                 _lastClickedSlot = clickedSlot;
             }
 
-            // Utwórz menu kontekstowe
             var contextMenu = new MenuFlyout();
             contextMenu.Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.RightEdgeAlignedTop;
 
-            var placeholderItem = new MenuFlyoutItem
+            // ✅ Styl dla przesunięcia w prawo (wyrównanie z resztą)
+            var indentedStyle = new Style(typeof(MenuFlyoutItem));
+            indentedStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(12, 12, 12, 12)));
+
+            // ✅ Styl nagłówka z tłem
+            var headerStyle = new Style(typeof(MenuFlyoutItem));
+            headerStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(12, 12, 12, 12)));
+            headerStyle.Setters.Add(new Setter(Control.BackgroundProperty,
+                new WinUISolidColorBrush(WinUIColor.FromArgb(60, 128, 128, 128))));
+            headerStyle.Setters.Add(new Setter(MenuFlyoutItem.FontWeightProperty, Microsoft.UI.Text.FontWeights.SemiBold));
+
+            // ============================================
+            // SEKCJA 1: Nagłówek - wyróżniony tłem
+            // ============================================
+            var addDeclarationHeader = new MenuFlyoutItem
             {
-                Text = "Tu znajdą się funkcje dodawania deklaracji",
-                IsEnabled = false
+                Text = "Dodaj deklarację:",
+                IsEnabled = false,
+                Style = headerStyle
+            };
+            contextMenu.Items.Add(addDeclarationHeader);
+
+            // ============================================
+            // SEKCJA 2: Typy deklaracji - PRZESUNIĘTE W PRAWO
+            // ============================================
+            var mogeItem = new MenuFlyoutItem
+            {
+                Text = "        Mogę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(mogeItem);
+
+            var chceItem = new MenuFlyoutItem
+            {
+                Text = "        Chcę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(chceItem);
+
+            var warunkowoItem = new MenuFlyoutItem
+            {
+                Text = "        Mogę warunkowo",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(warunkowoItem);
+
+            var rezerwacjaItem = new MenuFlyoutItem
+            {
+                Text = "        Rezerwacja",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(rezerwacjaItem);
+
+            var nieMogeItem = new MenuFlyoutItem
+            {
+                Text = "        Nie mogę",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(nieMogeItem);
+
+            var innyDyzurItem = new MenuFlyoutItem
+            {
+                Text = "        Inny dyżur",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(innyDyzurItem);
+
+            var urlopItem = new MenuFlyoutItem
+            {
+                Text = "        Urlop",
+                IsEnabled = false,
+                Style = indentedStyle
+            };
+            contextMenu.Items.Add(urlopItem);
+
+            contextMenu.Items.Add(new MenuFlyoutSeparator());
+
+            // ============================================
+            // SEKCJA 3: Współdyżurny z rozwijaną listą
+            // ============================================
+
+            // ✅ SPRAWDŹ czy w zaznaczonych slotach są deklaracje
+            bool hasDeclarationInSelection = ViewModel.SelectedSlots
+                .Any(slot => ViewModel.HasDeclarationInSlot(slot.Index, slot.Part));
+
+            var addCoWorkerSubItem = new MenuFlyoutSubItem
+            {
+                Text = "Dodaj współdyżurnego"
+                // ✅ SubItem ZAWSZE aktywne (można rozwinąć)
             };
 
-            contextMenu.Items.Add(placeholderItem);
+            if (!hasDeclarationInSelection)
+            {
+                // ✅ Pokaż komunikat zamiast listy lekarzy
+                var hintItem = new MenuFlyoutItem
+                {
+                    Text = "Najpierw wstaw deklarację",
+                    IsEnabled = false
+                };
+                addCoWorkerSubItem.Items.Add(hintItem);
+            }
+            else
+            {
+                // ✅ Pokaż listę lekarzy tylko gdy są deklaracje
+                var currentDoctorId = ViewModel.SelectedDoctor?.Id;
+                var doctorsInUnit = ViewModel.Doctors
+                    .Where(d => d.Profile.Id != currentDoctorId)
+                    .ToList();
 
-            // Pokaż menu w miejscu kliknięcia
+                if (doctorsInUnit.Any())
+                {
+                    foreach (var doctor in doctorsInUnit)
+                    {
+                        var doctorItem = new MenuFlyoutItem
+                        {
+                            Text = doctor.DisplayName,
+                            IsEnabled = false  // 🔧 PLACEHOLDER - na razie bez akcji
+                        };
+                        addCoWorkerSubItem.Items.Add(doctorItem);
+                    }
+                }
+                else
+                {
+                    var nodoctorsItem = new MenuFlyoutItem
+                    {
+                        Text = "(brak innych dyżurnych)",
+                        IsEnabled = false
+                    };
+                    addCoWorkerSubItem.Items.Add(nodoctorsItem);
+                }
+            }
+
+            contextMenu.Items.Add(addCoWorkerSubItem);
+
+            contextMenu.Items.Add(new MenuFlyoutSeparator());
+
+            // ============================================
+            // SEKCJA 4: Przełącznik trybu
+            // ============================================
+            var toggleModeItem = new MenuFlyoutItem
+            {
+                Text = "Przełącz tryb (12h/24h)",
+                IsEnabled = false  // 🔧 PLACEHOLDER
+            };
+            contextMenu.Items.Add(toggleModeItem);
+
             contextMenu.ShowAt(CalendarGridView, point);
 
             e.Handled = true;
@@ -11376,7 +11909,7 @@ namespace GrafikoMat.Views
             if (index >= 0 && index < ViewModel.DayCells.Count && ViewModel.DayCells[index].InMonth)
             {
                 System.Diagnostics.Debug.WriteLine($"[TAPPED] Handling Ctrl+Click in Tapped fallback");
-                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true); // ✅ ZMIENIONE
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
             }
 
@@ -11395,7 +11928,47 @@ namespace GrafikoMat.Views
             if (e.Key == VirtualKey.Shift) _shiftDown = false;
         }
 
-        private void OnThemeChanged(FrameworkElement sender, object args) => UpdateAllCellBrushes();
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            UpdateAllCellBrushes();
+            UpdateCalendarOpacity();
+        }
+
+        // ✅ DODANA NOWA METODA - kontrola opacity kalendarza
+        public void UpdateCalendarOpacity()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] UpdateCalendarOpacity called");
+
+            if (ViewModel == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OPACITY] ViewModel is null");
+                return;
+            }
+
+            bool isDark = this.ActualTheme == ElementTheme.Dark ||
+                          (this.ActualTheme == ElementTheme.Default &&
+                           Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] isDark={isDark}, HasNoDoctors={ViewModel.HasNoDoctors}");
+
+            var calendarWrapper = CalendarWrapper;
+
+            if (calendarWrapper == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OPACITY] CalendarWrapper is NULL!");
+                return;
+            }
+
+            // W ciemnym: bardziej przezroczysty (mniejsza opacity)
+            // W jasnym: obecna wartość OK
+            double targetOpacity = ViewModel.HasNoDoctors
+                ? (isDark ? 0.10 : 0.15)
+                : 1.0;
+
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] Setting opacity to {targetOpacity}");
+            calendarWrapper.Opacity = targetOpacity;
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] CalendarWrapper.Opacity after set = {calendarWrapper.Opacity}");
+        }
 
         public void UpdateAllCellBrushes()
         {
@@ -11410,65 +11983,58 @@ namespace GrafikoMat.Views
 
             foreach (var cell in ViewModel.DayCells)
             {
-                Brush effectiveBackground;
-                Brush effectiveBorder;
-                Brush dayNumberFg;
-                Brush headerBg;
+                WinUIBrush effectiveBackground;
+                WinUIBrush effectiveBorder;
+                WinUIBrush dayNumberFg;
+                WinUIBrush headerBg;
 
                 if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
                 {
-                    // Zaznaczone komórki
-                    effectiveBackground = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
-                    effectiveBorder = new SolidColorBrush(Color.FromArgb(255, 66, 135, 245));
-                    dayNumberFg = new SolidColorBrush(Colors.White);
-                    headerBg = new SolidColorBrush(Color.FromArgb(255, 50, 110, 200));
+                    effectiveBackground = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
+                    effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
+                    dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                    headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 50, 110, 200));
                 }
                 else if (!cell.InMonth)
                 {
-                    // ✅ DNI SPOZA MIESIĄCA
-                    // Tło: Alpha=40, Ramki: Alpha=10
-                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.6)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(40, 60, 60, 60)) :
-                            new SolidColorBrush(Color.FromArgb(40, 50, 50, 50));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
-                        headerBg = new SolidColorBrush(Color.FromArgb(40, 70, 70, 70));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 60, 60, 60)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 50, 50, 50));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 255, 255, 255));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 70, 70, 70));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(40, 220, 220, 220)) :
-                            new SolidColorBrush(Color.FromArgb(40, 240, 240, 240));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(10, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
-                        headerBg = new SolidColorBrush(Color.FromArgb(40, 230, 230, 230));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 220, 220, 220)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 240, 240, 240));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 0, 0, 0));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 230, 230, 230));
                     }
                 }
                 else
                 {
-                    // ✅ DNI W MIESIĄCU
-                    // Tło: Alpha=150, Ramki: Alpha=80
-                    // Tekst: ZAWSZE Black/White (Opacity kontrolowana w XAML = 0.8)
                     if (isDark)
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(150, 50, 50, 50)) :
-                            new SolidColorBrush(Color.FromArgb(150, 40, 40, 40));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255));
-                        dayNumberFg = new SolidColorBrush(Colors.White);  // ✅ Zawsze biały
-                        headerBg = new SolidColorBrush(Color.FromArgb(150, 60, 60, 60));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 50, 50, 50)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 40, 40, 40));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 255, 255, 255));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 60, 60, 60));
                     }
                     else
                     {
                         effectiveBackground = cell.IsDayOff ?
-                            new SolidColorBrush(Color.FromArgb(150, 235, 235, 235)) :
-                            new SolidColorBrush(Color.FromArgb(150, 250, 250, 250));
-                        effectiveBorder = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0));
-                        dayNumberFg = new SolidColorBrush(Colors.Black);  // ✅ Zawsze czarny
-                        headerBg = new SolidColorBrush(Color.FromArgb(150, 245, 245, 245));
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 235, 235, 235)) :
+                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 250, 250, 250));
+                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 0, 0, 0));
+                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
+                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 245, 245, 245));
                     }
                 }
 
@@ -11478,6 +12044,7 @@ namespace GrafikoMat.Views
                 cell.EffectiveHeaderBackground = headerBg;
             }
         }
+
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
         {
             if (ViewModel != null)

@@ -84,10 +84,17 @@ namespace GrafikoMat.Views
                 vm.PropertyChanged += Vm_PropertyChanged;
             }
             UpdateAllCellBrushes();
+            UpdateCalendarOpacity();
         }
 
         private void Vm_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            // ✅ DODANE - obsługa HasNoDoctors
+            if (e.PropertyName == nameof(DeclarationsViewModel.HasNoDoctors))
+            {
+                UpdateCalendarOpacity();
+            }
+
             if (e.PropertyName == nameof(ViewModel.SelectedDoctor))
             {
                 _lastClickedSlot = null;
@@ -111,6 +118,35 @@ namespace GrafikoMat.Views
             finally
             {
                 _suppressAutomaticBrushUpdate = false;
+            }
+        }
+
+        // ✅ DODANE - metody animacji overlaya
+        public void ShowOverlay()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OVERLAY] ShowOverlay called");
+            if (NoDoctorsOverlay != null && NoDoctorsOverlay.Visibility == Visibility.Visible)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Starting fade-in animation");
+                OverlayFadeInStoryboard?.Begin();
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Overlay not visible or null");
+            }
+        }
+
+        public void HideOverlay()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OVERLAY] HideOverlay called");
+            if (NoDoctorsOverlay != null && NoDoctorsOverlay.Visibility == Visibility.Visible)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Starting fade-out animation");
+                OverlayFadeOutStoryboard?.Begin();
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[OVERLAY] Overlay not visible or null");
             }
         }
 
@@ -457,6 +493,7 @@ namespace GrafikoMat.Views
 
             e.Handled = true;
         }
+
         private void Calendar_Tapped(object sender, TappedRoutedEventArgs e)
         {
             // Jeśli PointerPressed obsłużył Ctrl, ignore
@@ -487,7 +524,7 @@ namespace GrafikoMat.Views
             if (index >= 0 && index < ViewModel.DayCells.Count && ViewModel.DayCells[index].InMonth)
             {
                 System.Diagnostics.Debug.WriteLine($"[TAPPED] Handling Ctrl+Click in Tapped fallback");
-                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true); // ✅ ZMIENIONE
+                ViewModel.ToggleSlotSelection(index, slotPart, isMultiSelect: true);
                 _lastClickedSlot = new SelectedSlot(index, slotPart);
             }
 
@@ -506,7 +543,47 @@ namespace GrafikoMat.Views
             if (e.Key == VirtualKey.Shift) _shiftDown = false;
         }
 
-        private void OnThemeChanged(FrameworkElement sender, object args) => UpdateAllCellBrushes();
+        private void OnThemeChanged(FrameworkElement sender, object args)
+        {
+            UpdateAllCellBrushes();
+            UpdateCalendarOpacity();
+        }
+
+        // ✅ DODANA NOWA METODA - kontrola opacity kalendarza
+        public void UpdateCalendarOpacity()
+        {
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] UpdateCalendarOpacity called");
+
+            if (ViewModel == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OPACITY] ViewModel is null");
+                return;
+            }
+
+            bool isDark = this.ActualTheme == ElementTheme.Dark ||
+                          (this.ActualTheme == ElementTheme.Default &&
+                           Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] isDark={isDark}, HasNoDoctors={ViewModel.HasNoDoctors}");
+
+            var calendarWrapper = CalendarWrapper;
+
+            if (calendarWrapper == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[OPACITY] CalendarWrapper is NULL!");
+                return;
+            }
+
+            // W ciemnym: bardziej przezroczysty (mniejsza opacity)
+            // W jasnym: obecna wartość OK
+            double targetOpacity = ViewModel.HasNoDoctors
+                ? (isDark ? 0.10 : 0.15)
+                : 1.0;
+
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] Setting opacity to {targetOpacity}");
+            calendarWrapper.Opacity = targetOpacity;
+            System.Diagnostics.Debug.WriteLine($"[OPACITY] CalendarWrapper.Opacity after set = {calendarWrapper.Opacity}");
+        }
 
         public void UpdateAllCellBrushes()
         {
@@ -582,6 +659,7 @@ namespace GrafikoMat.Views
                 cell.EffectiveHeaderBackground = headerBg;
             }
         }
+
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
         {
             if (ViewModel != null)
