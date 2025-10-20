@@ -21,8 +21,8 @@
       "mtime": 1760721545.021529
     },
     "claude_pyrojects.manifest": {
-      "hash": "a3ecec39b0b4b912bbb23aae4f69bc5810980f2ddff7d3c78974b42e898458d4",
-      "mtime": 1760994172.2633157
+      "hash": "631637b7ab821b3c80492dc0728a3bf82b6b46f271bb2149643350553088d268",
+      "mtime": 1760996296.6202886
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -30,7 +30,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1760995481.984143
+      "mtime": 1760996840.3686485
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -620,9 +620,13 @@
       "hash": "fde8d7586c023cae893af136cdd66b162ac26279a8ac69723a8e39c434fb3cf5",
       "mtime": 1760994094.1165397
     },
+    "GrafikoMat.Core\\Scheduling\\Engines\\DeltaEvaluator.cs": {
+      "hash": "df503c95e72545e893a89427c48ec4eb35b2e8f3891e36276120604b4672010a",
+      "mtime": 1760996834.3292108
+    },
     "GrafikoMat.Core\\Scheduling\\Engines\\GeneticSolver.cs": {
-      "hash": "650cc42b7956e4c7b519380e4a526591760adeb02742025cfe60723d727f99cb",
-      "mtime": 1760167958.7704413
+      "hash": "4d007ee8663ec5973740c5d28ed67f45a54681a72d5e97ebb3adfd0c95b35e8a",
+      "mtime": 1760996154.7184267
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\IScheduleSolver.cs": {
       "hash": "f1dd68283cba591d4bddd560539c5def23f63b697a5c15e6df1c9ada5a1122fb",
@@ -636,17 +640,21 @@
       "hash": "6bb66011e518ff7f3da52169a2d7c10927ec68386b1b4a9ad1a28c5b201d32cf",
       "mtime": 1760167630.89386
     },
+    "GrafikoMat.Core\\Scheduling\\Engines\\ScheduleState.cs": {
+      "hash": "d9130dee45e9071fccfd792bcb4c401c9d8414a862449720a4239aab1fb2660d",
+      "mtime": 1760996834.3066926
+    },
     "GrafikoMat.Core\\Scheduling\\Engines\\SchedulingRules.cs": {
       "hash": "d3ac3fbcf5d621e1e560166efcad0007e080695543e80062bccc0f06fdc320e7",
       "mtime": 1757530897.2375655
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\SimulatedAnnealingSolver.cs": {
-      "hash": "cc37741de8cc74ee63ce21b680c48a1355f228ede6a7d0c41d950e0528e86d32",
-      "mtime": 1760167737.4456685
+      "hash": "9993b95e0bfd9be8bd1569ef76b4938714a8d902a886b054ae1bb1bd4d7dc827",
+      "mtime": 1760996834.362738
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\SolverUtility.cs": {
-      "hash": "9bc53ac5ddab02fdae74527fac8ec35307c3e76b0d3978c8e2d997b41ab637b2",
-      "mtime": 1757530940.587468
+      "hash": "8f1b7ba66e8695e16810a44b0ed30bd4fc29244ea508b33b69ff044e24a913c1",
+      "mtime": 1760996834.344729
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\TabuSearchSolver.cs": {
       "hash": "8c16b7a8dcd151c921a3d6e5a007ba3cca0f46440dd93df9a14ebb7eef5c217b",
@@ -685,8 +693,8 @@
       "mtime": 1760994094.15357
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverParameters.cs": {
-      "hash": "3fadf037f28e7b298ff387e03b12514c5dcf828dfd417b274721c3574bf77c28",
-      "mtime": 1760995454.570164
+      "hash": "b41190c95d1f4f6a6afd448191d1a0a75b892f7be379617861de78161e1fdaa4",
+      "mtime": 1760996154.7089257
     },
     "GrafikoMat.Core\\Scheduling\\Models\\SolverPriority.cs": {
       "hash": "4d7877ac003d4f66389a67dec78d6636c22ead89c351b1aad598202d3c45f529",
@@ -729,5 +737,5 @@
       "mtime": 1757151896.199422
     }
   },
-  "last_sync": "2025-10-20T23:24:59.416556"
+  "last_sync": "2025-10-20T23:47:37.188606"
 }
