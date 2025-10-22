@@ -24,7 +24,7 @@ if not "%ERRORLEVEL%"=="0" (
 
 REM Aktualizacja Claude Project (ciche, bez outputu)
 cd /d "%ROOT_DIR%"
-python -m claude-pyrojects.cli update >nul 2>&1
+py -m claude-pyrojects.cli update >nul 2>&1
 
 if not "%ERRORLEVEL%"=="0" (
   echo [BLAD] Aktualizacja Claude Project niepomyslna

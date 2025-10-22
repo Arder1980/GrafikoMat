@@ -12,23 +12,27 @@ namespace GrafikoMat.Core.Scheduling.Evaluation
     /// </summary>
     public static class EvaluationAndScoringService
     {
-        // Wagi do porównywania rozwiązań (większe = ważniejsze w finalnym score)
-        private static readonly Dictionary<SolverPriority, double> PriorityWeights = new()
+        // Wagi wykładnicze dla pozycji w hierarchii priorytetów
+        // Pierwsza pozycja (najważniejszy priorytet): 1e15, druga: 1e12, trzecia: 1e9, itd.
+        private static readonly double[] PositionWeights = new[]
         {
-            { SolverPriority.InitialContinuity,           1_000_000_000_000 },
-            { SolverPriority.TotalAssignments,             1_000_000_000 },
-            { SolverPriority.Fairness,                       1_000_000 },
-            { SolverPriority.Spacing,                          1_000 }
+            1_000_000_000_000_000.0,  // Pozycja 0 (najważniejszy priorytet)
+            1_000_000_000_000.0,      // Pozycja 1
+            1_000_000_000.0,          // Pozycja 2
+            1_000_000.0,              // Pozycja 3
+            1_000.0                   // Pozycja 4
         };
 
         // Dodatkowe gratyfikatory (poza priorytetami)
-        private const double RESERVATION_WEIGHT = 100_000_000_000_000;
+        private const double RESERVATION_WEIGHT = 100_000_000_000_000_000.0; // Najwyższa możliwa waga
         private const double WANTS_WEIGHT = 10;
         private const double AVAILABLE_WEIGHT = 1;
 
         /// <summary>
         /// Oblicza agregatową ocenę (score) rozwiązania, zgodnie z zadaną kolejnością priorytetów.
         /// Wyższa wartość oznacza lepszy grafik.
+        /// UWAGA: Wagi są teraz wykładnicze i zależne od POZYCJI w liście priorytetów,
+        /// co zapewnia spójność z leksykograficznym porównaniem w SolutionComparer.
         /// </summary>
         public static double CalculateScore(ScheduleSolution solution, List<SolverPriority> priorities, ScheduleInput scheduleInput)
         {
@@ -58,8 +62,14 @@ namespace GrafikoMat.Core.Scheduling.Evaluation
             };
 
             foreach (var priority in priorities)
-                if (PriorityWeights.TryGetValue(priority, out double weight))
-                    score += normalizedValues[priority] * weight;
+            {
+                var index = priorities.IndexOf(priority);
+                if (normalizedValues.TryGetValue(priority, out double normalizedValue))
+                {
+                    double weight = index < PositionWeights.Length ? PositionWeights[index] : 1.0;
+                    score += normalizedValue * weight;
+                }
+            }
 
             // Miękkie preferencje — drobne punkty „za chęci”
             score += solution.FulfilledWants * WANTS_WEIGHT;

@@ -74,7 +74,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 double avg = workloadValues.Average();
                 double variance = workloadValues.Sum(w => (w - avg) * (w - avg)) / workloadValues.Count;
-                estimate -= variance * 1_000_000.0; // im mniejsza wariancja tym lepiej
+                double stdDev = Math.Sqrt(variance);
+
+                // Normalizacja przez średnią (współczynnik zmienności) dla spójności między rozmiarami problemów
+                double normalizedFairness = avg > 0 ? stdDev / avg : 0;
+                estimate -= normalizedFairness * 1_000_000.0; // im mniejsza zmienność tym lepiej
             }
 
             // 4. Preferences (uproszczone)

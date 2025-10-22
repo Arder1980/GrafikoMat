@@ -44,7 +44,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly ulong[,] _zobristTable; // Tablica dla haszowania Zobrista
 
         // Time-limited search
-        private readonly TimeSpan _maxSearchTime = TimeSpan.FromMinutes(10); // Domyślny limit
+        private readonly TimeSpan _maxSearchTime;
         private Stopwatch? _searchStopwatch;
         private bool _timeLimitReached = false;
 
@@ -58,6 +58,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         public BacktrackingSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
+            TimeSpan timeout,  // ← NOWY PARAMETR
             IProgress<double>? progress = null,
             CancellationToken token = default)
         {
@@ -65,6 +66,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _priorities = priorities;
             _progress = progress;
             _cancellationToken = token;
+            _maxSearchTime = timeout;  // ← PRZYPISANIE Z PARAMETRU
 
             _days = _input.DaysInMonth;
             _doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
@@ -74,8 +76,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _workload = new int[_doctors.Count];
             _conditionalsUsed = new int[_doctors.Count];
 
-            // Inicjalizacja tablicy Zobrista dla haszowania stanów
-            _zobristTable = InitializeZobristTable(_days.Count, _doctors.Count + 2); // +2 dla EMPTY i UNASSIGNED
+            // +1 dla EMPTY (nie hashujemy UNASSIGNED - zostaje pominięty)
+            _zobristTable = InitializeZobristTable(_days.Count, _doctors.Count + 1);
         }
 
         private ulong[,] InitializeZobristTable(int days, int states)
@@ -413,6 +415,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         /// <summary>
         /// Zobrist hashing dla efektywnej memoizacji stanów.
         /// Zamiast string concatenation, XOR-ujemy precomputed random values.
+        /// OPTYMALIZACJA: Haszujemy tylko przypisane dni (pomijamy UNASSIGNED),
+        /// co pozwala wykrywać identyczne prefiksy na różnych głębokościach.
         /// </summary>
         private ulong ComputeZobristHash()
         {
@@ -420,9 +424,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
             for (int i = 0; i < _assignments.Length; i++)
             {
                 int val = _assignments[i];
+
+                // Pomijamy UNASSIGNED - haszujemy tylko przypisane dni
+                if (val == UNASSIGNED) continue;
+
                 int stateIndex;
                 if (val == EMPTY) stateIndex = _doctors.Count;
-                else if (val == UNASSIGNED) stateIndex = _doctors.Count + 1;
                 else stateIndex = val;
 
                 hash ^= _zobristTable[i, stateIndex];

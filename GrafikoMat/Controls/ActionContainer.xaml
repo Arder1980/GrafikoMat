@@ -57,7 +57,8 @@
     <Grid>
         <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
 
-        <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
+        <!-- Istniejący overlay dla komunikatów i busy indicator -->
+        <Grid x:Name="OverlayHost" Visibility="Collapsed">
             <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
             <Grid x:Name="InfoBarContainer" 
@@ -137,6 +138,78 @@
                     </Grid>
                 </Grid>
             </Grid>
+        </Grid>
+
+        <!-- NOWY: Progress Overlay dla długotrwałych operacji -->
+        <Grid x:Name="ProgressOverlay" Visibility="Collapsed">
+            <!-- Przygaszające tło -->
+            <Rectangle Fill="{ThemeResource SystemControlAcrylicElementBrush}" Opacity="0.95"/>
+
+            <!-- Główny panel z contentem -->
+            <Border Background="{ThemeResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="32,24"
+                    MaxWidth="480"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border.Shadow>
+                    <media:ThemeShadow/>
+                </Border.Shadow>
+
+                <StackPanel Spacing="16">
+                    <!-- Tytuł -->
+                    <TextBlock x:Name="ProgressTitle" 
+                               Text="Generowanie grafiku" 
+                               FontSize="20" 
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"/>
+
+                    <!-- Nazwa silnika -->
+                    <TextBlock x:Name="ProgressEngineName" 
+                               Text="Silnik: GeneticSolver (algorytm genetyczny)" 
+                               FontSize="16" 
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"/>
+
+                    <!-- ProgressBar (dla metaheurystyk) -->
+                    <ProgressBar x:Name="DeterminateProgress" 
+                                 Value="0" 
+                                 Maximum="100" 
+                                 Height="6"
+                                 Visibility="Collapsed"/>
+
+                    <!-- ProgressRing (dla Backtracking/A*) -->
+                    <ProgressRing x:Name="IndeterminateProgress" 
+                                  IsActive="False" 
+                                  Width="48" 
+                                  Height="48"
+                                  HorizontalAlignment="Center"
+                                  Visibility="Collapsed"/>
+
+                    <!-- Tekst statusu -->
+                    <TextBlock x:Name="ProgressStatusText" 
+                               Text="Inicjalizacja..." 
+                               FontSize="14"
+                               Opacity="0.85"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Center"
+                               MaxWidth="420"/>
+
+                    <!-- Przycisk Cancel -->
+                    <Button x:Name="CancelButton" 
+                            Content="Anuluj" 
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed"
+                            Click="OnCancelClicked"
+                            Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

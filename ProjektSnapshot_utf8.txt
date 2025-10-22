@@ -1,7 +1,7 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-20 23:51:23
+# Data:       2025-10-22 23:33:11
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
-# Maszyna:    FRACTAL
+# Maszyna:    DELL_XPS_17
 # Użytkownik: adaml
 # Kodowanie snapshotu: UTF-8 (z BOM)
 
@@ -43,7 +43,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 180
+## FILES (liczba): 181
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -76,6 +76,7 @@ FILE GrafikoMat.Core\Scheduling\Models\AvailabilityType.cs
 FILE GrafikoMat.Core\Scheduling\Models\Declarations.cs
 FILE GrafikoMat.Core\Scheduling\Models\ScheduleInput.cs
 FILE GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs
+FILE GrafikoMat.Core\Scheduling\Models\SolverMessages.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverParameters.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverPriority.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverType.cs
@@ -901,7 +902,7 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs (17748 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs (11734 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -910,6 +911,7 @@ using GrafikoMat.Core.Scheduling.Validation;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -917,11 +919,11 @@ using System.Threading.Tasks;
 namespace GrafikoMat.Core.Scheduling.Engines
 {
     /// <summary>
-    /// Implementacja algorytmu kolonii mrówek (ACO) do generowania grafików dyżurowych.
+    /// Implementacja algorytmu kolonii mrówek (ACO) z timeoutem.
     /// 
     /// WERSJA: PRECISION+ (Adaptive Beta + optymalizacje dla jakości 97-99%)
     /// 
-    /// Kluczowe ulepszenia względem wersji bazowej:
+    /// Kluczowe ulepszenia:
     /// - Adaptive Beta: 5.0 → 2.0 (początkowo słucha heurystyki, potem feromonów)
     /// - Elite Strategy: top 5 rozwiązań wzmacnia feromony (rank-based weights)
     /// - Early Stopping: zatrzymuje się po 25 generacjach bez poprawy >0.1%
@@ -931,29 +933,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// Docelowa wydajność:
     /// - 75-80% redukcja czasu obliczeń vs wersja bazowa
     /// - Jakość rozwiązań: 97-99% optimum
-    /// - Typowy czas dla złożonych problemów: 4-6 sekund
     /// </summary>
     public class AntColonySolver : IScheduleSolver
     {
-        // ==================== PARAMETRY ALGORYTMU ====================
+        private readonly int _numAnts;
+        private readonly int _maxGenerations;
+        private readonly TimeSpan _timeout;
+        private Stopwatch? _stopwatch;
 
-        // PRECISION+ PARAMETERS - dostrojone dla jakości 97-99%
-        private readonly int _numAnts;                    // Domyślnie: 40 (było 75)
-        private readonly int _maxGenerations;             // Domyślnie: 120 (było 300)
-
-        private const double EvaporationRate = 0.15;      // Parowanie feromonów (było 0.5)
-        private const double Alpha = 1.2;                 // Waga feromonów (było 1.0)
-        // Beta jest ADAPTIVE: 5.0 → 2.0, wyliczane dynamicznie w GetAdaptiveBeta()
-        private const double Q0 = 0.75;                   // Prawdopodobieństwo wyboru zachłannego (było 0.7)
-
-        // Early Stopping
-        private const int PATIENCE = 25;                  // Generacji bez poprawy przed zatrzymaniem
-        private const double IMPROVEMENT_THRESHOLD = 0.001; // Minimalna poprawa = 0.1%
-
-        // Elite Strategy
-        private const int ELITE_COUNT = 5;                // Liczba elite rozwiązań wzmacniających feromony
-
-        // ==================== STAN ALGORYTMU ====================
+        private const double EvaporationRate = 0.15;
+        private const double Alpha = 1.2;
+        private const double Q0 = 0.75;
+        private const int PATIENCE = 25;
+        private const double IMPROVEMENT_THRESHOLD = 0.001;
+        private const int ELITE_COUNT = 5;
 
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
@@ -963,16 +956,15 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly Random _random = new();
 
         private Dictionary<DateTime, Dictionary<string, double>> _pheromoneMatrix = new();
-        private int _currentGeneration;                   // Aktualny numer generacji (dla adaptive Beta)
-        private int _noImprovementCount;                  // Licznik generacji bez poprawy (early stopping)
-
-        // ==================== KONSTRUKTOR ====================
+        private int _currentGeneration;
+        private int _noImprovementCount;
 
         public AntColonySolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             int numAnts,
             int maxGenerations,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -981,6 +973,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
+            _timeout = timeout;
 
             _numAnts = numAnts;
             _maxGenerations = maxGenerations;
@@ -988,21 +981,23 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _noImprovementCount = 0;
         }
 
-        // ==================== GŁÓWNA METODA ROZWIĄZYWANIA ====================
-
         public ScheduleSolution FindOptimalSolution()
         {
+            _stopwatch = Stopwatch.StartNew();
             InitializePheromones();
 
             var bestSolution = new Dictionary<DateTime, DoctorProfile?>();
             double bestFitness = double.MinValue;
 
-            // Pętla główna algorytmu
             for (_currentGeneration = 0; _currentGeneration < _maxGenerations; _currentGeneration++)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
-                // === FAZA 1: Konstrukcja rozwiązań przez mrówki (równolegle) ===
+                if (_stopwatch != null && _stopwatch.Elapsed >= _timeout)
+                {
+                    break;
+                }
+
                 var solutions = new ConcurrentBag<Dictionary<DateTime, DoctorProfile?>>();
 
                 Parallel.For(0, _numAnts, ant =>
@@ -1012,7 +1007,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     solutions.Add(solution);
                 });
 
-                // === FAZA 2: Ewaluacja i selekcja Elite (top 5) ===
                 var evaluatedSolutions = solutions.AsParallel()
                     .Select(s => new
                     {
@@ -1021,7 +1015,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                             s,
                             _utility.CalculateWorkload(s),
                             _scheduleInput),
-                        Fitness = 0.0 // Zostanie wyliczone poniżej
+                        Fitness = 0.0
                     })
                     .Select(x => new
                     {
@@ -1038,20 +1032,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 var bestInGeneration = evaluatedSolutions.First();
 
-                // === FAZA 3: Aktualizacja najlepszego globalnego rozwiązania ===
                 if (bestInGeneration.Fitness > bestFitness * (1.0 + IMPROVEMENT_THRESHOLD))
                 {
-                    // Znacząca poprawa (>0.1%)
                     bestFitness = bestInGeneration.Fitness;
                     bestSolution = bestInGeneration.Solution;
                     _noImprovementCount = 0;
                 }
                 else
                 {
-                    // Brak znaczącej poprawy
                     _noImprovementCount++;
 
-                    // Early Stopping: jeśli zbyt długo brak postępu, zakończ
                     if (_noImprovementCount >= PATIENCE)
                     {
                         _progressReporter?.Report(1.0);
@@ -1059,25 +1049,31 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                 }
 
-                // === FAZA 4: Aktualizacja feromonów (Elite Strategy) ===
                 EvaporatePheromones();
                 UpdatePheromonesWithEliteStrategy(evaluatedSolutions);
 
-                // === FAZA 5: Raportowanie postępu ===
                 _progressReporter?.Report((double)(_currentGeneration + 1) / _maxGenerations);
             }
 
-            // Zwróć finalne rozwiązanie jako ScheduleSolution
             var finalWorkload = _utility.CalculateWorkload(bestSolution);
-            return EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+            var finalSolution = EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+
+            _stopwatch?.Stop();
+
+            finalSolution = finalSolution with
+            {
+                ComputationTime = _stopwatch?.Elapsed ?? TimeSpan.Zero,
+                OptimalityNote = _stopwatch?.Elapsed >= _timeout
+                    ? "Best solution found (timeout reached)"
+                    : _noImprovementCount >= PATIENCE
+                        ? "Best solution found (early stopping)"
+                        : "Solution found (colony converged)"
+            };
+
+            _progressReporter?.Report(1.0);
+            return finalSolution;
         }
 
-        // ==================== INICJALIZACJA FEROMONÓW ====================
-
-        /// <summary>
-        /// Inicjalizuje macierz feromonową z wartościami początkowymi = 1.0
-        /// dla każdej pary (dzień, lekarz).
-        /// </summary>
         private void InitializePheromones()
         {
             _pheromoneMatrix = new Dictionary<DateTime, Dictionary<string, double>>();
@@ -1093,30 +1089,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== KONSTRUKCJA ROZWIĄZANIA PRZEZ MRÓWKĘ ====================
-
-        /// <summary>
-        /// Buduje kompletny grafik od początku do końca według strategii ACO.
-        /// Każda mrówka dla każdego dnia wybiera lekarza bazując na:
-        /// - Sile feromonu (Alpha = 1.2)
-        /// - Wartości heurystycznej (Beta = adaptive 5.0→2.0)
-        /// 
-        /// Mechanizm wyboru:
-        /// - Z prawdopodobieństwem Q0 (75%): wybór zachłanny (najlepsza atrakcyjność)
-        /// - Z prawdopodobieństwem 1-Q0 (25%): wybór proporcjonalny losowy (eksploracja)
-        /// </summary>
         private Dictionary<DateTime, DoctorProfile?> BuildSolutionForAnt()
         {
             var newSolution = new Dictionary<DateTime, DoctorProfile?>();
             var workload = _scheduleInput.Doctors.ToDictionary(l => l.Abbreviation, l => 0);
             var usedConditionals = new HashSet<string>();
 
-            // Oblicz bieżącą wartość Beta (adaptive)
             double currentBeta = GetAdaptiveBeta();
 
             foreach (var day in _scheduleInput.DaysInMonth)
             {
-                // Pobierz kandydatów spełniających wszystkie constraints
                 var candidates = ConstraintValidationService.GetValidCandidatesForDay(
                     day,
                     _scheduleInput,
@@ -1130,25 +1112,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     continue;
                 }
 
-                // Oblicz atrakcyjność każdego kandydata:
-                // attractiveness = (pheromone^Alpha) * (heuristic^Beta)
                 var attractiveness = candidates.ToDictionary(
                     candidate => candidate,
                     candidate => Math.Pow(_pheromoneMatrix[day][candidate.Abbreviation], Alpha)
                                * Math.Pow(GetHeuristicValue(day, candidate), currentBeta)
                 );
 
-                // Wybierz lekarza według strategii ACO
                 DoctorProfile? chosenDoctor;
 
                 if (_random.NextDouble() < Q0)
                 {
-                    // Eksploatacja: wybierz najlepszą opcję (zachłannie)
                     chosenDoctor = attractiveness.OrderByDescending(kvp => kvp.Value).First().Key;
                 }
                 else
                 {
-                    // Eksploracja: wybór proporcjonalny losowy (ruletka)
                     double totalAttractiveness = attractiveness.Values.Sum();
                     double randomValue = _random.NextDouble() * totalAttractiveness;
                     chosenDoctor = null;
@@ -1166,7 +1143,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     chosenDoctor ??= candidates.Last();
                 }
 
-                // Zaktualizuj rozwiązanie i stan
                 newSolution[day] = chosenDoctor;
                 workload[chosenDoctor!.Abbreviation]++;
 
@@ -1179,36 +1155,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return newSolution;
         }
 
-        // ==================== ADAPTIVE BETA ====================
-
-        /// <summary>
-        /// Oblicza dynamiczną wartość parametru Beta w zależności od postępu algorytmu.
-        /// 
-        /// UZASADNIENIE:
-        /// - Na początku (Beta=5.0): mrówki silnie słuchają heurystyki (deklaracje "Chcę")
-        ///   → Szybkie znalezienie "regionu" dobrych rozwiązań
-        /// - Pod koniec (Beta=2.0): mrówki bardziej ufają feromonom (wyuczonym ścieżkom)
-        ///   → Precyzyjna eksploatacja najlepszych znalezionych rozwiązań
-        /// 
-        /// To daje ~15-20% przyspieszenie konwergencji vs stałe Beta.
-        /// </summary>
         private double GetAdaptiveBeta()
         {
             double progress = (double)_currentGeneration / _maxGenerations;
-            return 5.0 - 3.0 * progress;  // Liniowa zmiana: 5.0 → 2.0
+            return 5.0 - 3.0 * progress;
         }
 
-        // ==================== HEURYSTYKA ====================
-
-        /// <summary>
-        /// Zwraca wartość heurystyczną dla pary (dzień, lekarz).
-        /// Odzwierciedla "pożądaność" przypisania na podstawie deklaracji lekarza.
-        /// 
-        /// Wants (20.0):                Lekarz chce tego dyżuru
-        /// Available (1.0):             Lekarz jest dostępny
-        /// ConditionallyAvailable (0.5): Dostępny warunkowo
-        /// Inne (0.1):                  Nie powinno się zdarzyć (safety fallback)
-        /// </summary>
         private double GetHeuristicValue(DateTime day, DoctorProfile doctor)
         {
             return _scheduleInput.Availability[day][doctor.Abbreviation] switch
@@ -1220,16 +1172,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             };
         }
 
-        // ==================== PAROWANIE FEROMONÓW ====================
-
-        /// <summary>
-        /// Parowanie (evaporation) feromonów: wszystkie wartości * (1 - EvaporationRate).
-        /// 
-        /// PRECISION+ używa EvaporationRate=0.15 (było 0.5):
-        /// - Lepsza pamięć algorytmu o dobrych ścieżkach
-        /// - Mniejsze ryzyko "zapomnienia" przez przypadek
-        /// - Wolniejsza eksploracja, ale stabilniejsza eksploatacja
-        /// </summary>
         private void EvaporatePheromones()
         {
             foreach (var day in _pheromoneMatrix.Keys.ToList())
@@ -1241,52 +1183,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== AKTUALIZACJA FEROMONÓW (ELITE STRATEGY) ====================
-
-        /// <summary>
-        /// Elite Strategy (rank-based): Top 5 najlepszych rozwiązań wzmacnia feromony.
-        /// 
-        /// Wagi liniowe:
-        /// - Rank 1 (najlepsze): waga 5/15 ≈ 33%
-        /// - Rank 2:             waga 4/15 ≈ 27%
-        /// - Rank 3:             waga 3/15 = 20%
-        /// - Rank 4:             waga 2/15 ≈ 13%
-        /// - Rank 5:             waga 1/15 ≈ 7%
-        /// Suma wag = 1.0
-        /// 
-        /// KORZYŚCI vs single-best:
-        /// - Uczy się z kilku dobrych rozwiązań, nie tylko najlepszego
-        /// - Mniejsze ryzyko przedwczesnej konwergencji
-        /// - Lepsza dywersyfikacja poszukiwań
-        /// - +3-5% jakości końcowej vs single-best przy tym samym czasie
-        /// </summary>
-        private void UpdatePheromonesWithEliteStrategy(
-            List<dynamic> eliteSolutions) // dynamic = anonymous type z {Solution, Metrics, Fitness}
+        private void UpdatePheromonesWithEliteStrategy<T>(List<T> eliteSolutions) where T : class
         {
             int rank = 0;
-            foreach (var elite in eliteSolutions)
+            foreach (dynamic elite in eliteSolutions)
             {
                 rank++;
                 double weight = (double)(ELITE_COUNT - rank + 1) / (ELITE_COUNT * (ELITE_COUNT + 1) / 2.0);
-
-                // weight będzie: 5/15, 4/15, 3/15, 2/15, 1/15
                 UpdatePheromonesWeighted(elite.Solution, elite.Fitness, weight);
             }
         }
 
-        /// <summary>
-        /// Aktualizuje feromony dla danego rozwiązania z podaną wagą.
-        /// 
-        /// NAPRAWIONA FORMUŁA (vs wersja bazowa):
-        /// Zamiast:  deposit = (fitness / 10^12)^2  → wartości mikroskopijne
-        /// Teraz:    deposit = 0.1 + 0.9 * min(fitness/10^12, 1.0)
-        /// 
-        /// EFEKT:
-        /// - Depozyt w sensownym zakresie [0.1, 1.0]
-        /// - Nawet słabsze rozwiązania zostawiają ślad (0.1)
-        /// - Proporcje zachowane: 2× lepszy fitness → ~2× więcej feromonu
-        /// - Feromon faktycznie się akumuluje (była to główna wada wersji bazowej!)
-        /// </summary>
         private void UpdatePheromonesWeighted(
             Dictionary<DateTime, DoctorProfile?> solution,
             double fitness,
@@ -1294,14 +1201,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         {
             if (fitness <= 0) return;
 
-            // Normalizacja fitness do zakresu [0, 1]
-            // Zakładamy typowy max fitness ~10^12
             double normalizedFitness = Math.Min(fitness / 1_000_000_000_000.0, 1.0);
-
-            // Depozyt bazowy z logarytmicznym wzmocnieniem
             double baseDeposit = 0.1 + 0.9 * normalizedFitness;
-
-            // Finalna wartość depozytu z wagą elite
             double pheromoneDeposit = baseDeposit * weight;
 
             foreach (var entry in solution)
@@ -1316,7 +1217,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\AStarSolver.cs (15519 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\AStarSolver.cs (13748 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -1343,10 +1244,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progress;
         private readonly CancellationToken _cancellationToken;
+        private readonly TimeSpan _timeout;
 
         public AStarSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -1354,6 +1257,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _priorities = priorities;
             _progress = progress;
             _cancellationToken = cancellationToken;
+            _timeout = timeout;
             _sequence = 0;
         }
 
@@ -1382,18 +1286,24 @@ namespace GrafikoMat.Core.Scheduling.Engines
             long expandedNodes = 0;
             long prunedByUpperBound = 0;
             long duplicateStates = 0;
+            bool timeoutReached = false;
 
-            // Dodaj początkowy stan do kolejki
             Enqueue(priorityQueue, context0);
 
             while (priorityQueue.Count > 0)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
+                // Sprawdzenie timeoutu
+                if (stopwatch.Elapsed >= _timeout)
+                {
+                    timeoutReached = true;
+                    break;
+                }
+
                 var context = priorityQueue.Dequeue();
                 expandedNodes++;
 
-                // Memoizacja: sprawdź czy ten stan był już odwiedzony
                 string stateKey = BuildStateKey(context);
                 if (visitedStates.Contains(stateKey))
                 {
@@ -1402,11 +1312,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 }
                 visitedStates.Add(stateKey);
 
-                // Sprawdź czy to kompletne rozwiązanie
                 int nextDayIndex = context.GetEarliestUnassignedDayIndex();
                 if (nextDayIndex < 0)
                 {
-                    // Kompletny grafik - oceń i zapisz jeśli najlepszy
                     var solution = BuildSolution(context);
                     double reward = EvaluateSolutionReward(solution);
 
@@ -1418,7 +1326,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     continue;
                 }
 
-                // Upper bound pruning: jeśli ten częściowy stan nie może poprawić najlepszego kompletnego, skip
                 double stateReward = PartialSolutionEvaluator.EvaluateState(context, _priorities, _input);
                 if (bestCompleteSolution != null && stateReward <= bestCompleteReward)
                 {
@@ -1426,10 +1333,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     continue;
                 }
 
-                // Ekspansja węzła: generuj stany-dzieci
                 ExpandNode(context, priorityQueue);
 
-                // Raportuj postęp co ~1024 węzły
                 if ((expandedNodes & 0x3FF) == 0)
                 {
                     int assignedCount = context.Assignments.Count(a => a >= 0);
@@ -1441,21 +1346,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
             stopwatch.Stop();
             _progress?.Report(1.0);
 
-            // Finalizacja: dodaj informacje diagnostyczne
-            bool isOptimal = (priorityQueue.Count == 0); // Kolejka pusta = przeszukano wszystko
+            bool isOptimal = (priorityQueue.Count == 0 && !timeoutReached);
             string optimalityNote = isOptimal
                 ? "Optimal solution found (search space exhausted)"
-                : "Best solution found (computation cancelled)";
+                : timeoutReached
+                    ? "Best solution found (timeout reached)"
+                    : "Best solution found (computation cancelled)";
 
             if (bestCompleteSolution == null)
             {
-                // Nie znaleziono żadnego kompletnego rozwiązania - zwróć pusty grafik
                 bestCompleteSolution = BuildEmptySolution();
                 optimalityNote = "No complete solution found";
                 isOptimal = false;
             }
 
-            // Stwórz nowe rozwiązanie z diagnostyką
             return new ScheduleSolution
             {
                 Assignments = bestCompleteSolution.Assignments,
@@ -1466,8 +1370,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 FairnessIndex = bestCompleteSolution.FairnessIndex,
                 SpacingIndex = bestCompleteSolution.SpacingIndex,
                 FinalWorkload = bestCompleteSolution.FinalWorkload,
-
-                // Diagnostyka
                 IsProvablyOptimal = isOptimal,
                 NodesExpanded = expandedNodes,
                 ComputationTime = stopwatch.Elapsed,
@@ -1482,23 +1384,18 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        /// <summary>
-        /// Rozwija węzeł: generuje wszystkie możliwe stany-dzieci (pusty dzień + każdy kandydat).
-        /// </summary>
         private void ExpandNode(SchedulingRules.Context context, PriorityQueue<SchedulingRules.Context, PriorityKey> queue)
         {
             int nextDayIndex = context.GetEarliestUnassignedDayIndex();
-            if (nextDayIndex < 0) return; // Nie powinno się zdarzyć
+            if (nextDayIndex < 0) return;
 
             var candidates = SchedulingRules.OrderCandidates(nextDayIndex, context);
 
-            // Gałąź 1: Pusty dzień
             var emptyChild = CloneContext(context);
             emptyChild.Assignments[nextDayIndex] = EMPTY;
-            emptyChild.IsPrefixActive = false; // Dziura w grafiku przerywa prefix
+            emptyChild.IsPrefixActive = false;
             EnqueueChild(emptyChild);
 
-            // Gałęzie 2+: Każdy kandydat
             foreach (int docIndex in candidates)
             {
                 var child = CloneContext(context);
@@ -1510,7 +1407,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     child.ConditionalsUsed[docIndex]++;
                 }
 
-                // Sprawdź czy prefix jest aktywny
                 bool keepsPrefix = (nextDayIndex == 0) || (child.Assignments[nextDayIndex - 1] != SchedulingRules.UNASSIGNED);
                 child.IsPrefixActive = child.IsPrefixActive && keepsPrefix;
 
@@ -1525,13 +1421,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        /// <summary>
-        /// Klucz priorytetowy dla kolejki: wyższy reward = wyższy priorytet (maksymalizacja).
-        /// </summary>
         private readonly struct PriorityKey : IComparable<PriorityKey>
         {
-            public readonly double Reward; // Im wyższy, tym lepszy
-            public readonly long Sequence; // Tie-breaker
+            public readonly double Reward;
+            public readonly long Sequence;
 
             public PriorityKey(double reward, long sequence)
             {
@@ -1541,16 +1434,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             public int CompareTo(PriorityKey other)
             {
-                // ODWRÓCONE: wyższy reward = wyższy priorytet (dequeue first)
                 int c = other.Reward.CompareTo(this.Reward);
                 if (c != 0) return c;
-                return Sequence.CompareTo(other.Sequence); // Starsze najpierw (FIFO przy remisie)
+                return Sequence.CompareTo(other.Sequence);
             }
         }
 
-        /// <summary>
-        /// Klonuje kontekst (głęboka kopia tablic).
-        /// </summary>
         private static SchedulingRules.Context CloneContext(SchedulingRules.Context src)
         {
             var assignments = new int[src.DayCount];
@@ -1568,12 +1457,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             );
         }
 
-        /// <summary>
-        /// Buduje klucz stanu dla memoizacji (unikanie duplikatów).
-        /// </summary>
         private static string BuildStateKey(SchedulingRules.Context ctx)
         {
-            // Prosty hash: assignments + workload + conditionals
             var parts = new List<string>(ctx.DayCount + ctx.DoctorCount * 2);
 
             parts.Add("A:");
@@ -1591,9 +1476,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return string.Join(",", parts);
         }
 
-        /// <summary>
-        /// Konwertuje kontekst na ScheduleSolution.
-        /// </summary>
         private ScheduleSolution BuildSolution(SchedulingRules.Context ctx)
         {
             var map = new Dictionary<DateTime, DoctorProfile?>(ctx.DayCount);
@@ -1622,9 +1504,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
         }
 
-        /// <summary>
-        /// Tworzy puste rozwiązanie (fallback gdy nie znaleziono żadnego).
-        /// </summary>
         private ScheduleSolution BuildEmptySolution()
         {
             var emptyMap = new Dictionary<DateTime, DoctorProfile?>();
@@ -1638,16 +1517,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(emptyMap, emptyWorkload, _input);
         }
 
-        /// <summary>
-        /// Oblicza reward (wartość maksymalizowaną) dla kompletnego rozwiązania.
-        /// Używa tej samej logiki co PartialSolutionEvaluator dla spójności.
-        /// </summary>
         private double EvaluateSolutionReward(ScheduleSolution solution)
         {
             double reward = 0.0;
             double scale = 1e15;
 
-            // Rezerwacje najważniejsze
             reward += solution.FulfilledReservations * 1e18;
 
             int totalDays = _input.DaysInMonth.Count;
@@ -1688,7 +1562,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 scale /= 1000.0;
             }
 
-            // Dodatkowe bonusy
             reward += solution.FulfilledWants * 1e6;
             reward += solution.FulfilledAvailables * 1e3;
 
@@ -1698,7 +1571,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (20534 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (20806 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Engines.Algorithms;
@@ -1746,7 +1619,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly ulong[,] _zobristTable; // Tablica dla haszowania Zobrista
 
         // Time-limited search
-        private readonly TimeSpan _maxSearchTime = TimeSpan.FromMinutes(10); // Domyślny limit
+        private readonly TimeSpan _maxSearchTime;
         private Stopwatch? _searchStopwatch;
         private bool _timeLimitReached = false;
 
@@ -1760,6 +1633,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         public BacktrackingSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
+            TimeSpan timeout,  // ← NOWY PARAMETR
             IProgress<double>? progress = null,
             CancellationToken token = default)
         {
@@ -1767,6 +1641,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _priorities = priorities;
             _progress = progress;
             _cancellationToken = token;
+            _maxSearchTime = timeout;  // ← PRZYPISANIE Z PARAMETRU
 
             _days = _input.DaysInMonth;
             _doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
@@ -1776,8 +1651,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _workload = new int[_doctors.Count];
             _conditionalsUsed = new int[_doctors.Count];
 
-            // Inicjalizacja tablicy Zobrista dla haszowania stanów
-            _zobristTable = InitializeZobristTable(_days.Count, _doctors.Count + 2); // +2 dla EMPTY i UNASSIGNED
+            // +1 dla EMPTY (nie hashujemy UNASSIGNED - zostaje pominięty)
+            _zobristTable = InitializeZobristTable(_days.Count, _doctors.Count + 1);
         }
 
         private ulong[,] InitializeZobristTable(int days, int states)
@@ -2115,6 +1990,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         /// <summary>
         /// Zobrist hashing dla efektywnej memoizacji stanów.
         /// Zamiast string concatenation, XOR-ujemy precomputed random values.
+        /// OPTYMALIZACJA: Haszujemy tylko przypisane dni (pomijamy UNASSIGNED),
+        /// co pozwala wykrywać identyczne prefiksy na różnych głębokościach.
         /// </summary>
         private ulong ComputeZobristHash()
         {
@@ -2122,9 +1999,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
             for (int i = 0; i < _assignments.Length; i++)
             {
                 int val = _assignments[i];
+
+                // Pomijamy UNASSIGNED - haszujemy tylko przypisane dni
+                if (val == UNASSIGNED) continue;
+
                 int stateIndex;
                 if (val == EMPTY) stateIndex = _doctors.Count;
-                else if (val == UNASSIGNED) stateIndex = _doctors.Count + 1;
                 else stateIndex = val;
 
                 hash ^= _zobristTable[i, stateIndex];
@@ -2184,7 +2064,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\DeltaEvaluator.cs (4018 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\DeltaEvaluator.cs (4283 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -2262,7 +2142,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 double avg = workloadValues.Average();
                 double variance = workloadValues.Sum(w => (w - avg) * (w - avg)) / workloadValues.Count;
-                estimate -= variance * 1_000_000.0; // im mniejsza wariancja tym lepiej
+                double stdDev = Math.Sqrt(variance);
+
+                // Normalizacja przez średnią (współczynnik zmienności) dla spójności między rozmiarami problemów
+                double normalizedFairness = avg > 0 ? stdDev / avg : 0;
+                estimate -= normalizedFairness * 1_000_000.0; // im mniejsza zmienność tym lepiej
             }
 
             // 4. Preferences (uproszczone)
@@ -2285,7 +2169,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs (22784 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs (21063 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -2294,6 +2178,7 @@ using GrafikoMat.Core.Scheduling.Validation;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -2326,8 +2211,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// </summary>
     public class GeneticSolver : IScheduleSolver
     {
-        // ==================== WEWNĘTRZNA STRUKTURA CHROMOSOMU ====================
-
         private class Chromosome
         {
             public Dictionary<DateTime, DoctorProfile?> Genes { get; set; }
@@ -2371,8 +2254,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== ISLAND MODEL ====================
-
         private class Island
         {
             public List<Chromosome> Population { get; set; } = new();
@@ -2380,57 +2261,36 @@ namespace GrafikoMat.Core.Scheduling.Engines
             public Chromosome? BestChromosome { get; set; }
         }
 
-        // ==================== PARAMETRY ALGORYTMU ====================
-
-        // Parametry podstawowe
         private readonly int _populationSize;
         private readonly int _generations;
+        private readonly TimeSpan _timeout;
+        private Stopwatch? _stopwatch;
         private const double InitialCrossoverRate = 0.90;
-        private const int TournamentSize = 8; // Zwiększone z 5
-
-        // FALA 1: Early stopping
+        private const int TournamentSize = 8;
         private const int PatienceGenerations = 30;
         private int _noImprovementCounter = 0;
         private double _lastBestFitness = double.MinValue;
-
-        // FALA 2: Adaptacyjny mutation rate
-        private double GetAdaptiveMutationRate(int generation)
-        {
-            // Liniowa zmiana: 15% → 3%
-            double progress = (double)generation / _generations;
-            return 0.15 - (0.12 * progress);
-        }
-
-        // FALA 3: Island model
         private const int IslandCount = 3;
         private const int MigrationInterval = 20;
         private const int MigrantsCount = 2;
-
-        // FALA 3: Hybrydyzacja
         private const int HillClimbingInterval = 15;
         private const double HillClimbingTopPercentage = 0.20;
 
-        // FALA 3: Diversity maintenance
-        private HashSet<int> _seenHashes = new();
-
-        // Dane wejściowe
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
-
-        // Populacja (Island Model)
         private List<Island> _islands = new();
-
-        // ==================== KONSTRUKTOR ====================
+        private HashSet<int> _seenHashes = new();
 
         public GeneticSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             int populationSize,
             int generations,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -2439,39 +2299,45 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
+            _timeout = timeout;
 
             _populationSize = populationSize;
             _generations = generations;
         }
 
-        // ==================== GŁÓWNA METODA ROZWIĄZYWANIA ====================
+        private double GetAdaptiveMutationRate(int generation)
+        {
+            double progress = (double)generation / _generations;
+            return 0.15 - (0.12 * progress);
+        }
 
         public ScheduleSolution FindOptimalSolution()
         {
-            // Inicjalizacja island model
+            _stopwatch = Stopwatch.StartNew();
             InitializeIslands();
 
             for (int generation = 0; generation < _generations; generation++)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
-                // Ewolucja każdej wyspy równolegle
+                if (_stopwatch != null && _stopwatch.Elapsed >= _timeout)
+                {
+                    break;
+                }
+
                 Parallel.For(0, IslandCount, islandIdx =>
                 {
                     EvolveIsland(_islands[islandIdx], generation);
                 });
 
-                // Oblicz fitness dla wszystkich wysp
                 CalculateFitnessForAllIslands();
 
-                // Znajdź globalne najlepsze rozwiązanie
                 var globalBest = _islands
                     .Where(i => i.BestChromosome != null)
                     .OrderByDescending(i => i.BestFitness)
                     .First();
 
-                // FALA 1: Early stopping
-                if (globalBest.BestFitness > _lastBestFitness * 1.001) // 0.1% poprawa
+                if (globalBest.BestFitness > _lastBestFitness * 1.001)
                 {
                     _lastBestFitness = globalBest.BestFitness;
                     _noImprovementCounter = 0;
@@ -2482,27 +2348,23 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     if (_noImprovementCounter >= PatienceGenerations)
                     {
                         _progressReporter?.Report(1.0);
-                        break; // Zakończ wcześniej
+                        break;
                     }
                 }
 
-                // FALA 3: Migracja między wyspami
                 if ((generation + 1) % MigrationInterval == 0 && generation > 0)
                 {
                     PerformMigration();
                 }
 
-                // FALA 3: Hybrydyzacja (lokalny hill-climbing)
                 if ((generation + 1) % HillClimbingInterval == 0 && generation > 0)
                 {
                     PerformHillClimbing();
                 }
 
-                // Raportowanie postępu
                 _progressReporter?.Report((double)(generation + 1) / _generations);
             }
 
-            // Zwróć najlepsze rozwiązanie
             var finalBest = _islands
                 .Where(i => i.BestChromosome != null)
                 .OrderByDescending(i => i.BestFitness)
@@ -2510,15 +2372,28 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 .BestChromosome!;
 
             var finalWorkload = _utility.CalculateWorkload(finalBest.Genes);
-            return EvaluationAndScoringService.CalculateMetrics(finalBest.Genes, finalWorkload, _scheduleInput);
-        }
+            var finalSolution = EvaluationAndScoringService.CalculateMetrics(finalBest.Genes, finalWorkload, _scheduleInput);
 
-        // ==================== INICJALIZACJA WYSP ====================
+            _stopwatch?.Stop();
+
+            finalSolution = finalSolution with
+            {
+                ComputationTime = _stopwatch?.Elapsed ?? TimeSpan.Zero,
+                OptimalityNote = _stopwatch?.Elapsed >= _timeout
+                    ? "Best solution found (timeout reached)"
+                    : _noImprovementCounter >= PatienceGenerations
+                        ? "Best solution found (early stopping)"
+                        : "Solution found (evolution completed)"
+            };
+
+            return finalSolution;
+        }
 
         private void InitializeIslands()
         {
             _islands = new List<Island>();
             int populationPerIsland = _populationSize / IslandCount;
+            const int MaxAttemptsPerChromosome = 100; // Maksymalna liczba prób dla jednego chromosomu
 
             for (int i = 0; i < IslandCount; i++)
             {
@@ -2526,17 +2401,33 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 for (int j = 0; j < populationPerIsland; j++)
                 {
-                    var chromosome = new Chromosome(_utility.CreateRandomSolution());
+                    Chromosome? chromosome = null;
+                    int attempts = 0;
 
-                    // FALA 3: Diversity maintenance - odrzuć duplikaty
-                    if (!_seenHashes.Contains(chromosome.Hash))
+                    // Próbuj znaleźć unikalny chromosom, ale z limitem prób
+                    while (attempts < MaxAttemptsPerChromosome)
+                    {
+                        chromosome = new Chromosome(_utility.CreateRandomSolution());
+
+                        if (!_seenHashes.Contains(chromosome.Hash))
+                        {
+                            _seenHashes.Add(chromosome.Hash);
+                            break; // Znaleziono unikalny
+                        }
+
+                        attempts++;
+                    }
+
+                    // Jeśli znaleziono chromosom (unikalny lub po wyczerpaniu prób)
+                    if (chromosome != null)
                     {
                         island.Population.Add(chromosome);
-                        _seenHashes.Add(chromosome.Hash);
-                    }
-                    else
-                    {
-                        j--; // Spróbuj ponownie
+
+                        // Jeśli wyczerpano próby, dodaj mimo duplikatu (rzadki przypadek małej przestrzeni)
+                        if (attempts >= MaxAttemptsPerChromosome && !_seenHashes.Contains(chromosome.Hash))
+                        {
+                            _seenHashes.Add(chromosome.Hash);
+                        }
                     }
                 }
 
@@ -2544,14 +2435,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== EWOLUCJA POJEDYNCZEJ WYSPY ====================
-
         private void EvolveIsland(Island island, int generation)
         {
             var newPopulation = new ConcurrentBag<Chromosome>();
-            int eliteCount = Math.Max(1, (int)(island.Population.Count * 0.15)); // FALA 1: 15% elityzm
+            int eliteCount = Math.Max(1, (int)(island.Population.Count * 0.15));
 
-            // FALA 1: Elityzm - zachowaj najlepsze osobniki
             var elites = island.Population
                 .OrderByDescending(c => c.Fitness)
                 .Take(eliteCount)
@@ -2562,7 +2450,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 newPopulation.Add(elite.Clone());
             }
 
-            // Generuj resztę populacji
             int remaining = island.Population.Count - eliteCount;
 
             Parallel.For(0, remaining, _ =>
@@ -2572,7 +2459,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 var child = Crossover(parent1, parent2);
                 Mutation(child, generation);
 
-                // FALA 3: Diversity maintenance
                 lock (_seenHashes)
                 {
                     if (!_seenHashes.Contains(child.Hash))
@@ -2582,7 +2468,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                     else
                     {
-                        // Duplikat - dodaj mutanta elity zamiast
                         var mutant = elites[_random.Next(elites.Count)].Clone();
                         Mutation(mutant, generation);
                         mutant.UpdateHash();
@@ -2593,8 +2478,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             island.Population = newPopulation.ToList();
         }
-
-        // ==================== OBLICZANIE FITNESS DLA WSZYSTKICH WYSP ====================
 
         private void CalculateFitnessForAllIslands()
         {
@@ -2609,14 +2492,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         metrics, _priorities, _scheduleInput);
                 });
 
-                // Aktualizuj najlepszego na wyspie
                 var best = island.Population.OrderByDescending(c => c.Fitness).First();
                 island.BestFitness = best.Fitness;
                 island.BestChromosome = best.Clone();
             }
         }
-
-        // ==================== SELEKCJA (TURNIEJ) ====================
+        // KONTYNUACJA GeneticSolver.cs - operatory genetyczne i metody pomocnicze
 
         private Chromosome Selection(List<Chromosome> population)
         {
@@ -2628,8 +2509,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return tournament.OrderByDescending(c => c.Fitness).First();
         }
 
-        // ==================== KRZYŻOWANIE (UNIFORM) ====================
-
         private Chromosome Crossover(Chromosome parent1, Chromosome parent2)
         {
             if (_random.NextDouble() > InitialCrossoverRate)
@@ -2637,19 +2516,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 return parent1.Clone();
             }
 
-            // FALA 2: Uniform crossover zamiast single-point
             var days = _scheduleInput.DaysInMonth;
             var childGenes = new Dictionary<DateTime, DoctorProfile?>();
 
             foreach (var day in days)
             {
-                // 50% szans na gen od każdego rodzica
                 childGenes[day] = _random.NextDouble() < 0.5
                     ? parent1.Genes[day]
                     : parent2.Genes[day];
             }
 
-            // FALA 1: Inteligentne naprawianie - tylko gdy potrzeba
             if (NeedsRepair(childGenes))
             {
                 ConstraintValidationService.RepairSchedule(childGenes, _scheduleInput);
@@ -2658,20 +2534,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return new Chromosome(childGenes);
         }
 
-        // ==================== MUTACJA (SMART + ADAPTACYJNA) ====================
-
         private void Mutation(Chromosome chromosome, int generation)
         {
             double mutationRate = GetAdaptiveMutationRate(generation);
             var days = _scheduleInput.DaysInMonth.ToList();
 
-            // FALA 2: Smart mutation - sortuj dni wg dostępności (priorytet dla trudnych dni)
             var daysByDifficulty = days.OrderBy(day =>
             {
                 var availableCount = _scheduleInput.Availability[day]
                     .Count(kvp => kvp.Value == AvailabilityType.Available ||
                                   kvp.Value == AvailabilityType.ConditionallyAvailable);
-                return availableCount; // Mniej dostępnych = wyższy priorytet
+                return availableCount;
             }).ToList();
 
             bool anyMutation = false;
@@ -2680,7 +2553,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 if (_random.NextDouble() < mutationRate)
                 {
-                    // FALA 1: Efektywna mutacja - bezpośrednia zmiana bez GenerateNeighbor
                     var currentDoctor = chromosome.Genes[day];
                     var workload = _utility.CalculateWorkload(chromosome.Genes);
                     var usedConditionals = CalculateUsedConditionals(chromosome.Genes);
@@ -2690,12 +2562,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                     if (candidates.Any())
                     {
-                        // Preferuj lekarzy z mniejszym obciążeniem
                         var sortedCandidates = candidates
                             .OrderBy(d => workload.GetValueOrDefault(d.Abbreviation, 0))
                             .ToList();
 
-                        // 70% szans na top 3, 30% na losowy
                         var chosenDoctor = _random.NextDouble() < 0.7
                             ? sortedCandidates[_random.Next(Math.Min(3, sortedCandidates.Count))]
                             : sortedCandidates[_random.Next(sortedCandidates.Count)];
@@ -2711,7 +2581,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             if (anyMutation)
             {
-                // FALA 1: Napraw tylko jeśli była mutacja i jest potrzeba
                 if (NeedsRepair(chromosome.Genes))
                 {
                     ConstraintValidationService.RepairSchedule(chromosome.Genes, _scheduleInput);
@@ -2720,14 +2589,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== POMOCNICZE: SPRAWDZENIE CZY POTRZEBA NAPRAWY ====================
-
         private bool NeedsRepair(Dictionary<DateTime, DoctorProfile?> schedule)
         {
             var workload = _utility.CalculateWorkload(schedule);
             var usedConditionals = CalculateUsedConditionals(schedule);
 
-            // Sprawdź limity dyżurów
             foreach (var (doctorAbbr, count) in workload)
             {
                 var limit = _scheduleInput.DutyLimits.GetValueOrDefault(doctorAbbr, 0);
@@ -2735,7 +2601,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     return true;
             }
 
-            // Sprawdź limity conditional - tylko jeden conditional dozwolony na lekarza
             foreach (var doctorAbbr in usedConditionals)
             {
                 int conditionalCount = 0;
@@ -2768,11 +2633,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return used;
         }
 
-        // ==================== FALA 3: MIGRACJA MIĘDZY WYSPAMI ====================
-
         private void PerformMigration()
         {
-            // Każda wyspa wysyła swoich najlepszych migrantów do następnej wyspy (ring topology)
             for (int i = 0; i < IslandCount; i++)
             {
                 var sourceIsland = _islands[i];
@@ -2784,7 +2646,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     .Select(c => c.Clone())
                     .ToList();
 
-                // Zastąp najgorszych w docelowej wyspie
                 var worst = targetIsland.Population
                     .OrderBy(c => c.Fitness)
                     .Take(MigrantsCount)
@@ -2799,8 +2660,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== FALA 3: HYBRYDYZACJA (HILL-CLIMBING) ====================
-
         private void PerformHillClimbing()
         {
             foreach (var island in _islands)
@@ -2813,14 +2672,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 Parallel.ForEach(topChromosomes, chromosome =>
                 {
-                    // Prosty hill-climbing: spróbuj 3 losowych mutacji, zachowaj lepszą
                     var current = chromosome.Clone();
 
                     for (int attempt = 0; attempt < 3; attempt++)
                     {
                         var neighbor = current.Clone();
 
-                        // Jedna losowa zmiana
                         var randomDay = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
                         var workload = _utility.CalculateWorkload(neighbor.Genes);
                         var usedConditionals = CalculateUsedConditionals(neighbor.Genes);
@@ -2839,14 +2696,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                             neighbor.UpdateHash();
 
-                            // Oblicz fitness
                             var neighborWorkload = _utility.CalculateWorkload(neighbor.Genes);
                             var neighborMetrics = EvaluationAndScoringService.CalculateMetrics(
                                 neighbor.Genes, neighborWorkload, _scheduleInput);
                             neighbor.Fitness = EvaluationAndScoringService.CalculateScore(
                                 neighborMetrics, _priorities, _scheduleInput);
 
-                            // Zachowaj tylko jeśli lepszy
                             if (neighbor.Fitness > current.Fitness)
                             {
                                 current = neighbor;
@@ -2854,7 +2709,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         }
                     }
 
-                    // Aktualizuj oryginał jeśli znaleziono lepsze
                     if (current.Fitness > chromosome.Fitness)
                     {
                         chromosome.Genes = current.Genes;
@@ -3179,11 +3033,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs (1748 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs (5262 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Scheduling.Models;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 
 namespace GrafikoMat.Core.Scheduling.Engines
@@ -3197,22 +3052,89 @@ namespace GrafikoMat.Core.Scheduling.Engines
             IProgress<double>? progress = null,
             CancellationToken token = default)
         {
+            // Walidacja parametrów wejściowych
+            ValidateInput(input, activePriorities);
+
+            var timeout = TimeSpan.FromMinutes(parameters.TimeoutMinutes);
+
             switch (parameters.SolverType)
             {
                 case SolverType.Backtracking:
-                    return new BacktrackingSolver(input, activePriorities, progress, token);
+                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
+
                 case SolverType.SimulatedAnnealing:
-                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, progress, token);
+                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token);
+
                 case SolverType.Genetic:
-                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, progress, token);
+                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token);
+
                 case SolverType.TabuSearch:
-                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, progress, token);
+                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token);
+
                 case SolverType.AntColony:
-                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, progress, token);
+                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token);
+
                 case SolverType.AStar:
-                    return new AStarSolver(input, activePriorities, progress, token);
+                    return new AStarSolver(input, activePriorities, timeout, progress, token);
+
                 default:
-                    return new BacktrackingSolver(input, activePriorities, progress, token);
+                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
+            }
+        }
+
+        /// <summary>
+        /// Waliduje parametry wejściowe przed utworzeniem solvera.
+        /// Rzuca ArgumentException lub ArgumentNullException w przypadku niepoprawnych danych.
+        /// </summary>
+        private static void ValidateInput(ScheduleInput input, List<SolverPriority> activePriorities)
+        {
+            if (input == null)
+                throw new ArgumentNullException(nameof(input), "ScheduleInput nie może być null");
+
+            if (input.Doctors == null)
+                throw new ArgumentNullException(nameof(input.Doctors), "Lista lekarzy nie może być null");
+
+            if (input.Doctors.Count == 0)
+                throw new ArgumentException("Lista lekarzy nie może być pusta. Dodaj przynajmniej jednego lekarza.", nameof(input.Doctors));
+
+            var activeDoctors = input.Doctors.Where(d => !d.IsArchived).ToList();
+            if (activeDoctors.Count == 0)
+                throw new ArgumentException("Wszyscy lekarze są zarchiwizowani. Musi być przynajmniej jeden aktywny lekarz.", nameof(input.Doctors));
+
+            if (input.Availability == null)
+                throw new ArgumentNullException(nameof(input.Availability), "Słownik dostępności nie może być null");
+
+            // DaysInMonth jest computed property, ale sprawdźmy czy Availability ma jakieś dni
+            if (input.DaysInMonth.Count == 0)
+                throw new ArgumentException("Brak dni w miesiącu. Słownik Availability musi zawierać przynajmniej jeden dzień.", nameof(input.Availability));
+
+            if (input.DutyLimits == null)
+                throw new ArgumentNullException(nameof(input.DutyLimits), "Słownik limitów dyżurów nie może być null");
+
+            if (activePriorities == null)
+                throw new ArgumentNullException(nameof(activePriorities), "Lista priorytetów nie może być null");
+
+            if (activePriorities.Count == 0)
+                throw new ArgumentException("Lista priorytetów nie może być pusta. Dodaj przynajmniej jeden priorytet.", nameof(activePriorities));
+
+            // Sprawdzenie spójności danych: każdy dzień powinien mieć dostępność dla wszystkich lekarzy
+            foreach (var day in input.DaysInMonth)
+            {
+                if (!input.Availability.ContainsKey(day))
+                    throw new ArgumentException($"Brak danych dostępności dla dnia {day:yyyy-MM-dd}", nameof(input.Availability));
+
+                var dayAvailability = input.Availability[day];
+                if (dayAvailability == null)
+                    throw new ArgumentException($"Dostępność dla dnia {day:yyyy-MM-dd} nie może być null", nameof(input.Availability));
+
+                // Sprawdź czy każdy aktywny lekarz ma wpis dostępności
+                foreach (var doctor in activeDoctors)
+                {
+                    if (!dayAvailability.ContainsKey(doctor.Abbreviation))
+                        throw new ArgumentException(
+                            $"Brak wpisu dostępności dla lekarza {doctor.Abbreviation} w dniu {day:yyyy-MM-dd}",
+                            nameof(input.Availability));
+                }
             }
         }
     }
@@ -3523,7 +3445,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs (10672 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs (9066 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -3531,6 +3453,7 @@ using GrafikoMat.Core.Scheduling.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -3538,32 +3461,28 @@ using System.Threading.Tasks;
 namespace GrafikoMat.Core.Scheduling.Engines
 {
     /// <summary>
-    /// ZOPTYMALIZOWANA implementacja silnika Simulated Annealing.
+    /// ZOPTYMALIZOWANA implementacja silnika Simulated Annealing z obsługą timeoutu.
     /// 
-    /// KLUCZOWE OPTYMALIZACJE (WARIANT B):
+    /// KLUCZOWE OPTYMALIZACJE:
     /// - Adaptacyjne parametry (temperatura, cooling rate) dopasowane do rozmiaru problemu
     /// - Early stopping przy stagnacji (500 iteracji bez poprawy)
     /// - Cache odwiedzonych stanów (HashSet) - unika duplikatów
     /// - Smart neighbor generation (swap, shift, single) zależna od temperatury
     /// - Równoległa eksploracja 4 kandydatów w każdej iteracji
-    /// - Delta evaluation (przyrostowe obliczanie fitness) - OPCJONALNE, tu używamy quick estimate
     /// 
     /// OCZEKIWANY REZULTAT: 85-90% redukcja czasu, 97-99% jakości
     /// </summary>
     public class SimulatedAnnealingSolver : IScheduleSolver
     {
-        // ==================== STAŁE KONFIGURACYJNE ====================
-
-        private const int PARALLEL_CANDIDATES = 4;        // Liczba równolegle testowanych kandydatów
-        private const int MAX_STAGNATION = 500;           // Max iteracji bez poprawy przed early stop
-        private const int MAX_VISITED_CACHE = 50000;      // Max rozmiar cache stanów (memory limit)
-
-        // ==================== POLA PRYWATNE ====================
+        private const int PARALLEL_CANDIDATES = 4;
+        private const int MAX_STAGNATION = 500;
+        private const int MAX_VISITED_CACHE = 50000;
 
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
+        private readonly TimeSpan _timeout;
         private readonly Random _random = new();
         private readonly SolverUtility _utility;
         private readonly DeltaEvaluator _deltaEvaluator;
@@ -3574,12 +3493,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         private HashSet<string> _visitedStates = new();
 
-        // ==================== KONSTRUKTOR ====================
-
         public SimulatedAnnealingSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             double coolingRate,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -3587,30 +3505,22 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _priorities = priorities;
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
+            _timeout = timeout;
             _utility = new SolverUtility(scheduleInput);
             _deltaEvaluator = new DeltaEvaluator(scheduleInput, priorities);
-
-            // ==================== ADAPTACYJNE PARAMETRY ====================
 
             int daysCount = scheduleInput.DaysInMonth.Count;
             int doctorCount = scheduleInput.Doctors.Count(d => !d.IsArchived);
             double problemComplexity = Math.Log(daysCount * doctorCount + 1);
 
-            // Temperatura początkowa skalowana do rozmiaru problemu
             _initialTemperature = 500.0 * problemComplexity;
-
-            // Szybsze chłodzenie dla większych problemów
             _coolingRate = daysCount > 20 ? 0.97 : (coolingRate > 0 ? coolingRate : 0.985);
-
-            // Mniej iteracji na temperaturę (ale więcej temperatur dzięki szybszemu cooling)
             _iterationsPerTemperature = Math.Max(30, doctorCount * 2);
         }
 
-        // ==================== GŁÓWNA METODA ROZWIĄZYWANIA ====================
-
         public ScheduleSolution FindOptimalSolution()
         {
-            // === INICJALIZACJA ===
+            var stopwatch = Stopwatch.StartNew();
 
             var currentSolution = _utility.CreateGreedyInitialSolution();
             var bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
@@ -3624,12 +3534,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int totalIterations = (int)(Math.Log(0.1 / _initialTemperature) / Math.Log(_coolingRate)) * _iterationsPerTemperature;
             int currentIteration = 0;
             int iterationsWithoutImprovement = 0;
+            bool timeoutReached = false;
 
-            // Dodaj stan początkowy do cache
             string initialHash = _utility.ComputeQuickHash(currentSolution);
             _visitedStates.Add(initialHash);
-
-            // === GŁÓWNA PĘTLA SYMULOWANEGO WYŻARZANIA ===
 
             while (temperature > 0.1)
             {
@@ -3637,7 +3545,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 {
                     _cancellationToken.ThrowIfCancellationRequested();
 
-                    // ==================== RÓWNOLEGŁA EKSPLORACJA SĄSIADÓW ====================
+                    if (stopwatch.Elapsed >= _timeout)
+                    {
+                        timeoutReached = true;
+                        goto finish;
+                    }
 
                     var candidates = new ConcurrentBag<(Dictionary<DateTime, DoctorProfile?> solution, double fitness, string hash)>();
 
@@ -3645,59 +3557,42 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     {
                         try
                         {
-                            // Generuj smart neighbor (typ ruchu zależy od temperatury)
                             var neighbor = _utility.GenerateSmartNeighbor(currentSolution, temperature);
-
-                            // Napraw jeśli narusza twarde ograniczenia
                             Validation.ConstraintValidationService.RepairSchedule(neighbor, _scheduleInput);
 
-                            // Oblicz hash (do cache)
                             string hash = _utility.ComputeQuickHash(neighbor);
-
-                            // Szybka estymacja fitness (zamiast pełnego przeliczenia)
                             var neighborWorkload = _utility.CalculateWorkload(neighbor);
                             double estimatedFitness = _deltaEvaluator.QuickEstimateFitness(neighbor, neighborWorkload);
 
                             candidates.Add((neighbor, estimatedFitness, hash));
                         }
-                        catch
-                        {
-                            // Ignoruj błędy w równoległych wątkach
-                        }
+                        catch { }
                     });
 
                     if (!candidates.Any())
                         continue;
 
-                    // Wybierz najlepszego kandydata
                     var (bestCandidate, estimatedFitness, candidateHash) = candidates.OrderByDescending(c => c.fitness).First();
-
-                    // ==================== CACHE STANÓW - UNIKAJ DUPLIKATÓW ====================
 
                     if (_visitedStates.Contains(candidateHash))
                     {
                         iterationsWithoutImprovement++;
                         currentIteration++;
-                        continue; // Pomiń jeśli już odwiedzony
+                        continue;
                     }
 
-                    // Pełne przeliczenie fitness tylko dla wybranego kandydata
                     var newWorkload = _utility.CalculateWorkload(bestCandidate);
                     var newMetrics = EvaluationAndScoringService.CalculateMetrics(bestCandidate, newWorkload, _scheduleInput);
                     double newFitness = EvaluationAndScoringService.CalculateScore(newMetrics, _priorities, _scheduleInput);
-
-                    // ==================== KRYTERIUM AKCEPTACJI ====================
 
                     bool accept = false;
 
                     if (newFitness > currentFitness)
                     {
-                        // Akceptuj poprawę
                         accept = true;
                     }
                     else
                     {
-                        // Akceptuj pogorszenie z prawdopodobieństwem
                         double acceptanceProbability = Math.Exp((newFitness - currentFitness) / temperature);
                         accept = _random.NextDouble() < acceptanceProbability;
                     }
@@ -3708,13 +3603,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         currentWorkload = newWorkload;
                         currentFitness = newFitness;
 
-                        // Dodaj do cache (z limitem pamięci)
                         if (_visitedStates.Count < MAX_VISITED_CACHE)
                         {
                             _visitedStates.Add(candidateHash);
                         }
 
-                        // Sprawdź czy to nowy best
                         if (currentFitness > bestFitness)
                         {
                             bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
@@ -3731,21 +3624,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         iterationsWithoutImprovement++;
                     }
 
-                    // ==================== EARLY STOPPING ====================
-
                     if (iterationsWithoutImprovement > MAX_STAGNATION)
                     {
-                        // Przerwij jeśli długo brak poprawy
-                        goto finish; // Wyjście z zagnieżdżonych pętli
+                        goto finish;
                     }
 
                     currentIteration++;
                 }
 
-                // Chłodzenie
                 temperature *= _coolingRate;
 
-                // Raportuj postęp
                 if (totalIterations > 0)
                 {
                     _progressReporter?.Report(Math.Min(1.0, (double)currentIteration / totalIterations));
@@ -3754,14 +3642,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         finish:
 
-            // === FINALIZACJA ===
-
             var finalWorkload = _utility.CalculateWorkload(bestSolution);
             var finalSolution = EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
 
-            // Raportuj 100%
-            _progressReporter?.Report(1.0);
+            finalSolution = finalSolution with
+            {
+                ComputationTime = stopwatch.Elapsed,
+                OptimalityNote = timeoutReached
+                    ? "Best solution found (timeout reached)"
+                    : iterationsWithoutImprovement > MAX_STAGNATION
+                        ? "Best solution found (early stopping - stagnation)"
+                        : "Solution found (cooling completed)"
+            };
 
+            _progressReporter?.Report(1.0);
             return finalSolution;
         }
     }
@@ -4029,7 +3923,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs (10970 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs (9811 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -4037,6 +3931,7 @@ using GrafikoMat.Core.Scheduling.Models;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -4056,25 +3951,27 @@ namespace GrafikoMat.Core.Scheduling.Engines
     {
         private readonly int _tabuListSize;
         private readonly int _maxIterations;
+        private readonly TimeSpan _timeout;
+        private Stopwatch? _stopwatch;
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
 
-        // PRECISION+ optimizations
-        private const int EARLY_STOP_THRESHOLD = 60;           // Przerwij po 60 iteracjach bez poprawy
-        private const int DIVERSIFICATION_INTERVAL = 25;        // Dywersyfikacja co 25 iteracji (nie 125)
-        private const int INITIAL_NEIGHBORHOOD_SIZE = 5;        // Start: 5 sąsiadów
-        private const int MAX_NEIGHBORHOOD_SIZE = 15;           // Max: 15 sąsiadów
-        private const int STAGNATION_THRESHOLD_TIER1 = 20;     // Po 20 iteracjach → zwiększ do 10
-        private const int STAGNATION_THRESHOLD_TIER2 = 40;     // Po 40 iteracjach → zwiększ do 15
+        private const int EARLY_STOP_THRESHOLD = 60;
+        private const int DIVERSIFICATION_INTERVAL = 25;
+        private const int INITIAL_NEIGHBORHOOD_SIZE = 5;
+        private const int MAX_NEIGHBORHOOD_SIZE = 15;
+        private const int STAGNATION_THRESHOLD_TIER1 = 20;
+        private const int STAGNATION_THRESHOLD_TIER2 = 40;
 
         public TabuSearchSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             int tabuListSize,
             int maxIterations,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -4083,6 +3980,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
+            _timeout = timeout;
 
             _tabuListSize = tabuListSize;
             _maxIterations = maxIterations;
@@ -4090,13 +3988,13 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         public ScheduleSolution FindOptimalSolution()
         {
+            _stopwatch = Stopwatch.StartNew();
             var currentSolution = _utility.CreateGreedyInitialSolution();
             var bestSolution = new Dictionary<DateTime, DoctorProfile?>(currentSolution);
 
             var metrics = EvaluationAndScoringService.CalculateMetrics(bestSolution, _utility.CalculateWorkload(bestSolution), _scheduleInput);
             double bestFitness = EvaluationAndScoringService.CalculateScore(metrics, _priorities, _scheduleInput);
 
-            // PRECISION+: Move-based tabu list - przechowujemy pary (dzień, lekarz) zamiast całych rozwiązań
             var tabuList = new Queue<(DateTime day, Guid? doctorId)>();
 
             int iterationsWithoutImprovement = 0;
@@ -4106,13 +4004,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
-                // PRECISION+: Early stopping - jeśli 60 iteracji bez poprawy, kończymy
+                if (_stopwatch != null && _stopwatch.Elapsed >= _timeout)
+                {
+                    break;
+                }
+
                 if (iterationsWithoutImprovement >= EARLY_STOP_THRESHOLD)
                 {
                     break;
                 }
 
-                // PRECISION+: Adaptive neighborhood size
                 if (iterationsWithoutImprovement >= STAGNATION_THRESHOLD_TIER2)
                 {
                     currentNeighborhoodSize = MAX_NEIGHBORHOOD_SIZE;
@@ -4126,20 +4027,15 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     currentNeighborhoodSize = INITIAL_NEIGHBORHOOD_SIZE;
                 }
 
-                // PRECISION+: Generuj sąsiadów z adaptywnym rozmiarem
                 var neighbors = GenerateNeighbors(currentSolution, currentNeighborhoodSize);
-
-                // PRECISION+: Parallel evaluation sąsiadów
                 var (bestNeighbor, bestNeighborFitness) = FindBestNeighbor(neighbors, tabuList);
 
                 if (bestNeighbor != null)
                 {
-                    // Identyfikuj ruch (dzień, który się zmienił)
                     var move = IdentifyMove(currentSolution, bestNeighbor);
 
                     currentSolution = bestNeighbor;
 
-                    // Dodaj ruch do listy tabu
                     if (tabuList.Count >= _tabuListSize)
                     {
                         tabuList.Dequeue();
@@ -4158,7 +4054,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                 }
 
-                // PRECISION+: Szybsza dywersyfikacja - co 25 iteracji zamiast co 125
                 if (iterationsWithoutImprovement > 0 && iterationsWithoutImprovement % DIVERSIFICATION_INTERVAL == 0)
                 {
                     currentSolution = Diversify(currentSolution);
@@ -4168,12 +4063,23 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
 
             var finalWorkload = _utility.CalculateWorkload(bestSolution);
-            return EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+            var finalResult = EvaluationAndScoringService.CalculateMetrics(bestSolution, finalWorkload, _scheduleInput);
+
+            _stopwatch?.Stop();
+
+            finalResult = finalResult with
+            {
+                ComputationTime = _stopwatch?.Elapsed ?? TimeSpan.Zero,
+                OptimalityNote = _stopwatch?.Elapsed >= _timeout
+                    ? "Best solution found (timeout reached)"
+                    : iterationsWithoutImprovement >= EARLY_STOP_THRESHOLD
+                        ? "Best solution found (early stopping)"
+                        : "Solution found (search completed)"
+            };
+
+            return finalResult;
         }
 
-        /// <summary>
-        /// PRECISION+: Generuje sąsiadów z adaptywnym rozmiarem.
-        /// </summary>
         private List<Dictionary<DateTime, DoctorProfile?>> GenerateNeighbors(
             Dictionary<DateTime, DoctorProfile?> current,
             int count)
@@ -4186,9 +4092,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return neighbors;
         }
 
-        /// <summary>
-        /// PRECISION+: Parallel evaluation sąsiadów - wykorzystuje wszystkie rdzenie CPU.
-        /// </summary>
         private (Dictionary<DateTime, DoctorProfile?>? neighbor, double fitness) FindBestNeighbor(
             List<Dictionary<DateTime, DoctorProfile?>> neighbors,
             Queue<(DateTime, Guid?)> tabuList)
@@ -4197,15 +4100,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             Dictionary<DateTime, DoctorProfile?>? bestNeighbor = null;
             var lockObject = new object();
 
-            // Konwertuj tabuList do HashSet dla O(1) lookup
             var tabuSet = new HashSet<(DateTime, Guid?)>(tabuList);
 
             Parallel.ForEach(neighbors, neighbor =>
             {
-                // Sprawdź czy ruch jest tabu
-                var move = IdentifyMove(null, neighbor); // null jako current - sprawdzamy tylko czy day+doctor jest w tabu
-
-                // Jeśli którykolwiek dzień w sąsiedzie ma przypisanie z listy tabu, pomijamy
                 bool isTabu = false;
                 foreach (var kvp in neighbor)
                 {
@@ -4242,22 +4140,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return (bestNeighbor, bestFitness);
         }
 
-        /// <summary>
-        /// PRECISION+: Identyfikuje ruch między dwoma rozwiązaniami.
-        /// Zwraca parę (dzień, lekarz), która się zmieniła.
-        /// </summary>
         private (DateTime day, Guid? doctorId) IdentifyMove(
             Dictionary<DateTime, DoctorProfile?>? current,
             Dictionary<DateTime, DoctorProfile?> next)
         {
             if (current == null)
             {
-                // Używane tylko do sprawdzania tabu - zwróć pierwszy dzień z next
                 var firstDay = next.First();
                 return (firstDay.Key, firstDay.Value?.Id);
             }
 
-            // Znajdź dzień, który się zmienił
             foreach (var kvp in next)
             {
                 var currentDoctor = current.ContainsKey(kvp.Key) ? current[kvp.Key] : null;
@@ -4269,19 +4161,14 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 }
             }
 
-            // Fallback - nie powinno się zdarzyć
             var fallbackDay = next.First();
             return (fallbackDay.Key, fallbackDay.Value?.Id);
         }
 
-        /// <summary>
-        /// PRECISION+: Guided diversification - identyfikuje problematyczne dni i poprawia je.
-        /// </summary>
         private Dictionary<DateTime, DoctorProfile?> Diversify(Dictionary<DateTime, DoctorProfile?> current)
         {
             var diversified = new Dictionary<DateTime, DoctorProfile?>(current);
 
-            // Zamiast losowych swapów, wykonaj więcej celowanych zmian
             int numberOfSwaps = Math.Max(5, _scheduleInput.DaysInMonth.Count / 4);
 
             for (int i = 0; i < numberOfSwaps; i++)
@@ -4295,7 +4182,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Evaluation\EvaluationAndScoringService.cs (8863 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Evaluation\EvaluationAndScoringService.cs (9339 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Models;
@@ -4311,23 +4198,27 @@ namespace GrafikoMat.Core.Scheduling.Evaluation
     /// </summary>
     public static class EvaluationAndScoringService
     {
-        // Wagi do porównywania rozwiązań (większe = ważniejsze w finalnym score)
-        private static readonly Dictionary<SolverPriority, double> PriorityWeights = new()
+        // Wagi wykładnicze dla pozycji w hierarchii priorytetów
+        // Pierwsza pozycja (najważniejszy priorytet): 1e15, druga: 1e12, trzecia: 1e9, itd.
+        private static readonly double[] PositionWeights = new[]
         {
-            { SolverPriority.InitialContinuity,           1_000_000_000_000 },
-            { SolverPriority.TotalAssignments,             1_000_000_000 },
-            { SolverPriority.Fairness,                       1_000_000 },
-            { SolverPriority.Spacing,                          1_000 }
+            1_000_000_000_000_000.0,  // Pozycja 0 (najważniejszy priorytet)
+            1_000_000_000_000.0,      // Pozycja 1
+            1_000_000_000.0,          // Pozycja 2
+            1_000_000.0,              // Pozycja 3
+            1_000.0                   // Pozycja 4
         };
 
         // Dodatkowe gratyfikatory (poza priorytetami)
-        private const double RESERVATION_WEIGHT = 100_000_000_000_000;
+        private const double RESERVATION_WEIGHT = 100_000_000_000_000_000.0; // Najwyższa możliwa waga
         private const double WANTS_WEIGHT = 10;
         private const double AVAILABLE_WEIGHT = 1;
 
         /// <summary>
         /// Oblicza agregatową ocenę (score) rozwiązania, zgodnie z zadaną kolejnością priorytetów.
         /// Wyższa wartość oznacza lepszy grafik.
+        /// UWAGA: Wagi są teraz wykładnicze i zależne od POZYCJI w liście priorytetów,
+        /// co zapewnia spójność z leksykograficznym porównaniem w SolutionComparer.
         /// </summary>
         public static double CalculateScore(ScheduleSolution solution, List<SolverPriority> priorities, ScheduleInput scheduleInput)
         {
@@ -4357,8 +4248,14 @@ namespace GrafikoMat.Core.Scheduling.Evaluation
             };
 
             foreach (var priority in priorities)
-                if (PriorityWeights.TryGetValue(priority, out double weight))
-                    score += normalizedValues[priority] * weight;
+            {
+                var index = priorities.IndexOf(priority);
+                if (normalizedValues.TryGetValue(priority, out double normalizedValue))
+                {
+                    double weight = index < PositionWeights.Length ? PositionWeights[index] : 1.0;
+                    score += normalizedValue * weight;
+                }
+            }
 
             // Miękkie preferencje — drobne punkty „za chęci”
             score += solution.FulfilledWants * WANTS_WEIGHT;
@@ -4830,7 +4727,7 @@ namespace GrafikoMat.Core.Scheduling.Models
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs (3194 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\ScheduleSolution.cs (3195 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using System;
@@ -4843,7 +4740,7 @@ namespace GrafikoMat.Core.Scheduling.Models
     /// Reprezentuje finalny, obliczony grafik wraz z metrykami jakościowymi.
     /// Wersja zaadaptowana z GrafikWPF (RozwiazanyGrafik).
     /// </summary>
-    public class ScheduleSolution
+    public record ScheduleSolution
     {
         /// <summary>
         /// Główny wynik - słownik przypisujący lekarza (lub null) do konkretnego dnia.
@@ -4910,7 +4807,145 @@ namespace GrafikoMat.Core.Scheduling.Models
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\SolverParameters.cs (1654 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\SolverMessages.cs (6273 bytes)
+----- BEGIN -----
+using System;
+using System.Collections.Generic;
+
+namespace GrafikoMat.Core.Scheduling.Models
+{
+    /// <summary>
+    /// Zawiera komunikaty statusu dla różnych solverów, wyświetlane użytkownikowi podczas generowania grafiku.
+    /// Komunikaty są dobierane na podstawie postępu (0.0-1.0) dla metaheurystyk,
+    /// lub losowo rotowane dla solverów deterministycznych (Backtracking, A*).
+    /// </summary>
+    public static class SolverMessages
+    {
+        private static readonly Random _random = new Random();
+
+        /// <summary>
+        /// Komunikaty dla Algorytmu Genetycznego (8 etapów ewolucji).
+        /// </summary>
+        private static readonly string[] GeneticMessages = new[]
+        {
+            "Tworzenie pierwszej populacji grafików",
+            "Ocena przystosowania każdego osobnika",
+            "Selekcja naturalna eliminuje najsłabsze grafiki",
+            "Krzyżowanie genów najlepszych rozwiązań",
+            "Wprowadzanie losowych mutacji do genomu",
+            "Ewolucja kolejnego pokolenia w toku",
+            "Przetrwanie i reprodukcja najlepiej przystosowanych",
+            "Narodziny ostatecznego, najdoskonalszego grafiku"
+        };
+
+        /// <summary>
+        /// Komunikaty dla Kolonii Mrówek (8 etapów poszukiwań).
+        /// </summary>
+        private static readonly string[] AntColonyMessages = new[]
+        {
+            "Wysłanie mrówek-zwiadowców na poszukiwania grafiku",
+            "Przecieranie pierwszych, przypadkowych szlaków",
+            "Pozostawianie śladów feromonowych na trasach",
+            "Ocena pierwszych znalezionych rozwiązań",
+            "Kolejne mrówki przybywają do znalezisk, wzmacniając ślady feromonowe",
+            "Parowanie feromonów z rzadko uczęszczanych ścieżek",
+            "Konwergencja kolonii wokół głównego szlaku",
+            "Utrwalenie trasy do najlepszego grafiku"
+        };
+
+        /// <summary>
+        /// Komunikaty dla Symulowanego Wyżarzania (8 etapów hartowania).
+        /// </summary>
+        private static readonly string[] SimulatedAnnealingMessages = new[]
+        {
+            "Rozgrzewanie struktury grafiku do wysokiej temperatury",
+            "Materiał staje się plastyczny i podatny na zmiany",
+            "Chaotyczne przekształcenia wewnętrzne pod wpływem ciepła",
+            "Stopniowe, kontrolowane obniżanie temperatury",
+            "Układ krzepnie i stabilizuje się",
+            "Formowanie się trwałych wiązań krystalicznych",
+            "Hartowanie w celu osiągnięcia idealnych właściwości",
+            "Otrzymanie ostatecznego, doskonałego grafiku"
+        };
+
+        /// <summary>
+        /// Komunikaty dla Przeszukiwania z Tabu (8 etapów eksploracji labiryntu).
+        /// </summary>
+        private static readonly string[] TabuSearchMessages = new[]
+        {
+            "Wejście do labiryntu możliwych grafików",
+            "Badanie wszystkich dostępnych rozwidleń",
+            "Obranie najbardziej obiecującej ścieżki",
+            "Zamknięcie przebytego korytarza by uniknąć zapętlenia",
+            "Unikanie powrotu do niedawno odwiedzonych miejsc",
+            "Systematyczna eksploracja odległych zakątków",
+            "Dochodzenie do coraz lepszych rozwiązań",
+            "Odnalezienie wyjścia z najlepszym grafkiem"
+        };
+
+        /// <summary>
+        /// Komunikaty dla solwerów deterministycznych (Backtracking, A*).
+        /// Są losowo rotowane co ~10-15s, ponieważ nie mają deterministycznego postępu.
+        /// </summary>
+        private static readonly string[] DeterministicMessages = new[]
+        {
+            "Systematyczne przeszukiwanie drzewa decyzji",
+            "Metodyczna analiza możliwych kombinacji",
+            "Dogłębna eksploracja przestrzeni rozwiązań"
+        };
+
+        /// <summary>
+        /// Zwraca komunikat statusu dla danego typu solvera i postępu.
+        /// </summary>
+        /// <param name="solverType">Typ solvera.</param>
+        /// <param name="progress">Postęp (0.0-1.0). Dla solverów deterministycznych jest ignorowany.</param>
+        /// <returns>Komunikat statusu do wyświetlenia użytkownikowi.</returns>
+        public static string GetStatusMessage(SolverType solverType, double progress)
+        {
+            string[] messages = solverType switch
+            {
+                SolverType.Genetic => GeneticMessages,
+                SolverType.AntColony => AntColonyMessages,
+                SolverType.SimulatedAnnealing => SimulatedAnnealingMessages,
+                SolverType.TabuSearch => TabuSearchMessages,
+                SolverType.Backtracking => DeterministicMessages,
+                SolverType.AStar => DeterministicMessages,
+                _ => new[] { "Generowanie grafiku w toku..." }
+            };
+
+            // Dla solwerów deterministycznych (Backtracking, A*) zwracamy losowy komunikat
+            if (solverType == SolverType.Backtracking || solverType == SolverType.AStar)
+            {
+                return messages[_random.Next(messages.Length)];
+            }
+
+            // Dla metaheurystyk: wybieramy komunikat na podstawie postępu
+            int index = Math.Clamp((int)(progress * messages.Length), 0, messages.Length - 1);
+            return messages[index];
+        }
+
+        /// <summary>
+        /// Formatuje licznik przeanalizowanych stanów dla solwerów deterministycznych.
+        /// </summary>
+        /// <param name="nodesExpanded">Liczba przeanalizowanych stanów/węzłów.</param>
+        /// <returns>Sformatowany tekst licznika (np. "Przeanalizowano 12 847 stanów").</returns>
+        public static string FormatNodeCount(int nodesExpanded)
+        {
+            return $"Przeanalizowano {nodesExpanded:N0} stanów";
+        }
+
+        /// <summary>
+        /// Sprawdza czy dany solver jest deterministyczny (używa indeterminate progress).
+        /// </summary>
+        public static bool IsDeterministicSolver(SolverType solverType)
+        {
+            return solverType == SolverType.Backtracking || solverType == SolverType.AStar;
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\Models\SolverParameters.cs (4059 bytes)
 ----- BEGIN -----
 namespace GrafikoMat.Core.Scheduling.Models
 {
@@ -4922,25 +4957,79 @@ namespace GrafikoMat.Core.Scheduling.Models
     {
         public SolverType SolverType { get; init; } = SolverType.Backtracking;
 
+        // Timeout globalny (w minutach)
+        public int TimeoutMinutes { get; init; } = 10;
+
         // Simulated Annealing
-        public double CoolingRate { get; init; } = 0.995;
+        public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
 
-        // Genetic Solver - PRECISION+ defaults (zoptymalizowane dla 97-99% jakości przy 5-10× szybszym działaniu)
-        // Zmniejszona populacja (50 zamiast 100) + zmniejszona liczba generacji (150 zamiast 300)
-        // dzięki island model, elityzmowi 15%, uniform crossover, smart mutation, early stopping i hybrydyzacji
-        public int GeneticPopulationSize { get; init; } = 50;   // było 100
-        public int GeneticGenerations { get; init; } = 150;     // było 300
+        // Genetic Solver - PRECISION+ defaults
+        public int GeneticPopulationSize { get; init; } = SolverDefaults.GeneticPopulationSize.Default;
+        public int GeneticGenerations { get; init; } = SolverDefaults.GeneticGenerations.Default;
 
-        // Ant Colony - PRECISION+ defaults (zmienione z 75/300)
-        // Zoptymalizowane dla jakości 97-99% przy ~75% redukcji czasu obliczeń
-        public int AntColonyAnts { get; init; } = 40;           // było 75
-        public int AntColonyGenerations { get; init; } = 120;   // było 300
+        // Ant Colony - PRECISION+ defaults
+        public int AntColonyAnts { get; init; } = SolverDefaults.AntColonyAnts.Default;
+        public int AntColonyGenerations { get; init; } = SolverDefaults.AntColonyGenerations.Default;
 
         // Tabu Search - PRECISION+ defaults
-        // Zoptymalizowane dla jakości 97-99% przy ~80-85% redukcji czasu obliczeń
-        // dzięki move-based tabu list, adaptive neighborhood, parallel evaluation, early stopping
-        public int TabuListSize { get; init; } = 20;            // było 30
-        public int TabuMaxIterations { get; init; } = 150;      // było 500
+        public int TabuListSize { get; init; } = SolverDefaults.TabuListSize.Default;
+        public int TabuMaxIterations { get; init; } = SolverDefaults.TabuMaxIterations.Default;
+    }
+
+    /// <summary>
+    /// Centralne źródło wartości domyślnych i zakresów dla parametrów silników.
+    /// Zapewnia spójność między UI, logiką zapisu i logiką solverów.
+    /// </summary>
+    public static class SolverDefaults
+    {
+        // Format: (Default, Min, Max, Step)
+
+        /// <summary>
+        /// Timeout dla wszystkich silników (w minutach).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) TimeoutMinutes => (10, 1, 30, 1);
+
+        /// <summary>
+        /// Simulated Annealing: Tempo schładzania (cooling rate).
+        /// Wyższe wartości = wolniejsze schładzanie = lepsza jakość, ale dłuższy czas.
+        /// </summary>
+        public static (double Default, double Min, double Max, double Step) CoolingRate => (0.995, 0.90, 0.999, 0.001);
+
+        /// <summary>
+        /// Genetic Algorithm: Rozmiar populacji (liczba osobników w każdej generacji).
+        /// PRECISION+ default: 50 (zoptymalizowane dla jakości 97-99% przy 5-10× szybszym działaniu).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) GeneticPopulationSize => (50, 10, 200, 10);
+
+        /// <summary>
+        /// Genetic Algorithm: Liczba generacji (iteracji ewolucji).
+        /// PRECISION+ default: 150 (zoptymalizowane dla jakości 97-99%).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) GeneticGenerations => (150, 50, 500, 10);
+
+        /// <summary>
+        /// Ant Colony: Liczba mrówek (agentów) w każdej generacji.
+        /// PRECISION+ default: 40 (zoptymalizowane dla jakości 97-99% przy ~75% redukcji czasu).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) AntColonyAnts => (40, 10, 150, 5);
+
+        /// <summary>
+        /// Ant Colony: Liczba generacji (iteracji kolonii).
+        /// PRECISION+ default: 120 (zoptymalizowane dla jakości 97-99%).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) AntColonyGenerations => (120, 30, 400, 10);
+
+        /// <summary>
+        /// Tabu Search: Rozmiar listy tabu (pamięć ostatnich ruchów).
+        /// PRECISION+ default: 20 (zoptymalizowane dla jakości 97-99% przy ~80-85% redukcji czasu).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) TabuListSize => (20, 5, 100, 5);
+
+        /// <summary>
+        /// Tabu Search: Maksymalna liczba iteracji.
+        /// PRECISION+ default: 150 (zoptymalizowane dla jakości 97-99%).
+        /// </summary>
+        public static (int Default, int Min, int Max, int Step) TabuMaxIterations => (150, 50, 2000, 50);
     }
 }
 ----- END -----
@@ -6627,7 +6716,7 @@ namespace GrafikoMat.Controls
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\OrchestratorMessages.cs (720 bytes)
+===== FILE: GrafikoMat\Controls\OrchestratorMessages.cs (1586 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -6645,6 +6734,23 @@ namespace GrafikoMat.Controls
 
     // NOWA: Wiadomość rozsyłana przez ActionContainer po kliknięciu 'OK', by poinformować o ręcznym zamknięciu
     public sealed record HideOverlayExplicitlyMessage(Guid ViewId);
+
+    // NOWE: Wiadomości dla długich operacji z progressem
+    /// <summary>
+    /// Pokazuje nakładkę z ProgressBar/ProgressRing i opisem dla długotrwałych operacji.
+    /// </summary>
+    /// <param name="IsIndeterminate">Jeśli true, pokazuje ProgressRing (nieskończony spinner). Jeśli false, pokazuje ProgressBar (0-100%).</param>
+    public sealed record ShowProgressOverlayMessage(Guid ViewId, string Title, bool IsCancellable, bool IsIndeterminate);
+
+    /// <summary>
+    /// Aktualizuje postęp i opis w nakładce progressu.
+    /// </summary>
+    public sealed record UpdateProgressMessage(Guid ViewId, double Progress, string? StatusText = null);
+
+    /// <summary>
+    /// Sygnał anulowania operacji wysłany przez użytkownika (przycisk Cancel).
+    /// </summary>
+    public sealed record CancelOperationMessage(Guid ViewId);
 }
 ----- END -----
 
@@ -9273,9 +9379,10 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\IUxActionOrchestrator.cs (952 bytes)
+===== FILE: GrafikoMat\Services\IUxActionOrchestrator.cs (2520 bytes)
 ----- BEGIN -----
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GrafikoMat.Services
@@ -9301,6 +9408,28 @@ namespace GrafikoMat.Services
         Task PerformLoadAsync(
             Guid viewId,
             Func<Task> loadActionAsync
+        );
+
+        /// <summary>
+        /// Wykonuje długotrwałą operację z obsługą progressu, dynamicznych komunikatów i możliwością anulowania.
+        /// Idealne dla obliczeń typu generowanie grafiku, które trwają kilka sekund/minut.
+        /// </summary>
+        /// <param name="viewId">ID widoku do przygaszenia.</param>
+        /// <param name="title">Tytuł nakładki (np. "Generowanie grafiku").</param>
+        /// <param name="operationAsync">Operacja do wykonania. Otrzymuje IProgress i CancellationToken.</param>
+        /// <param name="successMessage">Komunikat sukcesu (opcjonalny).</param>
+        /// <param name="errorMessageTitle">Tytuł komunikatu błędu.</param>
+        /// <param name="isCancellable">Czy pokazać przycisk Cancel.</param>
+        /// <param name="showIndeterminateProgress">Jeśli true, pokazuje ProgressRing (nieskończony spinner dla deterministycznych solverów). Jeśli false, pokazuje ProgressBar (0-100% dla metaheurystyk).</param>
+        /// <returns>True jeśli operacja zakończyła się sukcesem, False jeśli została anulowana lub wystąpił błąd.</returns>
+        Task<bool> PerformLongRunningTaskAsync(
+            Guid viewId,
+            string title,
+            Func<IProgress<(double progress, string? statusText)>, CancellationToken, Task> operationAsync,
+            string? successMessage = null,
+            string errorMessageTitle = "Błąd",
+            bool isCancellable = true,
+            bool showIndeterminateProgress = false
         );
     }
 }
@@ -9337,7 +9466,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (5219 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (4965 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Scheduling.Models;
 using System;
@@ -9353,7 +9482,6 @@ namespace GrafikoMat.Services
     public enum AppTheme { Light, Dark, SystemDefault }
 
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
-    // Fragment SettingsService.cs - TYLKO zmieniony fragment record AppSettings
 
     public record AppSettings
     {
@@ -9369,17 +9497,17 @@ namespace GrafikoMat.Services
 
         public List<PrioritySetting> Priorities { get; init; } = new();
 
-        public double CoolingRate { get; init; } = 0.995;
-        public int GeneticPopulationSize { get; init; } = 100;
-        public int GeneticGenerations { get; init; } = 300;
+        // Timeout globalny (w minutach)
+        public int TimeoutMinutes { get; init; } = SolverDefaults.TimeoutMinutes.Default;
 
-        // ====== ZMIANA: Nowe wartości domyślne dla PRECISION+ ======
-        // BYŁO: AntColonyAnts = 75, AntColonyGenerations = 300
-        public int AntColonyAnts { get; init; } = 40;          // było 75
-        public int AntColonyGenerations { get; init; } = 120;  // było 300
-
-        public int TabuListSize { get; init; } = 30;
-        public int TabuMaxIterations { get; init; } = 500;
+        // Parametry silników - używamy wartości domyślnych z SolverDefaults
+        public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
+        public int GeneticPopulationSize { get; init; } = SolverDefaults.GeneticPopulationSize.Default;
+        public int GeneticGenerations { get; init; } = SolverDefaults.GeneticGenerations.Default;
+        public int AntColonyAnts { get; init; } = SolverDefaults.AntColonyAnts.Default;
+        public int AntColonyGenerations { get; init; } = SolverDefaults.AntColonyGenerations.Default;
+        public int TabuListSize { get; init; } = SolverDefaults.TabuListSize.Default;
+        public int TabuMaxIterations { get; init; } = SolverDefaults.TabuMaxIterations.Default;
     }
 
     public record WindowSize(int Width, int Height);
@@ -9391,6 +9519,7 @@ namespace GrafikoMat.Services
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
+
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
             if (_currentSettings != null && !forceReload)
@@ -9412,58 +9541,54 @@ namespace GrafikoMat.Services
             }
 
             _currentSettings ??= new AppSettings();
-            if (_currentSettings.Priorities == null || !_currentSettings.Priorities.Any())
-            {
-                _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
-            }
-            else
-            {
-                var existingPriorities = _currentSettings.Priorities.Select(p => p.Priority).ToHashSet();
-                var allPriorities = (SolverPriority[])Enum.GetValues(typeof(SolverPriority));
-                bool needsUpdate = false;
-                var updatedList = new List<PrioritySetting>(_currentSettings.Priorities);
-                foreach (var priority in allPriorities)
-                {
-                    if (!existingPriorities.Contains(priority))
-                    {
-                        updatedList.Add(new PrioritySetting(priority, true));
-                        needsUpdate = true;
-                    }
-                }
-                if (needsUpdate)
-                {
-                    _currentSettings = _currentSettings with { Priorities = updatedList };
-                }
-            }
-
             return _currentSettings;
-        }
-
-        public void SaveSettings(AppSettings settings)
-        {
-            if (settings == null) throw new ArgumentNullException(nameof(settings));
-            _currentSettings = settings;
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_settingsPath, json);
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
-            if (settings == null) throw new ArgumentNullException(nameof(settings));
             _currentSettings = settings;
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(_settingsPath, json);
+            try
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                var json = JsonSerializer.Serialize(settings, options);
+                await File.WriteAllTextAsync(_settingsPath, json);
+            }
+            catch (Exception)
+            {
+                // W przypadku błędu - logowanie lub rethrow
+            }
         }
 
-        private List<PrioritySetting> GetDefaultPriorities()
+        public SolverParameters BuildSolverParameters(AppSettings settings)
         {
-            return new List<PrioritySetting>
+            var activePriorities = settings.Priorities
+                .Where(p => p.IsActive)
+                .Select(p => p.Priority)
+                .ToList();
+
+            if (activePriorities.Count == 0)
             {
-                new(SolverPriority.InitialContinuity, true),
-                new(SolverPriority.TotalAssignments, true),
-                new(SolverPriority.Fairness, true),
-                new(SolverPriority.Spacing, true),
-                new(SolverPriority.DeclarationCompliance, true)
+                activePriorities = new List<SolverPriority>
+                {
+                    SolverPriority.InitialContinuity,
+                    SolverPriority.TotalAssignments,
+                    SolverPriority.Fairness,
+                    SolverPriority.Spacing,
+                    SolverPriority.DeclarationCompliance
+                };
+            }
+
+            return new SolverParameters
+            {
+                SolverType = settings.SelectedSolver,
+                TimeoutMinutes = settings.TimeoutMinutes,
+                CoolingRate = settings.CoolingRate,
+                GeneticPopulationSize = settings.GeneticPopulationSize,
+                GeneticGenerations = settings.GeneticGenerations,
+                AntColonyAnts = settings.AntColonyAnts,
+                AntColonyGenerations = settings.AntColonyGenerations,
+                TabuListSize = settings.TabuListSize,
+                TabuMaxIterations = settings.TabuMaxIterations
             };
         }
     }
@@ -9768,24 +9893,28 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\UxActionOrchestrator.cs (3227 bytes)
+===== FILE: GrafikoMat\Services\UxActionOrchestrator.cs (7229 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Controls;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GrafikoMat.Services
 {
-    public class UxActionOrchestrator : IUxActionOrchestrator, IRecipient<HideOverlayExplicitlyMessage>
+    public class UxActionOrchestrator : IUxActionOrchestrator, IRecipient<HideOverlayExplicitlyMessage>, IRecipient<CancelOperationMessage>
     {
         private readonly IMessenger _messenger;
+        private readonly Dictionary<Guid, CancellationTokenSource> _cancellationSources = new();
 
         public UxActionOrchestrator(IMessenger messenger)
         {
             _messenger = messenger;
             _messenger.Register<HideOverlayExplicitlyMessage>(this);
+            _messenger.Register<CancelOperationMessage>(this);
         }
 
         public async Task PerformActionAsync(
@@ -9852,6 +9981,90 @@ namespace GrafikoMat.Services
         {
             // Ta wiadomość jest ignorowana przez orkiestratora,
             // ale musi być zaimplementowana, aby móc się zarejestrować
+        }
+
+        public void Receive(CancelOperationMessage message)
+        {
+            // Anuluj operację jeśli istnieje CancellationTokenSource dla tego widoku
+            if (_cancellationSources.TryGetValue(message.ViewId, out var cts))
+            {
+                cts.Cancel();
+            }
+        }
+
+        /// <summary>
+        /// Wykonuje długotrwałą operację z obsługą progressu, dynamicznych komunikatów i możliwością anulowania.
+        /// </summary>
+        public async Task<bool> PerformLongRunningTaskAsync(
+            Guid viewId,
+            string title,
+            Func<IProgress<(double progress, string? statusText)>, CancellationToken, Task> operationAsync,
+            string? successMessage = null,
+            string errorMessageTitle = "Błąd",
+            bool isCancellable = true,
+            bool showIndeterminateProgress = false)
+        {
+            // Utwórz CancellationTokenSource dla tej operacji
+            var cts = new CancellationTokenSource();
+            _cancellationSources[viewId] = cts;
+
+            try
+            {
+                // Pokaż nakładkę z progressem (ProgressBar lub ProgressRing w zależności od showIndeterminateProgress)
+                _messenger.Send(new ShowProgressOverlayMessage(viewId, title, isCancellable, showIndeterminateProgress));
+
+                // Małe opóźnienie aby overlay się wyświetlił
+                await Task.Delay(100);
+
+                // Utwórz Progress który będzie wysyłać aktualizacje przez Messenger
+                var progress = new Progress<(double progress, string? statusText)>(update =>
+                {
+                    _messenger.Send(new UpdateProgressMessage(viewId, update.progress, update.statusText));
+                });
+
+                // Wykonaj operację w tle
+                await operationAsync(progress, cts.Token);
+
+                // Sprawdź czy została anulowana
+                if (cts.Token.IsCancellationRequested)
+                {
+                    _messenger.Send(new ShowStatusOverlayMessage(viewId, "Anulowano", "Operacja została anulowana przez użytkownika.", InfoBarSeverity.Warning));
+                    await Task.Delay(2000);
+                    _messenger.Send(new HideOverlayMessage(viewId));
+                    return false;
+                }
+
+                // Sukces
+                if (!string.IsNullOrEmpty(successMessage))
+                {
+                    _messenger.Send(new ShowStatusOverlayMessage(viewId, "Sukces", successMessage, InfoBarSeverity.Success));
+                    await Task.Delay(2000);
+                }
+
+                _messenger.Send(new HideOverlayMessage(viewId));
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                // Anulowanie przez CancellationToken
+                _messenger.Send(new ShowStatusOverlayMessage(viewId, "Anulowano", "Operacja została anulowana.", InfoBarSeverity.Warning));
+                await Task.Delay(2000);
+                _messenger.Send(new HideOverlayMessage(viewId));
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Błąd wykonania
+                _messenger.Send(new ShowStatusOverlayMessage(viewId, errorMessageTitle, ex.Message, InfoBarSeverity.Error));
+                // Nie ukrywamy automatycznie - użytkownik musi zamknąć ręcznie
+                return false;
+            }
+            finally
+            {
+                // Usuń CancellationTokenSource
+                _cancellationSources.Remove(viewId);
+                cts.Dispose();
+            }
         }
     }
 }
@@ -10911,7 +11124,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (14266 bytes)
+===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (16816 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -10952,29 +11165,60 @@ namespace GrafikoMat.ViewModels
         public bool HasConfigurableParameters =>
             SelectedEngine?.Type is SolverType.SimulatedAnnealing or SolverType.Genetic or SolverType.AntColony or SolverType.TabuSearch;
 
+        // === TIMEOUT ===
+        private int _timeoutMinutesValue;
+        public int TimeoutMinutesValue { get => _timeoutMinutesValue; set => SetProperty(ref _timeoutMinutesValue, value); }
+        public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
+        public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
+        public int TimeoutMinutesStep => SolverDefaults.TimeoutMinutes.Step;
+
+        // === SIMULATED ANNEALING ===
         private double _coolingRateValue;
         public double CoolingRateValue { get => _coolingRateValue; set => SetProperty(ref _coolingRateValue, value); }
+        public double CoolingRateMin => SolverDefaults.CoolingRate.Min;
+        public double CoolingRateMax => SolverDefaults.CoolingRate.Max;
+        public double CoolingRateStep => SolverDefaults.CoolingRate.Step;
 
+        // === GENETIC ===
         private int _geneticPopulationSizeValue;
         public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set => SetProperty(ref _geneticPopulationSizeValue, value); }
+        public int GeneticPopulationSizeMin => SolverDefaults.GeneticPopulationSize.Min;
+        public int GeneticPopulationSizeMax => SolverDefaults.GeneticPopulationSize.Max;
+        public int GeneticPopulationSizeStep => SolverDefaults.GeneticPopulationSize.Step;
 
         private int _geneticGenerationsValue;
         public int GeneticGenerationsValue { get => _geneticGenerationsValue; set => SetProperty(ref _geneticGenerationsValue, value); }
+        public int GeneticGenerationsMin => SolverDefaults.GeneticGenerations.Min;
+        public int GeneticGenerationsMax => SolverDefaults.GeneticGenerations.Max;
+        public int GeneticGenerationsStep => SolverDefaults.GeneticGenerations.Step;
 
+        // === ANT COLONY ===
         private int _antColonyAntsValue;
         public int AntColonyAntsValue { get => _antColonyAntsValue; set => SetProperty(ref _antColonyAntsValue, value); }
+        public int AntColonyAntsMin => SolverDefaults.AntColonyAnts.Min;
+        public int AntColonyAntsMax => SolverDefaults.AntColonyAnts.Max;
+        public int AntColonyAntsStep => SolverDefaults.AntColonyAnts.Step;
 
         private int _antColonyGenerationsValue;
         public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set => SetProperty(ref _antColonyGenerationsValue, value); }
+        public int AntColonyGenerationsMin => SolverDefaults.AntColonyGenerations.Min;
+        public int AntColonyGenerationsMax => SolverDefaults.AntColonyGenerations.Max;
+        public int AntColonyGenerationsStep => SolverDefaults.AntColonyGenerations.Step;
 
+        // === TABU SEARCH ===
         private int _tabuListSizeValue;
         public int TabuListSizeValue { get => _tabuListSizeValue; set => SetProperty(ref _tabuListSizeValue, value); }
+        public int TabuListSizeMin => SolverDefaults.TabuListSize.Min;
+        public int TabuListSizeMax => SolverDefaults.TabuListSize.Max;
+        public int TabuListSizeStep => SolverDefaults.TabuListSize.Step;
 
         private int _tabuMaxIterationsValue;
         public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set => SetProperty(ref _tabuMaxIterationsValue, value); }
+        public int TabuMaxIterationsMin => SolverDefaults.TabuMaxIterations.Min;
+        public int TabuMaxIterationsMax => SolverDefaults.TabuMaxIterations.Max;
+        public int TabuMaxIterationsStep => SolverDefaults.TabuMaxIterations.Step;
 
         public IAsyncRelayCommand SaveCommand { get; }
-
         public ICommand ResetSimulatedAnnealingCommand { get; }
         public ICommand ResetGeneticCommand { get; }
         public ICommand ResetAntColonyCommand { get; }
@@ -10987,27 +11231,25 @@ namespace GrafikoMat.ViewModels
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
 
-            ResetSimulatedAnnealingCommand = new RelayCommand(() => CoolingRateValue = 0.995);
+            ResetSimulatedAnnealingCommand = new RelayCommand(() =>
+                CoolingRateValue = SolverDefaults.CoolingRate.Default);
 
             ResetGeneticCommand = new RelayCommand(() =>
             {
-                GeneticPopulationSizeValue = 100;
-                GeneticGenerationsValue = 300;
+                GeneticPopulationSizeValue = SolverDefaults.GeneticPopulationSize.Default;
+                GeneticGenerationsValue = SolverDefaults.GeneticGenerations.Default;
             });
 
-            // ====== ZMIANA PRECISION+: Nowe wartości domyślne dla AntColony ======
-            // BYŁO: AntColonyAntsValue = 75, AntColonyGenerationsValue = 300
-            // TERAZ: zoptymalizowane dla jakości 97-99% przy ~75% redukcji czasu
             ResetAntColonyCommand = new RelayCommand(() =>
             {
-                AntColonyAntsValue = 40;              // Zmienione z 75 → 40
-                AntColonyGenerationsValue = 120;      // Zmienione z 300 → 120
+                AntColonyAntsValue = SolverDefaults.AntColonyAnts.Default;
+                AntColonyGenerationsValue = SolverDefaults.AntColonyGenerations.Default;
             });
 
             ResetTabuSearchCommand = new RelayCommand(() =>
             {
-                TabuListSizeValue = 30;
-                TabuMaxIterationsValue = 500;
+                TabuListSizeValue = SolverDefaults.TabuListSize.Default;
+                TabuMaxIterationsValue = SolverDefaults.TabuMaxIterations.Default;
             });
 
             LoadEngineData();
@@ -11021,6 +11263,7 @@ namespace GrafikoMat.ViewModels
             SelectedEngine = EngineOptions.FirstOrDefault(o => o.Type == _appSettings.SelectedSolver)
                 ?? EngineOptions.FirstOrDefault();
 
+            TimeoutMinutesValue = _appSettings.TimeoutMinutes;
             CoolingRateValue = _appSettings.CoolingRate;
             GeneticPopulationSizeValue = _appSettings.GeneticPopulationSize;
             GeneticGenerationsValue = _appSettings.GeneticGenerations;
@@ -11037,6 +11280,7 @@ namespace GrafikoMat.ViewModels
             var newSettings = _appSettings with
             {
                 SelectedSolver = _selectedEngine.Type,
+                TimeoutMinutes = this.TimeoutMinutesValue,
                 CoolingRate = this.CoolingRateValue,
                 GeneticPopulationSize = this.GeneticPopulationSizeValue,
                 GeneticGenerations = this.GeneticGenerationsValue,
@@ -11053,6 +11297,7 @@ namespace GrafikoMat.ViewModels
                 {
                     var saved = await _settingsService.LoadSettingsAsync(forceReload: true);
                     return saved.SelectedSolver == newSettings.SelectedSolver &&
+                           saved.TimeoutMinutes == newSettings.TimeoutMinutes &&
                            saved.CoolingRate == newSettings.CoolingRate &&
                            saved.GeneticPopulationSize == newSettings.GeneticPopulationSize;
                 },
@@ -11084,7 +11329,7 @@ namespace GrafikoMat.ViewModels
             EngineOptions.Add(new EngineOption(
                 SolverType.AStar,
                 "AStarSolver",
-                "Ten algorytm działa jak zaawansowany system nawigacji GPS w mieście, w którym jest nieskończenie wiele dróg. Zamiast jechać na ślepo, A* w każdym momencie analizuje dwie rzeczy: koszt już przebytej trasy (ile dyżurów już przypisano i jak dobrze) oraz szacowany koszt dotarcia do celu (jak 'obiecujące' są pozostałe dni do obsadzenia). Dzięki tej heurystycznej ocenie przyszłości, algorytm inteligentnie wybiera najbardziej obiecujące ścieżki, ignorując te, które już na wczesnym etapie wydają się prowadzić do gorszego wyniku. To sprawia, że jest znacznie wydajniejszy od czystego backtrackingu, zachowując przy tym zdolność do znalezienia optymalnego rozwiązania, jeśli jego 'mapa' (heurystyka) jest dobrze skalibrowana.",
+                "Ten algorytm działa jak zaawansowany system nawigacji GPS w mieście z niezliczoną ilością dróg. Zamiast jechać na ślepo, A* w każdym momencie analizuje dwie rzeczy: koszt już przebytej trasy (ile dyżurów już przypisano i jak dobrze) oraz szacowany koszt dotarcia do celu (jak 'obiecujące' są pozostałe dni do obsadzenia). Dzięki tej heurystycznej ocenie przyszłości, algorytm inteligentnie wybiera najbardziej obiecujące ścieżki, odcinając te, które już na wczesnym etapie wydają się prowadzić do gorszego wyniku. To sprawia, że jest znacznie wydajniejszy od czystego backtrackingu, zachowując przy tym zdolność do znalezienia optymalnego rozwiązania. W przeciwieństwie do metaheurystyk, A* jest deterministyczny i jednowątkowy, ale jego przeszukiwanie jest kierowane heurystyką, co drastycznie redukuje przestrzeń poszukiwań.",
                 "Wielokryterialny algorytm A*",
                 "Przeszukiwanie heurystyczne",
                 "Deterministyczny",
@@ -11096,7 +11341,7 @@ namespace GrafikoMat.ViewModels
             EngineOptions.Add(new EngineOption(
                 SolverType.Genetic,
                 "GeneticSolver",
-                "Działa na zasadach ewolucji. Na początku tworzy dużą 'populację' całkowicie losowych, często bezsensownych grafików. Następnie ocenia 'przystosowanie' każdego z nich – jak dobrze spełnia założone kryteria. Najlepsze grafiki ('osobniki') są wybierane do 'rozmnażania': ich fragmenty są ze sobą mieszane (krzyżowanie), tworząc nowe 'potomstwo', które dziedziczy cechy po 'rodzicach'. Dodatkowo, wprowadzane są losowe 'mutacje' (np. zmiana lekarza w jednym dniu), aby zwiększyć różnorodność. Z pokolenia na pokolenie słabe rozwiązania wymierają, a cała populacja staje się coraz lepsza, zbiegając się w kierunku rozwiązania o bardzo wysokiej jakości. To potężna, wielowątkowa technika, idealna do złożonych problemów.",
+                "Działa na zasadach ewolucji biologicznej. Na początku tworzy dużą 'populację' całkowicie losowych grafików. Następnie ocenia 'przystosowanie' każdego z nich – jak dobrze spełnia założone kryteria. Najlepsze grafiki ('osobniki') są wybierane do 'rozmnażania': ich fragmenty są ze sobą mieszane (krzyżowanie), tworząc nowe 'potomstwo' dziedziczące cechy po 'rodzicach'. Dodatkowo wprowadzane są losowe 'mutacje' (np. zmiana lekarza w jednym dniu), aby zwiększyć różnorodność. Z pokolenia na pokolenie słabe rozwiązania wymierają, a cała populacja ewoluuje w kierunku rozwiązań o bardzo wysokiej jakości. To potężna, wielowątkowa technika stosująca równoległą ewaluację populacji, idealna do złożonych problemów optymalizacyjnych.",
                 "Algorytm genetyczny",
                 "Metaheurystyka",
                 "Stochastyczny",
@@ -11108,7 +11353,7 @@ namespace GrafikoMat.ViewModels
             EngineOptions.Add(new EngineOption(
                 SolverType.SimulatedAnnealing,
                 "SimulatedAnnealingSolver",
-                "Naśladuje proces wyżarzania stali w hucie. Metal jest najpierw podgrzewany do bardzo wysokiej temperatury, co pozwala atomom na swobodne przemieszczanie się, a następnie jest bardzo powoli schładzany, aby atomy mogły ułożyć się w idealnie uporządkowaną, stabilną strukturę krystaliczną. W algorytmie 'temperatura' to prawdopodobieństwo akceptacji gorszego rozwiązania. Na początku, przy wysokiej temperaturze, algorytm chętnie dokonuje nawet losowych, pogarszających wynik zmian, co pozwala mu 'wyskakiwać' z lokalnych optimów i eksplorować całą przestrzeń rozwiązań. W miarę jak 'temperatura' spada, staje się coraz bardziej zachowawczy, akceptując już tylko te zmiany, które faktycznie poprawiają grafik. Tempo schładzania jest kluczowym parametrem do znalezienia złotego środka między jakością a czasem.",
+                "Naśladuje proces wyżarzania stali w hucie. Metal jest najpierw podgrzewany do bardzo wysokiej temperatury, co pozwala atomom na swobodne przemieszczanie się, a następnie jest bardzo powoli schładzany, aby atomy mogły ułożyć się w idealnie uporządkowaną strukturę krystaliczną. W algorytmie 'temperatura' to prawdopodobieństwo akceptacji gorszego rozwiązania. Na początku, przy wysokiej temperaturze, algorytm chętnie akceptuje nawet zmiany pogarszające wynik, co pozwala mu 'wyskakiwać' z lokalnych optimów i eksplorować całą przestrzeń rozwiązań. W miarę jak temperatura spada, staje się coraz bardziej wybredny, akceptując już tylko te zmiany, które faktycznie poprawiają grafik. Tempo schładzania jest kluczowym parametrem równoważącym jakość i czas obliczeń.",
                 "Algorytm symulowanego wyżarzania",
                 "Metaheurystyka",
                 "Stochastyczny",
@@ -11121,30 +11366,30 @@ namespace GrafikoMat.ViewModels
                 SolverType.TabuSearch,
                 "TabuSearchSolver",
                 "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
-                "Algorytm przeszukiwania z zakazami",
+                "Algorytm przeszukiwania z zabronieniami",
                 "Metaheurystyka",
                 "Stochastyczny",
-                "Nie",
-                "Wynik bardzo wysokiej jakości, bliski najlepszemu.",
+                "Tak",
+                "Wynik bardzo wysokiej jakości, zbliżony do najlepszego.",
                 "Krótki"));
 
             // Ant Colony
             EngineOptions.Add(new EngineOption(
                 SolverType.AntColony,
                 "AntColonySolver",
-                "Inspirowany zachowaniem mrówek szukających najkrótszej drogi do pożywienia. Wirtualna 'kolonia mrówek' jest wysyłana do budowania grafików. Każda 'mrówka' konstruuje kompletny grafik od początku do końca, dokonując po drodze wyborów (którego lekarza przypisać do dnia) w oparciu o dwie wskazówki: atrakcyjność danej opcji (np. deklaracja 'Chcę') oraz siłę 'śladu feromonowego' pozostawionego przez poprzednie mrówki. Gdy mrówka ukończy dobry grafik, wraca i wzmacnia feromonem ścieżki, z których korzystała. Z czasem feromon na gorszych ścieżkach 'paruje', a na najlepszych kumuluje się, co sprawia, że kolejne pokolenia mrówek coraz częściej podążają w kierunku optymalnego rozwiązania. To inteligentny, równoległy proces, który dobrze radzi sobie ze złożonymi problemami.",
+                "Algorytm inspirowany sposobem, w jaki mrówki znajdują najkrótsze trasy do źródeł pożywienia. Każda 'mrówka' (agent) próbuje zbudować kompletny grafik, poruszając się dzień po dniu i wybierając lekarzy. Wybory nie są losowe: mrówki kierują się śladami feromonowymi – cyfrowymi znacznikami pozostawianymi przez poprzednie mrówki. Im lepszy był grafik, tym więcej feromonu zostawiono na jego 'ścieżce'. Nowe mrówki są więc naturalnie przyciągane do sprawdzonych, obiecujących decyzji, zachowując jednak pewną losowość pozwalającą odkrywać nowe możliwości. Z czasem feromony częściowo parują, więc stare, słabe ścieżki są zapominane. Efekt? Kolonia stopniowo konwerguje wokół najlepszych strategii, tworząc wysokiej jakości rozwiązania dzięki współpracy wielu niezależnych agentów działających równolegle.",
                 "Algorytm kolonii mrówek",
                 "Metaheurystyka",
                 "Stochastyczny",
                 "Tak",
-                "Wynik bardzo wysokiej jakości, bliski najlepszemu.",
+                "Wynik wysokiej jakości, zbliżony do najlepszego.",
                 "Krótki"));
         }
     }
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (22639 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (23643 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11189,6 +11434,9 @@ namespace GrafikoMat.ViewModels
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
         private SettingsService? _settingsService;
+        private IUxActionOrchestrator? _orchestrator;
+
+        private readonly Guid _viewId = Guid.NewGuid();
 
         private readonly List<DoctorProfile> _allDoctors = new();
         private readonly List<UnitDoctorAssignment> _allAssignments = new();
@@ -11294,6 +11542,11 @@ namespace GrafikoMat.ViewModels
         public void SetSettingsService(SettingsService settingsService)
         {
             _settingsService = settingsService;
+        }
+
+        public void SetOrchestrator(IUxActionOrchestrator orchestrator)
+        {
+            _orchestrator = orchestrator;
         }
 
         public async Task LoadUserAndUnitDataAsync()
@@ -11524,9 +11777,9 @@ namespace GrafikoMat.ViewModels
 
         public async Task GenerateScheduleAsync()
         {
-            if (_settingsService == null || ActiveUnit == null)
+            if (_settingsService == null || ActiveUnit == null || _orchestrator == null)
             {
-                // TODO: Pokaż błąd - brak jednostki lub serwisu ustawień
+                // TODO: Pokaż błąd - brak jednostki, serwisu ustawień lub orkiestratora
                 return;
             }
 
@@ -11539,13 +11792,13 @@ namespace GrafikoMat.ViewModels
             }
 
             // --- Przygotowanie ScheduleInput ---
-            // TODO: Zastąpić poniższy kod rzeczywistym wczytywaniem deklaracji dla wybranego miesiąca
             var doctorsForSchedule = DoctorRows.Select(dr => dr.Profile).ToList();
             if (!doctorsForSchedule.Any())
             {
                 // TODO: Pokaż błąd - brak lekarzy dla jednostki
                 return;
             }
+
             // Przykład budowania Availability (na podstawie danych z _declByKey - DO ROZWINIĘCIA)
             var availability = new Dictionary<DateTime, Dictionary<string, AvailabilityType>>();
             int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
@@ -11565,45 +11818,55 @@ namespace GrafikoMat.ViewModels
             var scheduleInput = new ScheduleInput
             {
                 Doctors = doctorsForSchedule,
-                Availability = availability, // Użyj wczytanych/przykładowych danych
+                Availability = availability,
                 DutyLimits = doctorsForSchedule.ToDictionary(dr => dr.Abbreviation, dr => 10) // Przykładowy limit, TODO: Wczytać prawdziwe limity
-                // AllowTeleradiologyFallback NIE jest tutaj potrzebne
             };
             // --- Koniec przygotowania ScheduleInput ---
 
-
-            ScheduleSolution solution;
-            try
+            var solverParams = new SolverParameters
             {
-                var solverParams = new SolverParameters
+                SolverType = settings.SelectedSolver,
+                TimeoutMinutes = settings.TimeoutMinutes,
+                CoolingRate = settings.CoolingRate,
+                GeneticPopulationSize = settings.GeneticPopulationSize,
+                GeneticGenerations = settings.GeneticGenerations,
+                AntColonyAnts = settings.AntColonyAnts,
+                AntColonyGenerations = settings.AntColonyGenerations,
+                TabuListSize = settings.TabuListSize,
+                TabuMaxIterations = settings.TabuMaxIterations
+            };
+
+            // Wykryj czy solver jest deterministyczny (nie ma sensownego progressu 0-100%)
+            bool isDeterministicSolver = SolverMessages.IsDeterministicSolver(settings.SelectedSolver);
+
+            // Użyj orkiestratora do długotrwałej operacji z progressem
+            bool success = await _orchestrator.PerformLongRunningTaskAsync(
+                viewId: _viewId,
+                title: "Generowanie grafiku",
+                operationAsync: async (progress, cancellationToken) =>
                 {
-                    SolverType = settings.SelectedSolver,
-                    CoolingRate = settings.CoolingRate,
-                    GeneticPopulationSize = settings.GeneticPopulationSize,
-                    GeneticGenerations = settings.GeneticGenerations,
-                    AntColonyAnts = settings.AntColonyAnts,
-                    AntColonyGenerations = settings.AntColonyGenerations,
-                    TabuListSize = settings.TabuListSize,
-                    TabuMaxIterations = settings.TabuMaxIterations
-                };
-                var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities);
+                    // Walidacja nastąpi w ScheduleSolverFactory.Create() - rzuci ArgumentException
+                    var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities, progress: new Progress<double>(p =>
+                    {
+                        // Pobierz odpowiedni komunikat dla tego solvera i postępu
+                        string statusText = SolverMessages.GetStatusMessage(settings.SelectedSolver, p);
+                        progress.Report((p, statusText));
+                    }), token: cancellationToken);
 
-                // Wywołanie solvera w tle
-                // TODO: Dodać obsługę progresu i anulowania
-                solution = await Task.Run(() => solver.FindOptimalSolution());
-
-                _lastGeneratedSolution = solution; // Zapisz wynik
-
-            }
-            catch (Exception ex)
-            {
-                // TODO: Pokaż błąd generowania
-                Console.WriteLine($"Błąd generowania grafiku: {ex.Message}"); // Tymczasowy log
-                _lastGeneratedSolution = null; // Wyczyść stary wynik w razie błędu
-            }
+                    var solution = await Task.Run(() => solver.FindOptimalSolution(), cancellationToken);
+                    _lastGeneratedSolution = solution;
+                },
+                successMessage: "Grafik został wygenerowany pomyślnie.",
+                errorMessageTitle: "Błąd generowania grafiku",
+                isCancellable: true,
+                showIndeterminateProgress: isDeterministicSolver  // ← ProgressRing dla Backtracking/A*, ProgressBar dla metaheurystyk
+            );
 
             // Odśwież widok tabeli z wynikiem (RosterRows)
-            UpdateRosterForSelectedMonth();
+            if (success)
+            {
+                UpdateRosterForSelectedMonth();
+            }
         }
     }
 
@@ -14580,7 +14843,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (28318 bytes)
+===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (32268 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.EngineSettingsView"
@@ -14654,8 +14917,10 @@ namespace GrafikoMat.Views.Settings
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
             <StackPanel Spacing="16">
 
-                <TextBlock Text="Wybierz algorytm, który będzie używany do generowania grafików." TextWrapping="Wrap" Opacity="0.8"/>
+                <TextBlock Text="Wybierz algorytm, który będzie używany do generowania grafików."
+                           TextWrapping="Wrap" Opacity="0.8"/>
 
+                <!-- TABELA PORÓWNAWCZA SILNIKÓW -->
                 <ListView
                   ItemsSource="{x:Bind ViewModel.EngineOptions}"
                   SelectionMode="None"
@@ -14743,19 +15008,18 @@ namespace GrafikoMat.Views.Settings
                                     <ColumnDefinition Width="1.2*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <RadioButton Grid.Column="0" Content="{x:Bind Name}" GroupName="EngineSelection" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
-                                             Checked="EngineRadioButton_Checked" VerticalAlignment="Center" Margin="6,0,0,0"/>
-
-                                <TextBlock Grid.Column="1" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                                <TextBlock Grid.Column="2" Text="{x:Bind Determinism}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                                <TextBlock Grid.Column="3" Text="{x:Bind Multithreading}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                                <TextBlock Grid.Column="4" Text="{x:Bind QualityGuarantee}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
-                                <TextBlock Grid.Column="5" Text="{x:Bind TimeToResult}" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <RadioButton Grid.Column="0" GroupName="EngineSelection" Content="{x:Bind Name}" Checked="EngineRadioButton_Checked" IsChecked="{x:Bind IsSelected, Mode=OneWay}"/>
+                                <TextBlock Grid.Column="1" Text="{x:Bind AlgorithmType}" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap"/>
+                                <TextBlock Grid.Column="2" Text="{x:Bind Determinism}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="3" Text="{x:Bind Multithreading}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="4" Text="{x:Bind QualityGuarantee}" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
+                                <TextBlock Grid.Column="5" Text="{x:Bind TimeToResult}" VerticalAlignment="Center" HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"/>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
+                <!-- CHARAKTERYSTYKA WYBRANEGO SILNIKA -->
                 <Border x:Name="DetailsBorder" Visibility="Collapsed">
                     <Border.RenderTransform>
                         <TranslateTransform/>
@@ -14778,7 +15042,7 @@ namespace GrafikoMat.Views.Settings
                         </TextBlock>
                     </Grid>
                 </Border>
-
+                <!-- USTAWIENIA PARAMETRÓW WYBRANEGO SILNIKA -->
                 <Border x:Name="SettingsBorder" Visibility="Collapsed">
                     <Border.RenderTransform>
                         <TranslateTransform/>
@@ -14798,8 +15062,37 @@ namespace GrafikoMat.Views.Settings
                                 </TransitionCollection>
                             </StackPanel.Transitions>
 
+                            <!-- TIMEOUT (dla wszystkich silników) -->
+                            <StackPanel Spacing="8">
+                                <Slider Minimum="{x:Bind ViewModel.TimeoutMinutesMin}" 
+                                        Maximum="{x:Bind ViewModel.TimeoutMinutesMax}" 
+                                        StepFrequency="{x:Bind ViewModel.TimeoutMinutesStep}" 
+                                        Value="{x:Bind ViewModel.TimeoutMinutesValue, Mode=TwoWay}">
+                                    <Slider.Header>
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="Maksymalny czas obliczeń (minuty)"/>
+                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                <ToolTipService.ToolTip>
+                                                    <ToolTip MaxWidth="400">
+                                                        <TextBlock TextWrapping="Wrap">
+                                                            Limit czasu, po którym algorytm zakończy działanie i zwróci najlepszy znaleziony dotychczas wynik.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Krótszy czas:</Run> szybszy rezultat, ale może być niższej jakości.<LineBreak/>
+                                                            <Run FontWeight="Bold">Dłuższy czas:</Run> większa szansa na znalezienie lepszego rozwiązania.
+                                                        </TextBlock>
+                                                    </ToolTip>
+                                                </ToolTipService.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Slider.Header>
+                                </Slider>
+                            </StackPanel>
+
+                            <!-- SIMULATED ANNEALING -->
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=SimulatedAnnealing}">
-                                <Slider Minimum="0.9" Maximum="0.999" SmallChange="0.001" StepFrequency="0.001" Value="{x:Bind ViewModel.CoolingRateValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.CoolingRateMin}" 
+                                        Maximum="{x:Bind ViewModel.CoolingRateMax}" 
+                                        StepFrequency="{x:Bind ViewModel.CoolingRateStep}" 
+                                        Value="{x:Bind ViewModel.CoolingRateValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Tempo schładzania"/>
@@ -14820,8 +15113,12 @@ namespace GrafikoMat.Views.Settings
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetSimulatedAnnealingCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
+                            <!-- GENETIC ALGORITHM -->
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=Genetic}">
-                                <Slider Minimum="20" Maximum="500" SmallChange="10" StepFrequency="10" Value="{x:Bind ViewModel.GeneticPopulationSizeValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.GeneticPopulationSizeMin}" 
+                                        Maximum="{x:Bind ViewModel.GeneticPopulationSizeMax}" 
+                                        StepFrequency="{x:Bind ViewModel.GeneticPopulationSizeStep}" 
+                                        Value="{x:Bind ViewModel.GeneticPopulationSizeValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Rozmiar populacji"/>
@@ -14829,8 +15126,8 @@ namespace GrafikoMat.Views.Settings
                                                 <ToolTipService.ToolTip>
                                                     <ToolTip MaxWidth="400">
                                                         <TextBlock TextWrapping="Wrap">
-                                                            Liczba "osobników" (kandydatów na grafiki) w każdej generacji.<LineBreak/><LineBreak/>
-                                                            <Run FontWeight="Bold">Większa wartość:</Run> większa różnorodność genetyczna, potencjalnie lepszy wynik, ale wolniejsze działanie.
+                                                            Liczba osobników (kandydatów rozwiązań) w każdej generacji.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> większa różnorodność genetyczna, lepsza eksploracja przestrzeni rozwiązań, ale wolniejsze obliczenia.
                                                         </TextBlock>
                                                     </ToolTip>
                                                 </ToolTipService.ToolTip>
@@ -14838,7 +15135,10 @@ namespace GrafikoMat.Views.Settings
                                         </StackPanel>
                                     </Slider.Header>
                                 </Slider>
-                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Value="{x:Bind ViewModel.GeneticGenerationsValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.GeneticGenerationsMin}" 
+                                        Maximum="{x:Bind ViewModel.GeneticGenerationsMax}" 
+                                        StepFrequency="{x:Bind ViewModel.GeneticGenerationsStep}" 
+                                        Value="{x:Bind ViewModel.GeneticGenerationsValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Liczba generacji"/>
@@ -14846,8 +15146,8 @@ namespace GrafikoMat.Views.Settings
                                                 <ToolTipService.ToolTip>
                                                     <ToolTip MaxWidth="400">
                                                         <TextBlock TextWrapping="Wrap">
-                                                            Jak długo algorytm ma "ewoluować" w poszukiwaniu rozwiązania.<LineBreak/><LineBreak/>
-                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na optymalizację, potencjalnie lepszy wynik, ale dłuższy czas obliczeń.
+                                                            Ile razy populacja przejdzie proces ewolucji (selekcja, krzyżowanie, mutacja).<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na 'wyhodowanie' lepszych rozwiązań, ale dłuższy czas obliczeń.
                                                         </TextBlock>
                                                     </ToolTip>
                                                 </ToolTipService.ToolTip>
@@ -14858,8 +15158,12 @@ namespace GrafikoMat.Views.Settings
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetGeneticCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
+                            <!-- ANT COLONY -->
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=AntColony}">
-                                <Slider Minimum="10" Maximum="200" SmallChange="5" StepFrequency="5" Value="{x:Bind ViewModel.AntColonyAntsValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.AntColonyAntsMin}" 
+                                        Maximum="{x:Bind ViewModel.AntColonyAntsMax}" 
+                                        StepFrequency="{x:Bind ViewModel.AntColonyAntsStep}" 
+                                        Value="{x:Bind ViewModel.AntColonyAntsValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Liczba mrówek"/>
@@ -14867,8 +15171,8 @@ namespace GrafikoMat.Views.Settings
                                                 <ToolTipService.ToolTip>
                                                     <ToolTip MaxWidth="400">
                                                         <TextBlock TextWrapping="Wrap">
-                                                            Liczba "agentów" poszukujących rozwiązania w każdej iteracji.<LineBreak/><LineBreak/>
-                                                            <Run FontWeight="Bold">Większa wartość:</Run> szersze przeszukiwanie przestrzeni rozwiązań, potencjalnie lepszy wynik, ale wolniejsze działanie.
+                                                            Liczba agentów (mrówek) konstruujących rozwiązania w każdej generacji.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> szersze pokrycie przestrzeni rozwiązań, ale wolniejsze obliczenia.
                                                         </TextBlock>
                                                     </ToolTip>
                                                 </ToolTipService.ToolTip>
@@ -14876,7 +15180,10 @@ namespace GrafikoMat.Views.Settings
                                         </StackPanel>
                                     </Slider.Header>
                                 </Slider>
-                                <Slider Minimum="50" Maximum="1000" SmallChange="50" StepFrequency="50" Value="{x:Bind ViewModel.AntColonyGenerationsValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.AntColonyGenerationsMin}" 
+                                        Maximum="{x:Bind ViewModel.AntColonyGenerationsMax}" 
+                                        StepFrequency="{x:Bind ViewModel.AntColonyGenerationsStep}" 
+                                        Value="{x:Bind ViewModel.AntColonyGenerationsValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Liczba generacji"/>
@@ -14884,8 +15191,8 @@ namespace GrafikoMat.Views.Settings
                                                 <ToolTipService.ToolTip>
                                                     <ToolTip MaxWidth="400">
                                                         <TextBlock TextWrapping="Wrap">
-                                                            Określa, jak długo "mrówki" będą nanosić i podążać za śladami feromonowymi.<LineBreak/><LineBreak/>
-                                                            <Run FontWeight="Bold">Większa wartość:</Run> więcej czasu na zbiegnięcie się algorytmu do dobrego rozwiązania, ale dłuższy czas obliczeń.
+                                                            Ile razy kolonia mrówek przejdzie cykl konstrukcji i wzmocnienia feromonowego.<LineBreak/><LineBreak/>
+                                                            <Run FontWeight="Bold">Większa wartość:</Run> silniejsza konwergencja w kierunku najlepszych tras, ale dłuższy czas obliczeń.
                                                         </TextBlock>
                                                     </ToolTip>
                                                 </ToolTipService.ToolTip>
@@ -14896,11 +15203,15 @@ namespace GrafikoMat.Views.Settings
                                 <Button Content="Przywróć ustawienia domyślne" Command="{x:Bind ViewModel.ResetAntColonyCommand}" HorizontalAlignment="Right"/>
                             </StackPanel>
 
+                            <!-- TABU SEARCH -->
                             <StackPanel Spacing="8" Visibility="{x:Bind ViewModel.SelectedEngine.Type, Mode=OneWay, Converter={StaticResource EnumToVisibilityConverter}, ConverterParameter=TabuSearch}">
-                                <Slider Minimum="10" Maximum="100" SmallChange="5" StepFrequency="5" Value="{x:Bind ViewModel.TabuListSizeValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.TabuListSizeMin}" 
+                                        Maximum="{x:Bind ViewModel.TabuListSizeMax}" 
+                                        StepFrequency="{x:Bind ViewModel.TabuListSizeStep}" 
+                                        Value="{x:Bind ViewModel.TabuListSizeValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <TextBlock Text="Rozmiar listy Tabu"/>
+                                            <TextBlock Text="Rozmiar listy tabu"/>
                                             <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
                                                 <ToolTipService.ToolTip>
                                                     <ToolTip MaxWidth="400">
@@ -14914,7 +15225,10 @@ namespace GrafikoMat.Views.Settings
                                         </StackPanel>
                                     </Slider.Header>
                                 </Slider>
-                                <Slider Minimum="100" Maximum="2000" SmallChange="100" StepFrequency="100" Value="{x:Bind ViewModel.TabuMaxIterationsValue, Mode=TwoWay}">
+                                <Slider Minimum="{x:Bind ViewModel.TabuMaxIterationsMin}" 
+                                        Maximum="{x:Bind ViewModel.TabuMaxIterationsMax}" 
+                                        StepFrequency="{x:Bind ViewModel.TabuMaxIterationsStep}" 
+                                        Value="{x:Bind ViewModel.TabuMaxIterationsValue, Mode=TwoWay}">
                                     <Slider.Header>
                                         <StackPanel Orientation="Horizontal" Spacing="4">
                                             <TextBlock Text="Maksymalna liczba iteracji"/>
@@ -14946,7 +15260,7 @@ namespace GrafikoMat.Views.Settings
                 HorizontalAlignment="Right"
                 Margin="0,20,0,0"/>
     </Grid>
-</UserControl>
+</UserControl>                
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml.cs (2051 bytes)
@@ -23556,7 +23870,7 @@ pause
 
 ----- END -----
 
-===== FILE: UpdateProject.bat (2140 bytes)
+===== FILE: UpdateProject.bat (2136 bytes)
 ----- BEGIN -----
 @echo off
 setlocal EnableExtensions
@@ -23612,7 +23926,7 @@ REM ========================================
 echo [2/2] Aktualizacja Claude Project...
 
 cd /d "%ROOT_DIR%"
-python -m claude-pyrojects.cli update
+py -m claude-pyrojects.cli update
 
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" (

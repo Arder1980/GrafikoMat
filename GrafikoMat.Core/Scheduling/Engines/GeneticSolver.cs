@@ -5,6 +5,7 @@ using GrafikoMat.Core.Scheduling.Validation;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,8 +38,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// </summary>
     public class GeneticSolver : IScheduleSolver
     {
-        // ==================== WEWNĘTRZNA STRUKTURA CHROMOSOMU ====================
-
         private class Chromosome
         {
             public Dictionary<DateTime, DoctorProfile?> Genes { get; set; }
@@ -82,8 +81,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== ISLAND MODEL ====================
-
         private class Island
         {
             public List<Chromosome> Population { get; set; } = new();
@@ -91,57 +88,36 @@ namespace GrafikoMat.Core.Scheduling.Engines
             public Chromosome? BestChromosome { get; set; }
         }
 
-        // ==================== PARAMETRY ALGORYTMU ====================
-
-        // Parametry podstawowe
         private readonly int _populationSize;
         private readonly int _generations;
+        private readonly TimeSpan _timeout;
+        private Stopwatch? _stopwatch;
         private const double InitialCrossoverRate = 0.90;
-        private const int TournamentSize = 8; // Zwiększone z 5
-
-        // FALA 1: Early stopping
+        private const int TournamentSize = 8;
         private const int PatienceGenerations = 30;
         private int _noImprovementCounter = 0;
         private double _lastBestFitness = double.MinValue;
-
-        // FALA 2: Adaptacyjny mutation rate
-        private double GetAdaptiveMutationRate(int generation)
-        {
-            // Liniowa zmiana: 15% → 3%
-            double progress = (double)generation / _generations;
-            return 0.15 - (0.12 * progress);
-        }
-
-        // FALA 3: Island model
         private const int IslandCount = 3;
         private const int MigrationInterval = 20;
         private const int MigrantsCount = 2;
-
-        // FALA 3: Hybrydyzacja
         private const int HillClimbingInterval = 15;
         private const double HillClimbingTopPercentage = 0.20;
 
-        // FALA 3: Diversity maintenance
-        private HashSet<int> _seenHashes = new();
-
-        // Dane wejściowe
         private readonly ScheduleInput _scheduleInput;
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
-
-        // Populacja (Island Model)
         private List<Island> _islands = new();
-
-        // ==================== KONSTRUKTOR ====================
+        private HashSet<int> _seenHashes = new();
 
         public GeneticSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             int populationSize,
             int generations,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -150,39 +126,45 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _progressReporter = progress;
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
+            _timeout = timeout;
 
             _populationSize = populationSize;
             _generations = generations;
         }
 
-        // ==================== GŁÓWNA METODA ROZWIĄZYWANIA ====================
+        private double GetAdaptiveMutationRate(int generation)
+        {
+            double progress = (double)generation / _generations;
+            return 0.15 - (0.12 * progress);
+        }
 
         public ScheduleSolution FindOptimalSolution()
         {
-            // Inicjalizacja island model
+            _stopwatch = Stopwatch.StartNew();
             InitializeIslands();
 
             for (int generation = 0; generation < _generations; generation++)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
-                // Ewolucja każdej wyspy równolegle
+                if (_stopwatch != null && _stopwatch.Elapsed >= _timeout)
+                {
+                    break;
+                }
+
                 Parallel.For(0, IslandCount, islandIdx =>
                 {
                     EvolveIsland(_islands[islandIdx], generation);
                 });
 
-                // Oblicz fitness dla wszystkich wysp
                 CalculateFitnessForAllIslands();
 
-                // Znajdź globalne najlepsze rozwiązanie
                 var globalBest = _islands
                     .Where(i => i.BestChromosome != null)
                     .OrderByDescending(i => i.BestFitness)
                     .First();
 
-                // FALA 1: Early stopping
-                if (globalBest.BestFitness > _lastBestFitness * 1.001) // 0.1% poprawa
+                if (globalBest.BestFitness > _lastBestFitness * 1.001)
                 {
                     _lastBestFitness = globalBest.BestFitness;
                     _noImprovementCounter = 0;
@@ -193,27 +175,23 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     if (_noImprovementCounter >= PatienceGenerations)
                     {
                         _progressReporter?.Report(1.0);
-                        break; // Zakończ wcześniej
+                        break;
                     }
                 }
 
-                // FALA 3: Migracja między wyspami
                 if ((generation + 1) % MigrationInterval == 0 && generation > 0)
                 {
                     PerformMigration();
                 }
 
-                // FALA 3: Hybrydyzacja (lokalny hill-climbing)
                 if ((generation + 1) % HillClimbingInterval == 0 && generation > 0)
                 {
                     PerformHillClimbing();
                 }
 
-                // Raportowanie postępu
                 _progressReporter?.Report((double)(generation + 1) / _generations);
             }
 
-            // Zwróć najlepsze rozwiązanie
             var finalBest = _islands
                 .Where(i => i.BestChromosome != null)
                 .OrderByDescending(i => i.BestFitness)
@@ -221,15 +199,28 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 .BestChromosome!;
 
             var finalWorkload = _utility.CalculateWorkload(finalBest.Genes);
-            return EvaluationAndScoringService.CalculateMetrics(finalBest.Genes, finalWorkload, _scheduleInput);
-        }
+            var finalSolution = EvaluationAndScoringService.CalculateMetrics(finalBest.Genes, finalWorkload, _scheduleInput);
 
-        // ==================== INICJALIZACJA WYSP ====================
+            _stopwatch?.Stop();
+
+            finalSolution = finalSolution with
+            {
+                ComputationTime = _stopwatch?.Elapsed ?? TimeSpan.Zero,
+                OptimalityNote = _stopwatch?.Elapsed >= _timeout
+                    ? "Best solution found (timeout reached)"
+                    : _noImprovementCounter >= PatienceGenerations
+                        ? "Best solution found (early stopping)"
+                        : "Solution found (evolution completed)"
+            };
+
+            return finalSolution;
+        }
 
         private void InitializeIslands()
         {
             _islands = new List<Island>();
             int populationPerIsland = _populationSize / IslandCount;
+            const int MaxAttemptsPerChromosome = 100; // Maksymalna liczba prób dla jednego chromosomu
 
             for (int i = 0; i < IslandCount; i++)
             {
@@ -237,17 +228,33 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 for (int j = 0; j < populationPerIsland; j++)
                 {
-                    var chromosome = new Chromosome(_utility.CreateRandomSolution());
+                    Chromosome? chromosome = null;
+                    int attempts = 0;
 
-                    // FALA 3: Diversity maintenance - odrzuć duplikaty
-                    if (!_seenHashes.Contains(chromosome.Hash))
+                    // Próbuj znaleźć unikalny chromosom, ale z limitem prób
+                    while (attempts < MaxAttemptsPerChromosome)
+                    {
+                        chromosome = new Chromosome(_utility.CreateRandomSolution());
+
+                        if (!_seenHashes.Contains(chromosome.Hash))
+                        {
+                            _seenHashes.Add(chromosome.Hash);
+                            break; // Znaleziono unikalny
+                        }
+
+                        attempts++;
+                    }
+
+                    // Jeśli znaleziono chromosom (unikalny lub po wyczerpaniu prób)
+                    if (chromosome != null)
                     {
                         island.Population.Add(chromosome);
-                        _seenHashes.Add(chromosome.Hash);
-                    }
-                    else
-                    {
-                        j--; // Spróbuj ponownie
+
+                        // Jeśli wyczerpano próby, dodaj mimo duplikatu (rzadki przypadek małej przestrzeni)
+                        if (attempts >= MaxAttemptsPerChromosome && !_seenHashes.Contains(chromosome.Hash))
+                        {
+                            _seenHashes.Add(chromosome.Hash);
+                        }
                     }
                 }
 
@@ -255,14 +262,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== EWOLUCJA POJEDYNCZEJ WYSPY ====================
-
         private void EvolveIsland(Island island, int generation)
         {
             var newPopulation = new ConcurrentBag<Chromosome>();
-            int eliteCount = Math.Max(1, (int)(island.Population.Count * 0.15)); // FALA 1: 15% elityzm
+            int eliteCount = Math.Max(1, (int)(island.Population.Count * 0.15));
 
-            // FALA 1: Elityzm - zachowaj najlepsze osobniki
             var elites = island.Population
                 .OrderByDescending(c => c.Fitness)
                 .Take(eliteCount)
@@ -273,7 +277,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 newPopulation.Add(elite.Clone());
             }
 
-            // Generuj resztę populacji
             int remaining = island.Population.Count - eliteCount;
 
             Parallel.For(0, remaining, _ =>
@@ -283,7 +286,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 var child = Crossover(parent1, parent2);
                 Mutation(child, generation);
 
-                // FALA 3: Diversity maintenance
                 lock (_seenHashes)
                 {
                     if (!_seenHashes.Contains(child.Hash))
@@ -293,7 +295,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                     else
                     {
-                        // Duplikat - dodaj mutanta elity zamiast
                         var mutant = elites[_random.Next(elites.Count)].Clone();
                         Mutation(mutant, generation);
                         mutant.UpdateHash();
@@ -304,8 +305,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             island.Population = newPopulation.ToList();
         }
-
-        // ==================== OBLICZANIE FITNESS DLA WSZYSTKICH WYSP ====================
 
         private void CalculateFitnessForAllIslands()
         {
@@ -320,14 +319,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         metrics, _priorities, _scheduleInput);
                 });
 
-                // Aktualizuj najlepszego na wyspie
                 var best = island.Population.OrderByDescending(c => c.Fitness).First();
                 island.BestFitness = best.Fitness;
                 island.BestChromosome = best.Clone();
             }
         }
-
-        // ==================== SELEKCJA (TURNIEJ) ====================
+        // KONTYNUACJA GeneticSolver.cs - operatory genetyczne i metody pomocnicze
 
         private Chromosome Selection(List<Chromosome> population)
         {
@@ -339,8 +336,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return tournament.OrderByDescending(c => c.Fitness).First();
         }
 
-        // ==================== KRZYŻOWANIE (UNIFORM) ====================
-
         private Chromosome Crossover(Chromosome parent1, Chromosome parent2)
         {
             if (_random.NextDouble() > InitialCrossoverRate)
@@ -348,19 +343,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 return parent1.Clone();
             }
 
-            // FALA 2: Uniform crossover zamiast single-point
             var days = _scheduleInput.DaysInMonth;
             var childGenes = new Dictionary<DateTime, DoctorProfile?>();
 
             foreach (var day in days)
             {
-                // 50% szans na gen od każdego rodzica
                 childGenes[day] = _random.NextDouble() < 0.5
                     ? parent1.Genes[day]
                     : parent2.Genes[day];
             }
 
-            // FALA 1: Inteligentne naprawianie - tylko gdy potrzeba
             if (NeedsRepair(childGenes))
             {
                 ConstraintValidationService.RepairSchedule(childGenes, _scheduleInput);
@@ -369,20 +361,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return new Chromosome(childGenes);
         }
 
-        // ==================== MUTACJA (SMART + ADAPTACYJNA) ====================
-
         private void Mutation(Chromosome chromosome, int generation)
         {
             double mutationRate = GetAdaptiveMutationRate(generation);
             var days = _scheduleInput.DaysInMonth.ToList();
 
-            // FALA 2: Smart mutation - sortuj dni wg dostępności (priorytet dla trudnych dni)
             var daysByDifficulty = days.OrderBy(day =>
             {
                 var availableCount = _scheduleInput.Availability[day]
                     .Count(kvp => kvp.Value == AvailabilityType.Available ||
                                   kvp.Value == AvailabilityType.ConditionallyAvailable);
-                return availableCount; // Mniej dostępnych = wyższy priorytet
+                return availableCount;
             }).ToList();
 
             bool anyMutation = false;
@@ -391,7 +380,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 if (_random.NextDouble() < mutationRate)
                 {
-                    // FALA 1: Efektywna mutacja - bezpośrednia zmiana bez GenerateNeighbor
                     var currentDoctor = chromosome.Genes[day];
                     var workload = _utility.CalculateWorkload(chromosome.Genes);
                     var usedConditionals = CalculateUsedConditionals(chromosome.Genes);
@@ -401,12 +389,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                     if (candidates.Any())
                     {
-                        // Preferuj lekarzy z mniejszym obciążeniem
                         var sortedCandidates = candidates
                             .OrderBy(d => workload.GetValueOrDefault(d.Abbreviation, 0))
                             .ToList();
 
-                        // 70% szans na top 3, 30% na losowy
                         var chosenDoctor = _random.NextDouble() < 0.7
                             ? sortedCandidates[_random.Next(Math.Min(3, sortedCandidates.Count))]
                             : sortedCandidates[_random.Next(sortedCandidates.Count)];
@@ -422,7 +408,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             if (anyMutation)
             {
-                // FALA 1: Napraw tylko jeśli była mutacja i jest potrzeba
                 if (NeedsRepair(chromosome.Genes))
                 {
                     ConstraintValidationService.RepairSchedule(chromosome.Genes, _scheduleInput);
@@ -431,14 +416,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== POMOCNICZE: SPRAWDZENIE CZY POTRZEBA NAPRAWY ====================
-
         private bool NeedsRepair(Dictionary<DateTime, DoctorProfile?> schedule)
         {
             var workload = _utility.CalculateWorkload(schedule);
             var usedConditionals = CalculateUsedConditionals(schedule);
 
-            // Sprawdź limity dyżurów
             foreach (var (doctorAbbr, count) in workload)
             {
                 var limit = _scheduleInput.DutyLimits.GetValueOrDefault(doctorAbbr, 0);
@@ -446,7 +428,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     return true;
             }
 
-            // Sprawdź limity conditional - tylko jeden conditional dozwolony na lekarza
             foreach (var doctorAbbr in usedConditionals)
             {
                 int conditionalCount = 0;
@@ -479,11 +460,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return used;
         }
 
-        // ==================== FALA 3: MIGRACJA MIĘDZY WYSPAMI ====================
-
         private void PerformMigration()
         {
-            // Każda wyspa wysyła swoich najlepszych migrantów do następnej wyspy (ring topology)
             for (int i = 0; i < IslandCount; i++)
             {
                 var sourceIsland = _islands[i];
@@ -495,7 +473,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     .Select(c => c.Clone())
                     .ToList();
 
-                // Zastąp najgorszych w docelowej wyspie
                 var worst = targetIsland.Population
                     .OrderBy(c => c.Fitness)
                     .Take(MigrantsCount)
@@ -510,8 +487,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        // ==================== FALA 3: HYBRYDYZACJA (HILL-CLIMBING) ====================
-
         private void PerformHillClimbing()
         {
             foreach (var island in _islands)
@@ -524,14 +499,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 Parallel.ForEach(topChromosomes, chromosome =>
                 {
-                    // Prosty hill-climbing: spróbuj 3 losowych mutacji, zachowaj lepszą
                     var current = chromosome.Clone();
 
                     for (int attempt = 0; attempt < 3; attempt++)
                     {
                         var neighbor = current.Clone();
 
-                        // Jedna losowa zmiana
                         var randomDay = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
                         var workload = _utility.CalculateWorkload(neighbor.Genes);
                         var usedConditionals = CalculateUsedConditionals(neighbor.Genes);
@@ -550,14 +523,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                             neighbor.UpdateHash();
 
-                            // Oblicz fitness
                             var neighborWorkload = _utility.CalculateWorkload(neighbor.Genes);
                             var neighborMetrics = EvaluationAndScoringService.CalculateMetrics(
                                 neighbor.Genes, neighborWorkload, _scheduleInput);
                             neighbor.Fitness = EvaluationAndScoringService.CalculateScore(
                                 neighborMetrics, _priorities, _scheduleInput);
 
-                            // Zachowaj tylko jeśli lepszy
                             if (neighbor.Fitness > current.Fitness)
                             {
                                 current = neighbor;
@@ -565,7 +536,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         }
                     }
 
-                    // Aktualizuj oryginał jeśli znaleziono lepsze
                     if (current.Fitness > chromosome.Fitness)
                     {
                         chromosome.Genes = current.Genes;

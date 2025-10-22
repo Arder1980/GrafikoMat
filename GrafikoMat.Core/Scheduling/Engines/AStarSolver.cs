@@ -23,10 +23,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly List<SolverPriority> _priorities;
         private readonly IProgress<double>? _progress;
         private readonly CancellationToken _cancellationToken;
+        private readonly TimeSpan _timeout;
 
         public AStarSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
+            TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -34,6 +36,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _priorities = priorities;
             _progress = progress;
             _cancellationToken = cancellationToken;
+            _timeout = timeout;
             _sequence = 0;
         }
 
@@ -62,18 +65,24 @@ namespace GrafikoMat.Core.Scheduling.Engines
             long expandedNodes = 0;
             long prunedByUpperBound = 0;
             long duplicateStates = 0;
+            bool timeoutReached = false;
 
-            // Dodaj początkowy stan do kolejki
             Enqueue(priorityQueue, context0);
 
             while (priorityQueue.Count > 0)
             {
                 _cancellationToken.ThrowIfCancellationRequested();
 
+                // Sprawdzenie timeoutu
+                if (stopwatch.Elapsed >= _timeout)
+                {
+                    timeoutReached = true;
+                    break;
+                }
+
                 var context = priorityQueue.Dequeue();
                 expandedNodes++;
 
-                // Memoizacja: sprawdź czy ten stan był już odwiedzony
                 string stateKey = BuildStateKey(context);
                 if (visitedStates.Contains(stateKey))
                 {
@@ -82,11 +91,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 }
                 visitedStates.Add(stateKey);
 
-                // Sprawdź czy to kompletne rozwiązanie
                 int nextDayIndex = context.GetEarliestUnassignedDayIndex();
                 if (nextDayIndex < 0)
                 {
-                    // Kompletny grafik - oceń i zapisz jeśli najlepszy
                     var solution = BuildSolution(context);
                     double reward = EvaluateSolutionReward(solution);
 
@@ -98,7 +105,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     continue;
                 }
 
-                // Upper bound pruning: jeśli ten częściowy stan nie może poprawić najlepszego kompletnego, skip
                 double stateReward = PartialSolutionEvaluator.EvaluateState(context, _priorities, _input);
                 if (bestCompleteSolution != null && stateReward <= bestCompleteReward)
                 {
@@ -106,10 +112,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     continue;
                 }
 
-                // Ekspansja węzła: generuj stany-dzieci
                 ExpandNode(context, priorityQueue);
 
-                // Raportuj postęp co ~1024 węzły
                 if ((expandedNodes & 0x3FF) == 0)
                 {
                     int assignedCount = context.Assignments.Count(a => a >= 0);
@@ -121,21 +125,20 @@ namespace GrafikoMat.Core.Scheduling.Engines
             stopwatch.Stop();
             _progress?.Report(1.0);
 
-            // Finalizacja: dodaj informacje diagnostyczne
-            bool isOptimal = (priorityQueue.Count == 0); // Kolejka pusta = przeszukano wszystko
+            bool isOptimal = (priorityQueue.Count == 0 && !timeoutReached);
             string optimalityNote = isOptimal
                 ? "Optimal solution found (search space exhausted)"
-                : "Best solution found (computation cancelled)";
+                : timeoutReached
+                    ? "Best solution found (timeout reached)"
+                    : "Best solution found (computation cancelled)";
 
             if (bestCompleteSolution == null)
             {
-                // Nie znaleziono żadnego kompletnego rozwiązania - zwróć pusty grafik
                 bestCompleteSolution = BuildEmptySolution();
                 optimalityNote = "No complete solution found";
                 isOptimal = false;
             }
 
-            // Stwórz nowe rozwiązanie z diagnostyką
             return new ScheduleSolution
             {
                 Assignments = bestCompleteSolution.Assignments,
@@ -146,8 +149,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 FairnessIndex = bestCompleteSolution.FairnessIndex,
                 SpacingIndex = bestCompleteSolution.SpacingIndex,
                 FinalWorkload = bestCompleteSolution.FinalWorkload,
-
-                // Diagnostyka
                 IsProvablyOptimal = isOptimal,
                 NodesExpanded = expandedNodes,
                 ComputationTime = stopwatch.Elapsed,
@@ -162,23 +163,18 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        /// <summary>
-        /// Rozwija węzeł: generuje wszystkie możliwe stany-dzieci (pusty dzień + każdy kandydat).
-        /// </summary>
         private void ExpandNode(SchedulingRules.Context context, PriorityQueue<SchedulingRules.Context, PriorityKey> queue)
         {
             int nextDayIndex = context.GetEarliestUnassignedDayIndex();
-            if (nextDayIndex < 0) return; // Nie powinno się zdarzyć
+            if (nextDayIndex < 0) return;
 
             var candidates = SchedulingRules.OrderCandidates(nextDayIndex, context);
 
-            // Gałąź 1: Pusty dzień
             var emptyChild = CloneContext(context);
             emptyChild.Assignments[nextDayIndex] = EMPTY;
-            emptyChild.IsPrefixActive = false; // Dziura w grafiku przerywa prefix
+            emptyChild.IsPrefixActive = false;
             EnqueueChild(emptyChild);
 
-            // Gałęzie 2+: Każdy kandydat
             foreach (int docIndex in candidates)
             {
                 var child = CloneContext(context);
@@ -190,7 +186,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     child.ConditionalsUsed[docIndex]++;
                 }
 
-                // Sprawdź czy prefix jest aktywny
                 bool keepsPrefix = (nextDayIndex == 0) || (child.Assignments[nextDayIndex - 1] != SchedulingRules.UNASSIGNED);
                 child.IsPrefixActive = child.IsPrefixActive && keepsPrefix;
 
@@ -205,13 +200,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
         }
 
-        /// <summary>
-        /// Klucz priorytetowy dla kolejki: wyższy reward = wyższy priorytet (maksymalizacja).
-        /// </summary>
         private readonly struct PriorityKey : IComparable<PriorityKey>
         {
-            public readonly double Reward; // Im wyższy, tym lepszy
-            public readonly long Sequence; // Tie-breaker
+            public readonly double Reward;
+            public readonly long Sequence;
 
             public PriorityKey(double reward, long sequence)
             {
@@ -221,16 +213,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             public int CompareTo(PriorityKey other)
             {
-                // ODWRÓCONE: wyższy reward = wyższy priorytet (dequeue first)
                 int c = other.Reward.CompareTo(this.Reward);
                 if (c != 0) return c;
-                return Sequence.CompareTo(other.Sequence); // Starsze najpierw (FIFO przy remisie)
+                return Sequence.CompareTo(other.Sequence);
             }
         }
 
-        /// <summary>
-        /// Klonuje kontekst (głęboka kopia tablic).
-        /// </summary>
         private static SchedulingRules.Context CloneContext(SchedulingRules.Context src)
         {
             var assignments = new int[src.DayCount];
@@ -248,12 +236,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             );
         }
 
-        /// <summary>
-        /// Buduje klucz stanu dla memoizacji (unikanie duplikatów).
-        /// </summary>
         private static string BuildStateKey(SchedulingRules.Context ctx)
         {
-            // Prosty hash: assignments + workload + conditionals
             var parts = new List<string>(ctx.DayCount + ctx.DoctorCount * 2);
 
             parts.Add("A:");
@@ -271,9 +255,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return string.Join(",", parts);
         }
 
-        /// <summary>
-        /// Konwertuje kontekst na ScheduleSolution.
-        /// </summary>
         private ScheduleSolution BuildSolution(SchedulingRules.Context ctx)
         {
             var map = new Dictionary<DateTime, DoctorProfile?>(ctx.DayCount);
@@ -302,9 +283,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
         }
 
-        /// <summary>
-        /// Tworzy puste rozwiązanie (fallback gdy nie znaleziono żadnego).
-        /// </summary>
         private ScheduleSolution BuildEmptySolution()
         {
             var emptyMap = new Dictionary<DateTime, DoctorProfile?>();
@@ -318,16 +296,11 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(emptyMap, emptyWorkload, _input);
         }
 
-        /// <summary>
-        /// Oblicza reward (wartość maksymalizowaną) dla kompletnego rozwiązania.
-        /// Używa tej samej logiki co PartialSolutionEvaluator dla spójności.
-        /// </summary>
         private double EvaluateSolutionReward(ScheduleSolution solution)
         {
             double reward = 0.0;
             double scale = 1e15;
 
-            // Rezerwacje najważniejsze
             reward += solution.FulfilledReservations * 1e18;
 
             int totalDays = _input.DaysInMonth.Count;
@@ -368,7 +341,6 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 scale /= 1000.0;
             }
 
-            // Dodatkowe bonusy
             reward += solution.FulfilledWants * 1e6;
             reward += solution.FulfilledAvailables * 1e3;
 

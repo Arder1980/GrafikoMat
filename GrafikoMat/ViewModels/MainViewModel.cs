@@ -41,6 +41,9 @@ namespace GrafikoMat.ViewModels
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
         private SettingsService? _settingsService;
+        private IUxActionOrchestrator? _orchestrator;
+
+        private readonly Guid _viewId = Guid.NewGuid();
 
         private readonly List<DoctorProfile> _allDoctors = new();
         private readonly List<UnitDoctorAssignment> _allAssignments = new();
@@ -146,6 +149,11 @@ namespace GrafikoMat.ViewModels
         public void SetSettingsService(SettingsService settingsService)
         {
             _settingsService = settingsService;
+        }
+
+        public void SetOrchestrator(IUxActionOrchestrator orchestrator)
+        {
+            _orchestrator = orchestrator;
         }
 
         public async Task LoadUserAndUnitDataAsync()
@@ -376,9 +384,9 @@ namespace GrafikoMat.ViewModels
 
         public async Task GenerateScheduleAsync()
         {
-            if (_settingsService == null || ActiveUnit == null)
+            if (_settingsService == null || ActiveUnit == null || _orchestrator == null)
             {
-                // TODO: Pokaż błąd - brak jednostki lub serwisu ustawień
+                // TODO: Pokaż błąd - brak jednostki, serwisu ustawień lub orkiestratora
                 return;
             }
 
@@ -391,13 +399,13 @@ namespace GrafikoMat.ViewModels
             }
 
             // --- Przygotowanie ScheduleInput ---
-            // TODO: Zastąpić poniższy kod rzeczywistym wczytywaniem deklaracji dla wybranego miesiąca
             var doctorsForSchedule = DoctorRows.Select(dr => dr.Profile).ToList();
             if (!doctorsForSchedule.Any())
             {
                 // TODO: Pokaż błąd - brak lekarzy dla jednostki
                 return;
             }
+
             // Przykład budowania Availability (na podstawie danych z _declByKey - DO ROZWINIĘCIA)
             var availability = new Dictionary<DateTime, Dictionary<string, AvailabilityType>>();
             int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
@@ -417,45 +425,68 @@ namespace GrafikoMat.ViewModels
             var scheduleInput = new ScheduleInput
             {
                 Doctors = doctorsForSchedule,
-                Availability = availability, // Użyj wczytanych/przykładowych danych
+                Availability = availability,
                 DutyLimits = doctorsForSchedule.ToDictionary(dr => dr.Abbreviation, dr => 10) // Przykładowy limit, TODO: Wczytać prawdziwe limity
-                // AllowTeleradiologyFallback NIE jest tutaj potrzebne
             };
             // --- Koniec przygotowania ScheduleInput ---
 
-
-            ScheduleSolution solution;
-            try
+            var solverParams = new SolverParameters
             {
-                var solverParams = new SolverParameters
+                SolverType = settings.SelectedSolver,
+                TimeoutMinutes = settings.TimeoutMinutes,
+                CoolingRate = settings.CoolingRate,
+                GeneticPopulationSize = settings.GeneticPopulationSize,
+                GeneticGenerations = settings.GeneticGenerations,
+                AntColonyAnts = settings.AntColonyAnts,
+                AntColonyGenerations = settings.AntColonyGenerations,
+                TabuListSize = settings.TabuListSize,
+                TabuMaxIterations = settings.TabuMaxIterations
+            };
+
+            // Wykryj czy solver jest deterministyczny (nie ma sensownego progressu 0-100%)
+            bool isDeterministicSolver = SolverMessages.IsDeterministicSolver(settings.SelectedSolver);
+
+            // Wygeneruj nazwę silnika do wyświetlenia
+            var engineName = settings.SelectedSolver switch
+            {
+                SolverType.Backtracking => "BacktrackingSolver (algorytm z nawrotami)",
+                SolverType.AStar => "AStarSolver (algorytm A*)",
+                SolverType.Genetic => "GeneticSolver (algorytm genetyczny)",
+                SolverType.SimulatedAnnealing => "SimulatedAnnealingSolver (algorytm symulowanego wyżarzania)",
+                SolverType.TabuSearch => "TabuSearchSolver (algorytm przeszukiwania z tabu)",
+                SolverType.AntColony => "AntColonySolver (algorytm kolonii mrówek)",
+                _ => settings.SelectedSolver.ToString()
+            };
+
+            // Użyj orkiestratora do długotrwałej operacji z progressem
+            bool success = await _orchestrator.PerformLongRunningTaskAsync(
+                viewId: _viewId,
+                title: "Generowanie grafiku",
+                engineName: engineName,
+                operationAsync: async (progress, cancellationToken) =>
                 {
-                    SolverType = settings.SelectedSolver,
-                    CoolingRate = settings.CoolingRate,
-                    GeneticPopulationSize = settings.GeneticPopulationSize,
-                    GeneticGenerations = settings.GeneticGenerations,
-                    AntColonyAnts = settings.AntColonyAnts,
-                    AntColonyGenerations = settings.AntColonyGenerations,
-                    TabuListSize = settings.TabuListSize,
-                    TabuMaxIterations = settings.TabuMaxIterations
-                };
-                var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities);
+                    // Walidacja nastąpi w ScheduleSolverFactory.Create() - rzuci ArgumentException
+                    var solver = ScheduleSolverFactory.Create(scheduleInput, solverParams, activePriorities, progress: new Progress<double>(p =>
+                    {
+                        // Pobierz odpowiedni komunikat dla tego solvera i postępu
+                        string statusText = SolverMessages.GetStatusMessage(settings.SelectedSolver, p);
+                        progress.Report((p, statusText));
+                    }), token: cancellationToken);
 
-                // Wywołanie solvera w tle
-                // TODO: Dodać obsługę progresu i anulowania
-                solution = await Task.Run(() => solver.FindOptimalSolution());
-
-                _lastGeneratedSolution = solution; // Zapisz wynik
-
-            }
-            catch (Exception ex)
-            {
-                // TODO: Pokaż błąd generowania
-                Console.WriteLine($"Błąd generowania grafiku: {ex.Message}"); // Tymczasowy log
-                _lastGeneratedSolution = null; // Wyczyść stary wynik w razie błędu
-            }
+                    var solution = await Task.Run(() => solver.FindOptimalSolution(), cancellationToken);
+                    _lastGeneratedSolution = solution;
+                },
+                successMessage: "Grafik został wygenerowany pomyślnie.",
+                errorMessageTitle: "Błąd generowania grafiku",
+                isCancellable: true,
+                showIndeterminateProgress: isDeterministicSolver  // ← ProgressRing dla Backtracking/A*, ProgressBar dla metaheurystyk
+            );
 
             // Odśwież widok tabeli z wynikiem (RosterRows)
-            UpdateRosterForSelectedMonth();
+            if (success)
+            {
+                UpdateRosterForSelectedMonth();
+            }
         }
     }
 

@@ -12,7 +12,6 @@ namespace GrafikoMat.Services
     public enum AppTheme { Light, Dark, SystemDefault }
 
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
-    // Fragment SettingsService.cs - TYLKO zmieniony fragment record AppSettings
 
     public record AppSettings
     {
@@ -28,17 +27,17 @@ namespace GrafikoMat.Services
 
         public List<PrioritySetting> Priorities { get; init; } = new();
 
-        public double CoolingRate { get; init; } = 0.995;
-        public int GeneticPopulationSize { get; init; } = 100;
-        public int GeneticGenerations { get; init; } = 300;
+        // Timeout globalny (w minutach)
+        public int TimeoutMinutes { get; init; } = SolverDefaults.TimeoutMinutes.Default;
 
-        // ====== ZMIANA: Nowe wartości domyślne dla PRECISION+ ======
-        // BYŁO: AntColonyAnts = 75, AntColonyGenerations = 300
-        public int AntColonyAnts { get; init; } = 40;          // było 75
-        public int AntColonyGenerations { get; init; } = 120;  // było 300
-
-        public int TabuListSize { get; init; } = 30;
-        public int TabuMaxIterations { get; init; } = 500;
+        // Parametry silników - używamy wartości domyślnych z SolverDefaults
+        public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
+        public int GeneticPopulationSize { get; init; } = SolverDefaults.GeneticPopulationSize.Default;
+        public int GeneticGenerations { get; init; } = SolverDefaults.GeneticGenerations.Default;
+        public int AntColonyAnts { get; init; } = SolverDefaults.AntColonyAnts.Default;
+        public int AntColonyGenerations { get; init; } = SolverDefaults.AntColonyGenerations.Default;
+        public int TabuListSize { get; init; } = SolverDefaults.TabuListSize.Default;
+        public int TabuMaxIterations { get; init; } = SolverDefaults.TabuMaxIterations.Default;
     }
 
     public record WindowSize(int Width, int Height);
@@ -50,6 +49,7 @@ namespace GrafikoMat.Services
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
+
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
             if (_currentSettings != null && !forceReload)
@@ -71,58 +71,54 @@ namespace GrafikoMat.Services
             }
 
             _currentSettings ??= new AppSettings();
-            if (_currentSettings.Priorities == null || !_currentSettings.Priorities.Any())
-            {
-                _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
-            }
-            else
-            {
-                var existingPriorities = _currentSettings.Priorities.Select(p => p.Priority).ToHashSet();
-                var allPriorities = (SolverPriority[])Enum.GetValues(typeof(SolverPriority));
-                bool needsUpdate = false;
-                var updatedList = new List<PrioritySetting>(_currentSettings.Priorities);
-                foreach (var priority in allPriorities)
-                {
-                    if (!existingPriorities.Contains(priority))
-                    {
-                        updatedList.Add(new PrioritySetting(priority, true));
-                        needsUpdate = true;
-                    }
-                }
-                if (needsUpdate)
-                {
-                    _currentSettings = _currentSettings with { Priorities = updatedList };
-                }
-            }
-
             return _currentSettings;
-        }
-
-        public void SaveSettings(AppSettings settings)
-        {
-            if (settings == null) throw new ArgumentNullException(nameof(settings));
-            _currentSettings = settings;
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_settingsPath, json);
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
-            if (settings == null) throw new ArgumentNullException(nameof(settings));
             _currentSettings = settings;
-            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(_settingsPath, json);
+            try
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                var json = JsonSerializer.Serialize(settings, options);
+                await File.WriteAllTextAsync(_settingsPath, json);
+            }
+            catch (Exception)
+            {
+                // W przypadku błędu - logowanie lub rethrow
+            }
         }
 
-        private List<PrioritySetting> GetDefaultPriorities()
+        public SolverParameters BuildSolverParameters(AppSettings settings)
         {
-            return new List<PrioritySetting>
+            var activePriorities = settings.Priorities
+                .Where(p => p.IsActive)
+                .Select(p => p.Priority)
+                .ToList();
+
+            if (activePriorities.Count == 0)
             {
-                new(SolverPriority.InitialContinuity, true),
-                new(SolverPriority.TotalAssignments, true),
-                new(SolverPriority.Fairness, true),
-                new(SolverPriority.Spacing, true),
-                new(SolverPriority.DeclarationCompliance, true)
+                activePriorities = new List<SolverPriority>
+                {
+                    SolverPriority.InitialContinuity,
+                    SolverPriority.TotalAssignments,
+                    SolverPriority.Fairness,
+                    SolverPriority.Spacing,
+                    SolverPriority.DeclarationCompliance
+                };
+            }
+
+            return new SolverParameters
+            {
+                SolverType = settings.SelectedSolver,
+                TimeoutMinutes = settings.TimeoutMinutes,
+                CoolingRate = settings.CoolingRate,
+                GeneticPopulationSize = settings.GeneticPopulationSize,
+                GeneticGenerations = settings.GeneticGenerations,
+                AntColonyAnts = settings.AntColonyAnts,
+                AntColonyGenerations = settings.AntColonyGenerations,
+                TabuListSize = settings.TabuListSize,
+                TabuMaxIterations = settings.TabuMaxIterations
             };
         }
     }

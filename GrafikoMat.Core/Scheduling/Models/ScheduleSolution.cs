@@ -9,7 +9,7 @@ namespace GrafikoMat.Core.Scheduling.Models
     /// Reprezentuje finalny, obliczony grafik wraz z metrykami jakościowymi.
     /// Wersja zaadaptowana z GrafikWPF (RozwiazanyGrafik).
     /// </summary>
-    public class ScheduleSolution
+    public record ScheduleSolution
     {
         /// <summary>
         /// Główny wynik - słownik przypisujący lekarza (lub null) do konkretnego dnia.

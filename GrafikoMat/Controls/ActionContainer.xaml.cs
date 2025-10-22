@@ -11,7 +11,9 @@ namespace GrafikoMat.Controls
     public sealed partial class ActionContainer : UserControl,
         IRecipient<ShowBusyOverlayMessage>,
         IRecipient<ShowStatusOverlayMessage>,
-        IRecipient<HideOverlayMessage>
+        IRecipient<HideOverlayMessage>,
+        IRecipient<ShowProgressOverlayMessage>,
+        IRecipient<UpdateProgressMessage>
     {
         private readonly Guid _viewId = Guid.NewGuid();
 
@@ -161,6 +163,15 @@ namespace GrafikoMat.Controls
 
             DispatcherQueue.TryEnqueue(() =>
             {
+                // Ukryj progress overlay jeśli jest widoczny
+                if (ProgressOverlay.Visibility == Visibility.Visible)
+                {
+                    ProgressOverlay.Visibility = Visibility.Collapsed;
+                    IndeterminateProgress.IsActive = false;
+                    FadeInStoryboard.Begin();
+                    return;
+                }
+
                 // Fade-out InfoBar
                 if (CustomInfoBar.Visibility == Visibility.Visible)
                 {
@@ -184,6 +195,81 @@ namespace GrafikoMat.Controls
                     FadeInStoryboard.Begin();
                 }
             });
+        }
+
+        public void Receive(ShowProgressOverlayMessage message)
+        {
+            if (message.ViewId != _viewId) return;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // Fade-out zawartości
+                FadeOutStoryboard.Begin();
+
+                FadeOutStoryboard.Completed += (s, e) =>
+                {
+                    // Ustaw tytuł i nazwę silnika
+                    ProgressTitle.Text = message.Title;
+                    ProgressEngineName.Text = $"Silnik: {message.EngineName}";
+
+                    // Pokaż/ukryj przycisk Cancel
+                    CancelButton.Visibility = message.IsCancellable ? Visibility.Visible : Visibility.Collapsed;
+
+                    // Wybierz ProgressBar lub ProgressRing
+                    if (message.IsIndeterminate)
+                    {
+                        // Deterministyczne solvery (Backtracking, A*) - ProgressRing
+                        IndeterminateProgress.Visibility = Visibility.Visible;
+                        IndeterminateProgress.IsActive = true;
+                        DeterminateProgress.Visibility = Visibility.Collapsed;
+                        DeterminateProgress.Value = 0;
+                    }
+                    else
+                    {
+                        // Metaheurystyki - ProgressBar
+                        DeterminateProgress.Visibility = Visibility.Visible;
+                        DeterminateProgress.Value = 0;
+                        IndeterminateProgress.Visibility = Visibility.Collapsed;
+                        IndeterminateProgress.IsActive = false;
+                    }
+
+                    // Resetuj tekst statusu
+                    ProgressStatusText.Text = "Inicjalizacja...";
+
+                    // Pokaż overlay
+                    ProgressOverlay.Visibility = Visibility.Visible;
+                };
+            });
+        }
+
+        public void Receive(UpdateProgressMessage message)
+        {
+            if (message.ViewId != _viewId) return;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // Aktualizuj ProgressBar jeśli jest widoczny
+                if (DeterminateProgress.Visibility == Visibility.Visible)
+                {
+                    DeterminateProgress.Value = message.Progress * 100;
+                }
+
+                // Aktualizuj tekst statusu jeśli podano
+                if (!string.IsNullOrEmpty(message.StatusText))
+                {
+                    ProgressStatusText.Text = message.StatusText;
+                }
+            });
+        }
+
+        private void OnCancelClicked(object sender, RoutedEventArgs e)
+        {
+            // Wyślij komunikat anulowania
+            WeakReferenceMessenger.Default.Send(new CancelOperationMessage(_viewId));
+
+            // Opcjonalnie: wyłącz przycisk aby zapobiec wielokrotnemu kliknięciu
+            CancelButton.IsEnabled = false;
+            CancelButton.Content = "Anulowanie...";
         }
 
         public Guid GetViewId() => _viewId;
