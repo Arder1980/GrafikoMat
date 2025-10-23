@@ -97,7 +97,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private const int PatienceGenerations = 30;
         private int _noImprovementCounter = 0;
         private double _lastBestFitness = double.MinValue;
-        private const int IslandCount = 3;
+        private readonly int _islandCount;
         private const int MigrationInterval = 20;
         private const int MigrantsCount = 2;
         private const int HillClimbingInterval = 15;
@@ -109,6 +109,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
+        private readonly ParallelOptions _parallelOptions;
         private List<Island> _islands = new();
         private HashSet<int> _seenHashes = new();
 
@@ -119,7 +120,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int generations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -130,6 +132,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _populationSize = populationSize;
             _generations = generations;
+
+            // Konfiguracja wielowątkowości
+            _islandCount = ParallelismConfig.GetIslandsCount(customThreadCount);
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         private double GetAdaptiveMutationRate(int generation)
@@ -152,7 +158,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     break;
                 }
 
-                Parallel.For(0, IslandCount, islandIdx =>
+                Parallel.For(0, _islandCount, islandIdx =>
                 {
                     EvolveIsland(_islands[islandIdx], generation);
                 });
@@ -219,10 +225,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private void InitializeIslands()
         {
             _islands = new List<Island>();
-            int populationPerIsland = _populationSize / IslandCount;
+            int populationPerIsland = _populationSize / _islandCount;
             const int MaxAttemptsPerChromosome = 100; // Maksymalna liczba prób dla jednego chromosomu
 
-            for (int i = 0; i < IslandCount; i++)
+            for (int i = 0; i < _islandCount; i++)
             {
                 var island = new Island();
 
@@ -279,7 +285,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             int remaining = island.Population.Count - eliteCount;
 
-            Parallel.For(0, remaining, _ =>
+            Parallel.For(0, remaining, _parallelOptions, _ =>
             {
                 var parent1 = Selection(island.Population);
                 var parent2 = Selection(island.Population);
@@ -310,7 +316,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         {
             foreach (var island in _islands)
             {
-                Parallel.ForEach(island.Population, chromosome =>
+                Parallel.ForEach(island.Population, _parallelOptions, chromosome =>
                 {
                     var workload = _utility.CalculateWorkload(chromosome.Genes);
                     var metrics = EvaluationAndScoringService.CalculateMetrics(
@@ -462,10 +468,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         private void PerformMigration()
         {
-            for (int i = 0; i < IslandCount; i++)
+            for (int i = 0; i < _islandCount; i++)
             {
                 var sourceIsland = _islands[i];
-                var targetIsland = _islands[(i + 1) % IslandCount];
+                var targetIsland = _islands[(i + 1) % _islandCount];
 
                 var migrants = sourceIsland.Population
                     .OrderByDescending(c => c.Fitness)

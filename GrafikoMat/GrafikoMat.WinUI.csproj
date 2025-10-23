@@ -13,12 +13,12 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
-	  <None Remove="Views\ChangePasswordView.xaml" />
-	  <None Remove="Views\LoginView.xaml" />
-	  <None Remove="Views\Settings\AppearanceSettingsView.xaml" />
-	  <None Remove="Views\Settings\ConnectionSettingsView.xaml" />
-	  <None Remove="Views\Settings\EngineSettingsView.xaml" />
-	  <None Remove="Views\Settings\PrioritiesSettingsView.xaml" />
+		<None Remove="Views\ChangePasswordView.xaml" />
+		<None Remove="Views\LoginView.xaml" />
+		<None Remove="Views\Settings\AppearanceSettingsView.xaml" />
+		<None Remove="Views\Settings\ConnectionSettingsView.xaml" />
+		<None Remove="Views\Settings\EngineSettingsView.xaml" />
+		<None Remove="Views\Settings\PrioritiesSettingsView.xaml" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -46,6 +46,7 @@
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.250930001-experimental1" />
 		<PackageReference Include="Supabase" Version="1.1.1" />
+		<PackageReference Include="System.Management" Version="9.0.10" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -53,45 +54,48 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="Controls\ActionContainer.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </None>
+		<None Update="Controls\ActionContainer.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</None>
+		<Page Update="Views\Settings\GeneralSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Controls\ActionContainer.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Controls\ActionContainer.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\ChangePasswordView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\ChangePasswordView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\LoginView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\LoginView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\Settings\EngineSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	  <Page Update="Views\Settings\AppearanceSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	  <Page Update="Views\Settings\PrioritiesSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\Settings\EngineSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\Settings\AppearanceSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\Settings\PrioritiesSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\Settings\ConnectionSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\Settings\ConnectionSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>

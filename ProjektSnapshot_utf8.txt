@@ -1,7 +1,7 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-22 23:33:11
+# Data:       2025-10-23 23:33:55
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
-# Maszyna:    DELL_XPS_17
+# Maszyna:    FRACTAL
 # Użytkownik: adaml
 # Kodowanie snapshotu: UTF-8 (z BOM)
 
@@ -10,6 +10,7 @@ DIR  GrafikoMat
 DIR  GrafikoMat.Core
 DIR  GrafikoMat.Core\Data
 DIR  GrafikoMat.Core\Repositories
+DIR  GrafikoMat.Core\Scheduling
 DIR  GrafikoMat.Core\Scheduling\Engines
 DIR  GrafikoMat.Core\Scheduling\Engines\Algorithms
 DIR  GrafikoMat.Core\Scheduling\Evaluation
@@ -43,7 +44,7 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 181
+## FILES (liczba): 187
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
 FILE GrafikoMat.Core\Data\DutyDeclaration.cs
@@ -80,6 +81,7 @@ FILE GrafikoMat.Core\Scheduling\Models\SolverMessages.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverParameters.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverPriority.cs
 FILE GrafikoMat.Core\Scheduling\Models\SolverType.cs
+FILE GrafikoMat.Core\Scheduling\ParallelismConfig.cs
 FILE GrafikoMat.Core\Scheduling\Validation\ConstraintValidationService.cs
 FILE GrafikoMat.sln
 FILE GrafikoMat\App.xaml
@@ -98,6 +100,8 @@ FILE GrafikoMat\Controls\ActionContainer.xaml
 FILE GrafikoMat\Controls\ActionContainer.xaml.cs
 FILE GrafikoMat\Controls\AutoEqualRowsGrid.cs
 FILE GrafikoMat\Controls\CalendarUniformGridPanel.cs
+FILE GrafikoMat\Controls\MessageBoxControl.xaml
+FILE GrafikoMat\Controls\MessageBoxControl.xaml.cs
 FILE GrafikoMat\Controls\OrchestratorMessages.cs
 FILE GrafikoMat\Converters\BooleanToPrimaryStyleConverter.cs
 FILE GrafikoMat\Converters\BooleanToVisibilityConverter.cs
@@ -128,6 +132,7 @@ FILE GrafikoMat\ViewModels\DoctorListItemViewModel.cs
 FILE GrafikoMat\ViewModels\EngineComparisonInfo.cs
 FILE GrafikoMat\ViewModels\EngineOption.cs
 FILE GrafikoMat\ViewModels\EngineSettingsViewModel.cs
+FILE GrafikoMat\ViewModels\GeneralSettingsViewModel.cs
 FILE GrafikoMat\ViewModels\MainViewModel.cs
 FILE GrafikoMat\ViewModels\ManagementViewModel.cs
 FILE GrafikoMat\ViewModels\PrioritiesSettingsViewModel.cs
@@ -149,6 +154,8 @@ FILE GrafikoMat\Views\Settings\ConnectionSettingsView.xaml
 FILE GrafikoMat\Views\Settings\ConnectionSettingsView.xaml.cs
 FILE GrafikoMat\Views\Settings\EngineSettingsView.xaml
 FILE GrafikoMat\Views\Settings\EngineSettingsView.xaml.cs
+FILE GrafikoMat\Views\Settings\GeneralSettingsView.xaml
+FILE GrafikoMat\Views\Settings\GeneralSettingsView.xaml.cs
 FILE GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml
 FILE GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml.cs
 FILE GrafikoMat\Views\Settings\UnitsSettingsView.xaml
@@ -902,7 +909,7 @@ namespace GrafikoMat.Core.Scheduling.Engines.Algorithms
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs (11734 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\AntColonySolver.cs (11989 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -954,6 +961,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
+        private readonly ParallelOptions _parallelOptions;
 
         private Dictionary<DateTime, Dictionary<string, double>> _pheromoneMatrix = new();
         private int _currentGeneration;
@@ -966,7 +974,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int maxGenerations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -979,6 +988,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _maxGenerations = maxGenerations;
             _currentGeneration = 0;
             _noImprovementCount = 0;
+
+            // Konfiguracja wielowątkowości
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -1000,7 +1012,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 var solutions = new ConcurrentBag<Dictionary<DateTime, DoctorProfile?>>();
 
-                Parallel.For(0, _numAnts, ant =>
+                Parallel.For(0, _numAnts, _parallelOptions, ant =>
                 {
                     _cancellationToken.ThrowIfCancellationRequested();
                     var solution = BuildSolutionForAnt();
@@ -2169,7 +2181,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs (21063 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\GeneticSolver.cs (21423 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -2270,7 +2282,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private const int PatienceGenerations = 30;
         private int _noImprovementCounter = 0;
         private double _lastBestFitness = double.MinValue;
-        private const int IslandCount = 3;
+        private readonly int _islandCount;
         private const int MigrationInterval = 20;
         private const int MigrantsCount = 2;
         private const int HillClimbingInterval = 15;
@@ -2282,6 +2294,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
+        private readonly ParallelOptions _parallelOptions;
         private List<Island> _islands = new();
         private HashSet<int> _seenHashes = new();
 
@@ -2292,7 +2305,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int generations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -2303,6 +2317,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _populationSize = populationSize;
             _generations = generations;
+
+            // Konfiguracja wielowątkowości
+            _islandCount = ParallelismConfig.GetIslandsCount(customThreadCount);
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         private double GetAdaptiveMutationRate(int generation)
@@ -2325,7 +2343,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     break;
                 }
 
-                Parallel.For(0, IslandCount, islandIdx =>
+                Parallel.For(0, _islandCount, islandIdx =>
                 {
                     EvolveIsland(_islands[islandIdx], generation);
                 });
@@ -2392,10 +2410,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private void InitializeIslands()
         {
             _islands = new List<Island>();
-            int populationPerIsland = _populationSize / IslandCount;
+            int populationPerIsland = _populationSize / _islandCount;
             const int MaxAttemptsPerChromosome = 100; // Maksymalna liczba prób dla jednego chromosomu
 
-            for (int i = 0; i < IslandCount; i++)
+            for (int i = 0; i < _islandCount; i++)
             {
                 var island = new Island();
 
@@ -2452,7 +2470,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             int remaining = island.Population.Count - eliteCount;
 
-            Parallel.For(0, remaining, _ =>
+            Parallel.For(0, remaining, _parallelOptions, _ =>
             {
                 var parent1 = Selection(island.Population);
                 var parent2 = Selection(island.Population);
@@ -2483,7 +2501,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         {
             foreach (var island in _islands)
             {
-                Parallel.ForEach(island.Population, chromosome =>
+                Parallel.ForEach(island.Population, _parallelOptions, chromosome =>
                 {
                     var workload = _utility.CalculateWorkload(chromosome.Genes);
                     var metrics = EvaluationAndScoringService.CalculateMetrics(
@@ -2635,10 +2653,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         private void PerformMigration()
         {
-            for (int i = 0; i < IslandCount; i++)
+            for (int i = 0; i < _islandCount; i++)
             {
                 var sourceIsland = _islands[i];
-                var targetIsland = _islands[(i + 1) % IslandCount];
+                var targetIsland = _islands[(i + 1) % _islandCount];
 
                 var migrants = sourceIsland.Population
                     .OrderByDescending(c => c.Fitness)
@@ -3033,7 +3051,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs (5262 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\ScheduleSolverFactory.cs (5406 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Scheduling.Models;
 using System;
@@ -3056,6 +3074,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             ValidateInput(input, activePriorities);
 
             var timeout = TimeSpan.FromMinutes(parameters.TimeoutMinutes);
+            int? customThreadCount = parameters.CustomThreadCount;
 
             switch (parameters.SolverType)
             {
@@ -3063,16 +3082,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
 
                 case SolverType.SimulatedAnnealing:
-                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token);
+                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token, customThreadCount);
 
                 case SolverType.Genetic:
-                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token);
+                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token, customThreadCount);
 
                 case SolverType.TabuSearch:
-                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token);
+                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token, customThreadCount);
 
                 case SolverType.AntColony:
-                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token);
+                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token, customThreadCount);
 
                 case SolverType.AStar:
                     return new AStarSolver(input, activePriorities, timeout, progress, token);
@@ -3445,7 +3464,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs (9066 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\SimulatedAnnealingSolver.cs (9447 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -3468,13 +3487,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// - Early stopping przy stagnacji (500 iteracji bez poprawy)
     /// - Cache odwiedzonych stanów (HashSet) - unika duplikatów
     /// - Smart neighbor generation (swap, shift, single) zależna od temperatury
-    /// - Równoległa eksploracja 4 kandydatów w każdej iteracji
+    /// - Równoległa eksploracja kandydatów (automatycznie dopasowana do liczby wątków procesora)
     /// 
     /// OCZEKIWANY REZULTAT: 85-90% redukcja czasu, 97-99% jakości
     /// </summary>
     public class SimulatedAnnealingSolver : IScheduleSolver
     {
-        private const int PARALLEL_CANDIDATES = 4;
         private const int MAX_STAGNATION = 500;
         private const int MAX_VISITED_CACHE = 50000;
 
@@ -3490,6 +3508,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly double _coolingRate;
         private readonly int _iterationsPerTemperature;
         private readonly double _initialTemperature;
+        private readonly int _parallelCandidates;
+        private readonly ParallelOptions _parallelOptions;
 
         private HashSet<string> _visitedStates = new();
 
@@ -3499,7 +3519,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             double coolingRate,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -3516,6 +3537,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _initialTemperature = 500.0 * problemComplexity;
             _coolingRate = daysCount > 20 ? 0.97 : (coolingRate > 0 ? coolingRate : 0.985);
             _iterationsPerTemperature = Math.Max(30, doctorCount * 2);
+
+            // Konfiguracja wielowątkowości
+            _parallelCandidates = ParallelismConfig.GetCandidatesCount(customThreadCount);
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -3553,7 +3578,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                     var candidates = new ConcurrentBag<(Dictionary<DateTime, DoctorProfile?> solution, double fitness, string hash)>();
 
-                    Parallel.For(0, PARALLEL_CANDIDATES, candidateIdx =>
+                    Parallel.For(0, _parallelCandidates, _parallelOptions, candidateIdx =>
                     {
                         try
                         {
@@ -3923,7 +3948,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs (9811 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\TabuSearchSolver.cs (10122 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Evaluation;
@@ -3943,7 +3968,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// Kluczowe optymalizacje:
     /// 1. Move-based tabu list (hash par (dzień, lekarz))
     /// 2. Adaptive neighborhood size (5→15 w zależności od stagnacji)
-    /// 3. Parallel evaluation sąsiadów
+    /// 3. Parallel evaluation sąsiadów (automatycznie dopasowana do liczby wątków procesora)
     /// 4. Early stopping (60 iteracji bez poprawy)
     /// 5. Szybsza dywersyfikacja (co 25 iteracji)
     /// </summary>
@@ -3958,6 +3983,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
+        private readonly ParallelOptions _parallelOptions;
 
         private const int EARLY_STOP_THRESHOLD = 60;
         private const int DIVERSIFICATION_INTERVAL = 25;
@@ -3973,7 +3999,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int maxIterations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -3984,6 +4011,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _tabuListSize = tabuListSize;
             _maxIterations = maxIterations;
+
+            // Konfiguracja wielowątkowości
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -4102,7 +4132,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             var tabuSet = new HashSet<(DateTime, Guid?)>(tabuList);
 
-            Parallel.ForEach(neighbors, neighbor =>
+            Parallel.ForEach(neighbors, _parallelOptions, neighbor =>
             {
                 bool isTabu = false;
                 foreach (var kvp in neighbor)
@@ -4945,8 +4975,10 @@ namespace GrafikoMat.Core.Scheduling.Models
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Models\SolverParameters.cs (4059 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Models\SolverParameters.cs (4639 bytes)
 ----- BEGIN -----
+using System;
+
 namespace GrafikoMat.Core.Scheduling.Models
 {
     /// <summary>
@@ -4959,6 +4991,9 @@ namespace GrafikoMat.Core.Scheduling.Models
 
         // Timeout globalny (w minutach)
         public int TimeoutMinutes { get; init; } = 10;
+
+        // Wielowątkowość (null = auto-detection)
+        public int? CustomThreadCount { get; init; } = null;
 
         // Simulated Annealing
         public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
@@ -4986,8 +5021,15 @@ namespace GrafikoMat.Core.Scheduling.Models
 
         /// <summary>
         /// Timeout dla wszystkich silników (w minutach).
+        /// Parametr globalny - ta sama wartość jest używana przez wszystkie silniki obliczeniowe.
         /// </summary>
-        public static (int Default, int Min, int Max, int Step) TimeoutMinutes => (10, 1, 30, 1);
+        public static (int Default, int Min, int Max, int Step) TimeoutMinutes => (10, 1, 60, 1);
+
+        /// <summary>
+        /// Liczba wątków do wykorzystania w algorytmach równoległych.
+        /// Min = 1, Max = liczba wątków procesora, Default = null (auto-detection).
+        /// </summary>
+        public static (int? Default, int Min, int Max, int Step) CustomThreadCount => (null, 1, Environment.ProcessorCount, 1);
 
         /// <summary>
         /// Simulated Annealing: Tempo schładzania (cooling rate).
@@ -5079,6 +5121,77 @@ namespace GrafikoMat.Core.Scheduling.Models
         SimulatedAnnealing,
         TabuSearch,
         AntColony
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat.Core\Scheduling\ParallelismConfig.cs (2844 bytes)
+----- BEGIN -----
+using System;
+using System.Threading.Tasks;
+
+namespace GrafikoMat.Core.Scheduling
+{
+    /// <summary>
+    /// Centralna konfiguracja wielowątkowości dla silników obliczeniowych.
+    /// Automatycznie wykrywa liczbę dostępnych wątków procesora i dostosowuje parametry równoległości.
+    /// </summary>
+    public static class ParallelismConfig
+    {
+        /// <summary>
+        /// Liczba dostępnych wątków logicznych procesora (włącznie z HyperThreading/SMT).
+        /// </summary>
+        public static int ProcessorCount { get; } = Environment.ProcessorCount;
+
+        /// <summary>
+        /// Optymalna liczba wątków dla operacji równoległych.
+        /// Pozostawia 1 wątek wolny dla UI i systemu operacyjnego.
+        /// </summary>
+        public static int OptimalParallelism => Math.Max(1, ProcessorCount - 1);
+
+        /// <summary>
+        /// Oblicza optymalną liczbę równoległych kandydatów dla algorytmów SA/Tabu.
+        /// Zakres: 4-16 wątków (więcej może dać overhead).
+        /// </summary>
+        /// <param name="customThreadCount">Opcjonalna niestandardowa liczba wątków (null = auto)</param>
+        public static int GetCandidatesCount(int? customThreadCount = null)
+        {
+            int threads = customThreadCount ?? OptimalParallelism;
+            return Math.Clamp(threads, 4, 16);
+        }
+
+        /// <summary>
+        /// Oblicza optymalną liczbę wysp dla algorytmu genetycznego.
+        /// Zakres: 2-8 wysp (więcej może dać overhead synchronizacji).
+        /// </summary>
+        /// <param name="customThreadCount">Opcjonalna niestandardowa liczba wątków (null = auto)</param>
+        public static int GetIslandsCount(int? customThreadCount = null)
+        {
+            int threads = customThreadCount ?? OptimalParallelism;
+            return Math.Clamp(threads / 2, 2, 8);
+        }
+
+        /// <summary>
+        /// Tworzy ParallelOptions z optymalnym MaxDegreeOfParallelism.
+        /// </summary>
+        /// <param name="customThreadCount">Opcjonalna niestandardowa liczba wątków (null = auto)</param>
+        public static ParallelOptions CreateOptions(int? customThreadCount = null)
+        {
+            int threads = customThreadCount ?? OptimalParallelism;
+            return new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(1, threads)
+            };
+        }
+
+        /// <summary>
+        /// Zwraca tekstowy opis konfiguracji wielowątkowości.
+        /// </summary>
+        public static string GetConfigurationInfo(int? customThreadCount = null)
+        {
+            int threads = customThreadCount ?? OptimalParallelism;
+            return $"Procesor: {ProcessorCount} wątków, Używane: {threads} wątków";
+        }
     }
 }
 ----- END -----
@@ -5354,7 +5467,7 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (7233 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (8525 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
@@ -5374,6 +5487,10 @@ namespace GrafikoMat
     public partial class App : Application
     {
         public static MainWindow MainRoot { get; private set; }
+
+        // Win32 API do wykrywania DPI
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
 
         public App()
         {
@@ -5478,6 +5595,30 @@ namespace GrafikoMat
 
             if (appWindow != null && appWindow.Presenter is OverlappedPresenter presenter)
             {
+                // Oblicz DPI scale factor dla ekranu używając Win32 API
+                double scaleFactor = 1.0;
+                try
+                {
+                    uint dpi = GetDpiForWindow(hwnd);
+                    scaleFactor = dpi / 96.0; // 96 DPI = 100% scaling
+                    System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Detected DPI={dpi}, scale={scaleFactor:F2}x");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Failed to get DPI: {ex.Message}");
+                    scaleFactor = 1.0;
+                }
+
+                // Bazowe rozmiary (logiczne)
+                const int baseWidth = 1600;
+                const int baseHeight = 1000;
+
+                // Przeskalowane rozmiary (fizyczne)
+                int scaledWidth = (int)Math.Ceiling(baseWidth * scaleFactor);
+                int scaledHeight = (int)Math.Ceiling(baseHeight * scaleFactor);
+
+                System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Base={baseWidth}×{baseHeight}, Scaled={scaledWidth}×{scaledHeight}");
+
                 // Sprawdzamy, czy to pierwsze uruchomienie (brak zapisanej pozycji i nie był zmaksymalizowany)
                 bool isFirstRun = !settings.WasWindowMaximized &&
                                   settings.LastWindowPosition.X == 0 &&
@@ -5486,22 +5627,19 @@ namespace GrafikoMat
                 if (isFirstRun)
                 {
                     // --- LOGIKA DLA PIERWSZEGO URUCHOMIENIA ---
-                    const int defaultWidth = 1600;
-                    const int defaultHeight = 1000;
-
                     // WAŻNE: Najpierw jawnie przywróć okno (jeśli było zminimalizowane)
                     presenter.Restore();
 
-                    // Ustawiamy domyślny rozmiar
-                    appWindow.Resize(new SizeInt32(defaultWidth, defaultHeight));
+                    // Ustawiamy domyślny rozmiar (DPI-aware)
+                    appWindow.Resize(new SizeInt32(scaledWidth, scaledHeight));
 
                     // Pobieramy informacje o ekranie, na którym jest okno
                     DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
                     if (displayArea != null)
                     {
                         // Obliczamy pozycję, aby wyśrodkować okno
-                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - defaultWidth) / 2;
-                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - defaultHeight) / 2;
+                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - scaledWidth) / 2;
+                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - scaledHeight) / 2;
 
                         // Przesuwamy okno na środek
                         appWindow.Move(new PointInt32(centerX, centerY));
@@ -5520,10 +5658,10 @@ namespace GrafikoMat
                         // WAŻNE: Najpierw jawnie przywróć okno
                         presenter.Restore();
 
-                        // Potem ustaw rozmiar i pozycję
+                        // Potem ustaw rozmiar i pozycję (z DPI-aware minimum)
                         var lastSize = settings.LastWindowSize;
                         var lastPos = settings.LastWindowPosition;
-                        appWindow.Resize(new SizeInt32(Math.Max(1600, lastSize.Width), Math.Max(1000, lastSize.Height)));
+                        appWindow.Resize(new SizeInt32(Math.Max(scaledWidth, lastSize.Width), Math.Max(scaledHeight, lastSize.Height)));
                         appWindow.Move(new PointInt32(lastPos.X, lastPos.Y));
                     }
                 }
@@ -5724,7 +5862,7 @@ namespace GrafikoMat.Common
 
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (7351 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (9493 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -5901,6 +6039,59 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language)
         {
             throw new NotImplementedException();
+        }
+    }
+
+    public class EnumToBoolConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value == null || parameter == null)
+                return false;
+
+            string? enumValue = value.ToString();
+            string? targetValue = parameter.ToString();
+
+            return enumValue == targetValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool isChecked && isChecked && parameter is string enumString)
+            {
+                try
+                {
+                    // Dla x:Bind, targetType może być Object zamiast właściwego typu enum
+                    // Musimy spróbować znaleźć właściwy typ
+
+                    // Próbujemy najpierw użyć przekazanego targetType
+                    if (targetType != null && targetType != typeof(object) && targetType.IsEnum)
+                    {
+                        return Enum.Parse(targetType, enumString);
+                    }
+
+                    // Jeśli targetType to object lub nie jest enumem, próbujemy znaleźć typ na podstawie nazwy
+                    // Sprawdzamy popularne typy enum w aplikacji
+                    var enumTypes = new[]
+                    {
+                        typeof(GrafikoMat.Services.AppTheme),
+                        typeof(GrafikoMat.Core.Scheduling.Models.SolverType)
+                    };
+
+                    foreach (var enumType in enumTypes)
+                    {
+                        if (Enum.IsDefined(enumType, enumString))
+                        {
+                            return Enum.Parse(enumType, enumString);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"EnumToBoolConverter.ConvertBack error: {ex.Message}");
+                }
+            }
+            return DependencyProperty.UnsetValue;
         }
     }
 }
@@ -6222,7 +6413,7 @@ namespace GrafikoMat.Common
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml (6293 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml (9526 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Controls.ActionContainer"
@@ -6283,7 +6474,8 @@ namespace GrafikoMat.Common
     <Grid>
         <ContentPresenter x:Name="ContentHost" Content="{x:Bind Content, Mode=OneWay}"/>
 
-        <Grid x:Name="OverlayHost" Visibility="Collapsed" Canvas.ZIndex="1">
+        <!-- Istniejący overlay dla komunikatów i busy indicator -->
+        <Grid x:Name="OverlayHost" Visibility="Collapsed">
             <ProgressRing x:Name="ActionProgressRing" IsActive="False" Width="48" Height="48"/>
 
             <Grid x:Name="InfoBarContainer" 
@@ -6364,11 +6556,84 @@ namespace GrafikoMat.Common
                 </Grid>
             </Grid>
         </Grid>
+
+        <!-- NOWY: Progress Overlay dla długotrwałych operacji -->
+        <Grid x:Name="ProgressOverlay" Visibility="Collapsed">
+            <!-- Przygaszające tło -->
+            <Rectangle Fill="{ThemeResource SystemControlAcrylicElementBrush}" Opacity="0.95"/>
+
+            <!-- Główny panel z contentem -->
+            <Border Background="{ThemeResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="32,24"
+                    MaxWidth="480"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Border.Shadow>
+                    <media:ThemeShadow/>
+                </Border.Shadow>
+
+                <StackPanel Spacing="16">
+                    <!-- Tytuł -->
+                    <TextBlock x:Name="ProgressTitle" 
+                               Text="Generowanie grafiku" 
+                               FontSize="20" 
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"/>
+
+                    <!-- Nazwa silnika -->
+                    <TextBlock x:Name="ProgressEngineName" 
+                               Text="Silnik: GeneticSolver (algorytm genetyczny)" 
+                               FontSize="16" 
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"/>
+
+                    <!-- ProgressBar (dla metaheurystyk) -->
+                    <ProgressBar x:Name="DeterminateProgress" 
+                                 Value="0" 
+                                 Maximum="100" 
+                                 Height="6"
+                                 Visibility="Collapsed"/>
+
+                    <!-- ProgressRing (dla Backtracking/A*) -->
+                    <ProgressRing x:Name="IndeterminateProgress" 
+                                  IsActive="False" 
+                                  Width="48" 
+                                  Height="48"
+                                  HorizontalAlignment="Center"
+                                  Visibility="Collapsed"/>
+
+                    <!-- Tekst statusu -->
+                    <TextBlock x:Name="ProgressStatusText" 
+                               Text="Inicjalizacja..." 
+                               FontSize="14"
+                               Opacity="0.85"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               HorizontalAlignment="Center"
+                               MaxWidth="420"/>
+
+                    <!-- Przycisk Cancel -->
+                    <Button x:Name="CancelButton" 
+                            Content="Anuluj" 
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed"
+                            Click="OnCancelClicked"
+                            Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>
+
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (7308 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (10822 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI;
@@ -6383,7 +6648,9 @@ namespace GrafikoMat.Controls
     public sealed partial class ActionContainer : UserControl,
         IRecipient<ShowBusyOverlayMessage>,
         IRecipient<ShowStatusOverlayMessage>,
-        IRecipient<HideOverlayMessage>
+        IRecipient<HideOverlayMessage>,
+        IRecipient<ShowProgressOverlayMessage>,
+        IRecipient<UpdateProgressMessage>
     {
         private readonly Guid _viewId = Guid.NewGuid();
 
@@ -6533,6 +6800,15 @@ namespace GrafikoMat.Controls
 
             DispatcherQueue.TryEnqueue(() =>
             {
+                // Ukryj progress overlay jeśli jest widoczny
+                if (ProgressOverlay.Visibility == Visibility.Visible)
+                {
+                    ProgressOverlay.Visibility = Visibility.Collapsed;
+                    IndeterminateProgress.IsActive = false;
+                    FadeInStoryboard.Begin();
+                    return;
+                }
+
                 // Fade-out InfoBar
                 if (CustomInfoBar.Visibility == Visibility.Visible)
                 {
@@ -6556,6 +6832,81 @@ namespace GrafikoMat.Controls
                     FadeInStoryboard.Begin();
                 }
             });
+        }
+
+        public void Receive(ShowProgressOverlayMessage message)
+        {
+            if (message.ViewId != _viewId) return;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // Fade-out zawartości
+                FadeOutStoryboard.Begin();
+
+                FadeOutStoryboard.Completed += (s, e) =>
+                {
+                    // Ustaw tytuł i nazwę silnika
+                    ProgressTitle.Text = message.Title;
+                    ProgressEngineName.Text = $"Silnik: {message.EngineName}";
+
+                    // Pokaż/ukryj przycisk Cancel
+                    CancelButton.Visibility = message.IsCancellable ? Visibility.Visible : Visibility.Collapsed;
+
+                    // Wybierz ProgressBar lub ProgressRing
+                    if (message.IsIndeterminate)
+                    {
+                        // Deterministyczne solvery (Backtracking, A*) - ProgressRing
+                        IndeterminateProgress.Visibility = Visibility.Visible;
+                        IndeterminateProgress.IsActive = true;
+                        DeterminateProgress.Visibility = Visibility.Collapsed;
+                        DeterminateProgress.Value = 0;
+                    }
+                    else
+                    {
+                        // Metaheurystyki - ProgressBar
+                        DeterminateProgress.Visibility = Visibility.Visible;
+                        DeterminateProgress.Value = 0;
+                        IndeterminateProgress.Visibility = Visibility.Collapsed;
+                        IndeterminateProgress.IsActive = false;
+                    }
+
+                    // Resetuj tekst statusu
+                    ProgressStatusText.Text = "Inicjalizacja...";
+
+                    // Pokaż overlay
+                    ProgressOverlay.Visibility = Visibility.Visible;
+                };
+            });
+        }
+
+        public void Receive(UpdateProgressMessage message)
+        {
+            if (message.ViewId != _viewId) return;
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // Aktualizuj ProgressBar jeśli jest widoczny
+                if (DeterminateProgress.Visibility == Visibility.Visible)
+                {
+                    DeterminateProgress.Value = message.Progress * 100;
+                }
+
+                // Aktualizuj tekst statusu jeśli podano
+                if (!string.IsNullOrEmpty(message.StatusText))
+                {
+                    ProgressStatusText.Text = message.StatusText;
+                }
+            });
+        }
+
+        private void OnCancelClicked(object sender, RoutedEventArgs e)
+        {
+            // Wyślij komunikat anulowania
+            WeakReferenceMessenger.Default.Send(new CancelOperationMessage(_viewId));
+
+            // Opcjonalnie: wyłącz przycisk aby zapobiec wielokrotnemu kliknięciu
+            CancelButton.IsEnabled = false;
+            CancelButton.Content = "Anulowanie...";
         }
 
         public Guid GetViewId() => _viewId;
@@ -6716,7 +7067,150 @@ namespace GrafikoMat.Controls
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\OrchestratorMessages.cs (1586 bytes)
+===== FILE: GrafikoMat\Controls\MessageBoxControl.xaml (2785 bytes)
+----- BEGIN -----
+<!-- GrafikoMat\Controls\MessageBoxControl.xaml -->
+<UserControl
+    x:Class="GrafikoMat.Controls.MessageBoxControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:media="using:Microsoft.UI.Xaml.Media">
+
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource ControlFillColorDefaultBrush}"
+          Padding="0"
+          CornerRadius="10"
+          MinWidth="340"
+          MaxWidth="500">
+
+        <!-- Miękki cień -->
+        <Grid.Shadow>
+            <media:ThemeShadow/>
+        </Grid.Shadow>
+
+        <!-- Subtelna ramka w kolorze systemowym -->
+        <Border BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                CornerRadius="10"/>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Lewy pasek koloru -->
+            <Border x:Name="StatusBorder" 
+                    Grid.Column="0"
+                    Background="#10B981"
+                    CornerRadius="10,0,0,10"/>
+
+            <!-- Ikona (większa o 50%, wycentrowana) -->
+            <Grid Grid.Column="1" 
+                  Width="64" 
+                  Margin="16,16,16,16">
+                <Viewbox Width="72" Height="72">
+                    <FontIcon x:Name="StatusIcon" 
+                              Glyph="&#xF13E;" 
+                              Foreground="#10B981"
+                              FontWeight="Bold"/>
+                </Viewbox>
+            </Grid>
+
+            <!-- Separator -->
+            <Rectangle Grid.Column="1"
+                       Width="1"
+                       Opacity="0.1"
+                       Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                       Margin="0,12,0,12"
+                       HorizontalAlignment="Right"/>
+
+            <!-- Tekst -->
+            <StackPanel Grid.Column="2" 
+                        Margin="20,16,24,16"
+                        VerticalAlignment="Center"
+                        Spacing="6">
+                <TextBlock x:Name="TitleTextBlock" 
+                           Text="Tytuł"
+                           FontWeight="Bold"
+                           FontSize="15"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Name="MessageTextBlock" 
+                           Text="Wiadomość"
+                           FontSize="13"
+                           Opacity="0.75"
+                           TextWrapping="Wrap"
+                           LineHeight="18"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>
+
+----- END -----
+
+===== FILE: GrafikoMat\Controls\MessageBoxControl.xaml.cs (2125 bytes)
+----- BEGIN -----
+using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
+
+namespace GrafikoMat.Controls
+{
+    public sealed partial class MessageBoxControl : UserControl
+    {
+        public enum MessageType
+        {
+            Success,
+            Error,
+            Warning,
+            Info
+        }
+
+        public MessageBoxControl()
+        {
+            this.InitializeComponent();
+        }
+
+        public void SetMessage(string title, string message, MessageType type)
+        {
+            TitleTextBlock.Text = title;
+            MessageTextBlock.Text = message;
+
+            switch (type)
+            {
+                case MessageType.Success:
+                    StatusBorder.Background = new SolidColorBrush(Color.FromArgb(255, 16, 185, 129)); // #10B981
+                    StatusIcon.Glyph = "\uF13E"; // Checkmark
+                    StatusIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 16, 185, 129));
+                    break;
+
+                case MessageType.Error:
+                    StatusBorder.Background = new SolidColorBrush(Color.FromArgb(255, 239, 68, 68)); // #EF4444
+                    StatusIcon.Glyph = "\uEA39"; // Error
+                    StatusIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 239, 68, 68));
+                    break;
+
+                case MessageType.Warning:
+                    StatusBorder.Background = new SolidColorBrush(Color.FromArgb(255, 251, 191, 36)); // #FBBF24
+                    StatusIcon.Glyph = "\uE7BA"; // Warning
+                    StatusIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 251, 191, 36));
+                    break;
+
+                case MessageType.Info:
+                    StatusBorder.Background = new SolidColorBrush(Color.FromArgb(255, 59, 130, 246)); // #3B82F6
+                    StatusIcon.Glyph = "\uE946"; // Info
+                    StatusIcon.Foreground = new SolidColorBrush(Color.FromArgb(255, 59, 130, 246));
+                    break;
+            }
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\Controls\OrchestratorMessages.cs (1605 bytes)
 ----- BEGIN -----
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -6740,7 +7234,7 @@ namespace GrafikoMat.Controls
     /// Pokazuje nakładkę z ProgressBar/ProgressRing i opisem dla długotrwałych operacji.
     /// </summary>
     /// <param name="IsIndeterminate">Jeśli true, pokazuje ProgressRing (nieskończony spinner). Jeśli false, pokazuje ProgressBar (0-100%).</param>
-    public sealed record ShowProgressOverlayMessage(Guid ViewId, string Title, bool IsCancellable, bool IsIndeterminate);
+    public sealed record ShowProgressOverlayMessage(Guid ViewId, string Title, string EngineName, bool IsCancellable, bool IsIndeterminate);
 
     /// <summary>
     /// Aktualizuje postęp i opis w nakładce progressu.
@@ -6839,7 +7333,7 @@ namespace GrafikoMat.Converters
 
 ----- END -----
 
-===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (4293 bytes)
+===== FILE: GrafikoMat\GrafikoMat.WinUI.csproj (4437 bytes)
 ----- BEGIN -----
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
@@ -6856,12 +7350,12 @@ namespace GrafikoMat.Converters
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
-	  <None Remove="Views\ChangePasswordView.xaml" />
-	  <None Remove="Views\LoginView.xaml" />
-	  <None Remove="Views\Settings\AppearanceSettingsView.xaml" />
-	  <None Remove="Views\Settings\ConnectionSettingsView.xaml" />
-	  <None Remove="Views\Settings\EngineSettingsView.xaml" />
-	  <None Remove="Views\Settings\PrioritiesSettingsView.xaml" />
+		<None Remove="Views\ChangePasswordView.xaml" />
+		<None Remove="Views\LoginView.xaml" />
+		<None Remove="Views\Settings\AppearanceSettingsView.xaml" />
+		<None Remove="Views\Settings\ConnectionSettingsView.xaml" />
+		<None Remove="Views\Settings\EngineSettingsView.xaml" />
+		<None Remove="Views\Settings\PrioritiesSettingsView.xaml" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -6889,6 +7383,7 @@ namespace GrafikoMat.Converters
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.250930001-experimental1" />
 		<PackageReference Include="Supabase" Version="1.1.1" />
+		<PackageReference Include="System.Management" Version="9.0.10" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -6896,45 +7391,48 @@ namespace GrafikoMat.Converters
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="Controls\ActionContainer.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </None>
+		<None Update="Controls\ActionContainer.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</None>
+		<Page Update="Views\Settings\GeneralSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Controls\ActionContainer.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Controls\ActionContainer.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\ChangePasswordView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\ChangePasswordView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\LoginView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\LoginView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\Settings\EngineSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	  <Page Update="Views\Settings\AppearanceSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	  <Page Update="Views\Settings\PrioritiesSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\Settings\EngineSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\Settings\AppearanceSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+		<Page Update="Views\Settings\PrioritiesSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Views\Settings\ConnectionSettingsView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
+		<Page Update="Views\Settings\ConnectionSettingsView.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -6965,7 +7463,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (11803 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (12279 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -7127,6 +7625,12 @@ namespace GrafikoMat.Converters
         </Border>
 
         <!-- PANEL AKCJI -->
+        <!-- PANEL AKCJI -->
+        <!-- Centralne miejsce dla przycisków akcji z widoków.
+             Dla spójności UX, wszystkie główne przyciski akcji widoków powinny być
+             rejestrowane tutaj przez IUxActionOrchestrator (event ActionsChanged).
+             Przyciski pomocnicze mogą pozostać w widokach, ale główne akcje (Zapisz, Generuj, itp.)
+             należy umieszczać w tym panelu dla jednolitego wyglądu i zachowania. -->
         <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,12" Opacity="0">
             <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
                 <Grid>
@@ -7153,7 +7657,7 @@ namespace GrafikoMat.Converters
                 </Grid>
             </Border>
         </Grid>
-
+        
         <!-- DOLNY PASEK STATUSU -->
         <Grid x:Name="BottomStatusBar" Grid.Row="4" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,0" Opacity="0">
             <Grid.RenderTransform>
@@ -7186,7 +7690,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (68101 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (74236 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -7224,8 +7728,15 @@ namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
+        // Bazowe minimalne wymiary (przy 100% DPI scaling)
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
+
+        // Przeskalowane wymiary (obliczane dynamicznie na podstawie DPI)
+        private int _scaledMinWidth = MIN_W;
+        private int _scaledMinHeight = MIN_H;
+        private double _currentScaleFactor = 1.0;
+
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> ActionsLeft { get; } = new();
@@ -7272,10 +7783,16 @@ namespace GrafikoMat
             this.SetTitleBar(DragBar);
             InitAppWindow();
 
+            // Inicjalizuj backdrop z kaskadowym fallbackiem (Acrylic → Mica → Solid)
             _backdropManager = new AcrylicBackdropManager();
             _backdropManager.Initialize(this);
+            // Nie musimy już ręcznie obsługiwać fallbacku - AcrylicBackdropManager robi to automatycznie
 
             RootGrid.Loaded += async (s, e) => {
+                // WAŻNE: Oblicz DPI scale gdy XAML jest już załadowany
+                CalculateScaleFactor();
+                System.Diagnostics.Debug.WriteLine($"RootGrid.Loaded: DPI calculated, scale={_currentScaleFactor:F2}x");
+
                 ApplyTitleBarMenuStyling();
                 await InitializeApplicationAsync();
             };
@@ -7994,7 +8511,7 @@ namespace GrafikoMat
                 });
             };
 
-            _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
+            _settingsView.Initialize(_unitRepository, _settingsService, _supabaseService, _appSettings);
 
             if (!forceRefresh)
             {
@@ -8341,6 +8858,12 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
+            // Odepnij event handlery AppWindow
+            if (_appWindow != null)
+            {
+                _appWindow.Changed -= OnAppWindowChanged;
+            }
+
             _backdropManager?.Dispose();
             _backdropManager = null;
 
@@ -8370,6 +8893,7 @@ namespace GrafikoMat
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
             ApplyTitleBarMenuStyling();
+            // BackdropManager automatycznie obsługuje zmiany motywu
             _ = DispatcherQueue.TryEnqueue(async () => await SaveWindowStateAsync());
         }
 
@@ -8535,9 +9059,108 @@ namespace GrafikoMat
                     presenter.IsMaximizable = true;
                     presenter.IsMinimizable = true;
                 }
+
+                // DPI scale będzie obliczony w RootGrid.Loaded (gdy XamlRoot jest dostępny)
+
+                // Monitoruj zmiany rozmiaru i wymuszaj minimalny rozmiar
+                _appWindow.Changed += OnAppWindowChanged;
+
+                System.Diagnostics.Debug.WriteLine($"InitAppWindow: Window initialized, DPI will be calculated in RootGrid.Loaded");
             }
 
+            // Zachowaj hook Win32 jako backup (niektóre systemy go respektują)
             SubclassWindow(hwnd);
+        }
+
+        private void CalculateScaleFactor()
+        {
+            try
+            {
+                // Użyj XamlRoot.RasterizationScale - najbardziej niezawodna metoda w WinUI 3
+                if (RootGrid?.XamlRoot != null)
+                {
+                    _currentScaleFactor = RootGrid.XamlRoot.RasterizationScale;
+
+                    // Oblicz przeskalowane minimalne wymiary
+                    _scaledMinWidth = (int)Math.Ceiling(MIN_W * _currentScaleFactor);
+                    _scaledMinHeight = (int)Math.Ceiling(MIN_H * _currentScaleFactor);
+
+                    System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor: RasterizationScale={_currentScaleFactor:F2}x ({(_currentScaleFactor * 100):F0}%)");
+                    System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor: Base={MIN_W}×{MIN_H}, Scaled={_scaledMinWidth}×{_scaledMinHeight}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("CalculateScaleFactor: XamlRoot not available yet, using defaults");
+                    _currentScaleFactor = 1.0;
+                    _scaledMinWidth = MIN_W;
+                    _scaledMinHeight = MIN_H;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor failed: {ex.Message}, using defaults");
+                _currentScaleFactor = 1.0;
+                _scaledMinWidth = MIN_W;
+                _scaledMinHeight = MIN_H;
+            }
+        }
+
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            // Sprawdź czy okno zostało przeniesione (może zmienić się DPI)
+            if (args.DidPositionChange)
+            {
+                // Przelicz scale factor - mogliśmy przejść na monitor z innym DPI
+                var oldScaleFactor = _currentScaleFactor;
+                CalculateScaleFactor();
+
+                if (Math.Abs(_currentScaleFactor - oldScaleFactor) > 0.01)
+                {
+                    System.Diagnostics.Debug.WriteLine($"DPI changed: {oldScaleFactor:F2}x → {_currentScaleFactor:F2}x");
+
+                    // Wymuszaj nowy minimalny rozmiar jeśli okno jest za małe dla nowego DPI
+                    if (_appWindow != null)
+                    {
+                        var currentSize = _appWindow.Size;
+                        if (currentSize.Width < _scaledMinWidth || currentSize.Height < _scaledMinHeight)
+                        {
+                            _appWindow.Resize(new SizeInt32(
+                                Math.Max(currentSize.Width, _scaledMinWidth),
+                                Math.Max(currentSize.Height, _scaledMinHeight)
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Sprawdź czy zmienił się rozmiar
+            if (args.DidSizeChange && _appWindow != null)
+            {
+                var currentSize = _appWindow.Size;
+                bool needsResize = false;
+                int newWidth = currentSize.Width;
+                int newHeight = currentSize.Height;
+
+                // Użyj przeskalowanych wymiarów
+                if (currentSize.Width < _scaledMinWidth)
+                {
+                    newWidth = _scaledMinWidth;
+                    needsResize = true;
+                    System.Diagnostics.Debug.WriteLine($"AppWindow: Width too small ({currentSize.Width}), enforcing {_scaledMinWidth} (scale={_currentScaleFactor:F2}x)");
+                }
+
+                if (currentSize.Height < _scaledMinHeight)
+                {
+                    newHeight = _scaledMinHeight;
+                    needsResize = true;
+                    System.Diagnostics.Debug.WriteLine($"AppWindow: Height too small ({currentSize.Height}), enforcing {_scaledMinHeight} (scale={_currentScaleFactor:F2}x)");
+                }
+
+                if (needsResize)
+                {
+                    _appWindow.Resize(new SizeInt32(newWidth, newHeight));
+                }
+            }
         }
 
         private void SubclassWindow(IntPtr hwnd)
@@ -8559,9 +9182,17 @@ namespace GrafikoMat
                 if (msg == WM_GETMINMAXINFO)
                 {
                     var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-                    mmi.ptMinTrackSize.x = MIN_W;
-                    mmi.ptMinTrackSize.y = MIN_H;
+
+                    // Log przed zmianą
+                    System.Diagnostics.Debug.WriteLine($"WM_GETMINMAXINFO: Before - ptMinTrackSize=({mmi.ptMinTrackSize.x}, {mmi.ptMinTrackSize.y})");
+
+                    // Użyj przeskalowanych wymiarów
+                    mmi.ptMinTrackSize.x = _scaledMinWidth;
+                    mmi.ptMinTrackSize.y = _scaledMinHeight;
                     Marshal.StructureToPtr(mmi, lParam, true);
+
+                    // Log po zmianie
+                    System.Diagnostics.Debug.WriteLine($"WM_GETMINMAXINFO: After - Set to ({_scaledMinWidth}, {_scaledMinHeight}) at {_currentScaleFactor:F2}x scale");
                 }
                 else if ((msg == WM_SIZE || msg == WM_MOVE) && !_isClosing && _appWindow != null && _settingsService != null && DispatcherQueue != null)
                 {
@@ -9379,7 +10010,7 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\IUxActionOrchestrator.cs (2520 bytes)
+===== FILE: GrafikoMat\Services\IUxActionOrchestrator.cs (2674 bytes)
 ----- BEGIN -----
 using System;
 using System.Threading;
@@ -9416,15 +10047,17 @@ namespace GrafikoMat.Services
         /// </summary>
         /// <param name="viewId">ID widoku do przygaszenia.</param>
         /// <param name="title">Tytuł nakładki (np. "Generowanie grafiku").</param>
+        /// <param name="engineName">Nazwa silnika do wyświetlenia (np. "GeneticSolver (algorytm genetyczny)").</param>
         /// <param name="operationAsync">Operacja do wykonania. Otrzymuje IProgress i CancellationToken.</param>
         /// <param name="successMessage">Komunikat sukcesu (opcjonalny).</param>
         /// <param name="errorMessageTitle">Tytuł komunikatu błędu.</param>
         /// <param name="isCancellable">Czy pokazać przycisk Cancel.</param>
-        /// <param name="showIndeterminateProgress">Jeśli true, pokazuje ProgressRing (nieskończony spinner dla deterministycznych solverów). Jeśli false, pokazuje ProgressBar (0-100% dla metaheurystyk).</param>
+        /// <param name="showIndeterminateProgress">Jeśli true, pokazuje ProgressRing (nieskończony spinner dla deterministycznych solwerów). Jeśli false, pokazuje ProgressBar (0-100% dla metaheurystyk).</param>
         /// <returns>True jeśli operacja zakończyła się sukcesem, False jeśli została anulowana lub wystąpił błąd.</returns>
         Task<bool> PerformLongRunningTaskAsync(
             Guid viewId,
             string title,
+            string engineName,
             Func<IProgress<(double progress, string? statusText)>, CancellationToken, Task> operationAsync,
             string? successMessage = null,
             string errorMessageTitle = "Błąd",
@@ -9466,7 +10099,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SettingsService.cs (4965 bytes)
+===== FILE: GrafikoMat\Services\SettingsService.cs (7873 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Scheduling.Models;
 using System;
@@ -9480,6 +10113,47 @@ using Windows.Storage;
 namespace GrafikoMat.Services
 {
     public enum AppTheme { Light, Dark, SystemDefault }
+
+    /// <summary>
+    /// Zachowanie aplikacji przy przekroczeniu limitu czasu obliczeń.
+    /// </summary>
+    public enum TimeoutBehavior
+    {
+        /// <summary>Pokaż dialog informacyjny i zwróć najlepsze znalezione rozwiązanie</summary>
+        ShowResultAndInform,
+        /// <summary>Zapytaj użytkownika czy przedłużyć czas obliczeniowy</summary>
+        AskToExtend
+    }
+
+    /// <summary>
+    /// Poziom logowania zdarzeń aplikacji.
+    /// </summary>
+    public enum AppLogLevel
+    {
+        /// <summary>Brak logowania</summary>
+        Off,
+        /// <summary>Tylko błędy krytyczne</summary>
+        ErrorsOnly,
+        /// <summary>Błędy + ostrzeżenia</summary>
+        ErrorsAndWarnings,
+        /// <summary>Pełne logowanie wszystkich zdarzeń</summary>
+        Full
+    }
+
+    /// <summary>
+    /// Poziom logowania procesu generowania grafiku przez silniki.
+    /// </summary>
+    public enum SolverLogLevel
+    {
+        /// <summary>Brak logowania silników</summary>
+        Off,
+        /// <summary>Podstawowy - tylko podsumowanie (~1 KB na generowanie)</summary>
+        Basic,
+        /// <summary>Szczegółowy - postęp + statystyki (~10-50 KB na generowanie)</summary>
+        Detailed,
+        /// <summary>Debug - pełna diagnostyka (~100 KB - 10 MB na generowanie)</summary>
+        Debug
+    }
 
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
 
@@ -9500,6 +10174,16 @@ namespace GrafikoMat.Services
         // Timeout globalny (w minutach)
         public int TimeoutMinutes { get; init; } = SolverDefaults.TimeoutMinutes.Default;
 
+        // Wielowątkowość (null = automatyczne wykrywanie)
+        public int? CustomThreadCount { get; init; } = SolverDefaults.CustomThreadCount.Default;
+
+        // Zachowanie przy przekroczeniu timeout
+        public TimeoutBehavior TimeoutBehavior { get; init; } = TimeoutBehavior.ShowResultAndInform;
+
+        // Poziomy logowania
+        public AppLogLevel AppLogLevel { get; init; } = AppLogLevel.ErrorsOnly;
+        public SolverLogLevel SolverLogLevel { get; init; } = SolverLogLevel.Off;
+
         // Parametry silników - używamy wartości domyślnych z SolverDefaults
         public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
         public int GeneticPopulationSize { get; init; } = SolverDefaults.GeneticPopulationSize.Default;
@@ -9519,6 +10203,22 @@ namespace GrafikoMat.Services
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
+
+        /// <summary>
+        /// Zwraca domyślną kolejność priorytetów używaną przy pierwszym uruchomieniu aplikacji.
+        /// Kolejność od najważniejszego do najmniej ważnego.
+        /// </summary>
+        private static List<PrioritySetting> GetDefaultPriorities()
+        {
+            return new List<PrioritySetting>
+            {
+                new(SolverPriority.InitialContinuity, true),
+                new(SolverPriority.TotalAssignments, true),
+                new(SolverPriority.Fairness, true),
+                new(SolverPriority.Spacing, true),
+                new(SolverPriority.DeclarationCompliance, true)
+            };
+        }
 
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
@@ -9541,6 +10241,13 @@ namespace GrafikoMat.Services
             }
 
             _currentSettings ??= new AppSettings();
+
+            // ✅ NOWE: Jeśli lista priorytetów jest pusta, użyj domyślnych wartości
+            if (_currentSettings.Priorities.Count == 0)
+            {
+                _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
+            }
+
             return _currentSettings;
         }
 
@@ -9561,27 +10268,25 @@ namespace GrafikoMat.Services
 
         public SolverParameters BuildSolverParameters(AppSettings settings)
         {
+            // Po LoadSettingsAsync() lista Priorities zawsze ma wartości (domyślne lub zapisane)
             var activePriorities = settings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => p.Priority)
                 .ToList();
 
+            // Bezpieczeństwo - jeśli wszystkie priorytety są nieaktywne, użyj domyślnych
             if (activePriorities.Count == 0)
             {
-                activePriorities = new List<SolverPriority>
-                {
-                    SolverPriority.InitialContinuity,
-                    SolverPriority.TotalAssignments,
-                    SolverPriority.Fairness,
-                    SolverPriority.Spacing,
-                    SolverPriority.DeclarationCompliance
-                };
+                activePriorities = GetDefaultPriorities()
+                    .Select(p => p.Priority)
+                    .ToList();
             }
 
             return new SolverParameters
             {
                 SolverType = settings.SelectedSolver,
                 TimeoutMinutes = settings.TimeoutMinutes,
+                CustomThreadCount = settings.CustomThreadCount,
                 CoolingRate = settings.CoolingRate,
                 GeneticPopulationSize = settings.GeneticPopulationSize,
                 GeneticGenerations = settings.GeneticGenerations,
@@ -9685,7 +10390,7 @@ namespace GrafikoMat.Services
 
 ----- END -----
 
-===== FILE: GrafikoMat\Services\SupabaseService.cs (6276 bytes)
+===== FILE: GrafikoMat\Services\SupabaseService.cs (7573 bytes)
 ----- BEGIN -----
 using System;
 using System.Diagnostics;
@@ -9729,6 +10434,40 @@ namespace GrafikoMat.Services
             };
             _client = new SbClient(url, apiKey, options);
             Debug.WriteLine("[SupabaseService] Initialize: klient utworzony.");
+        }
+
+        /// <summary>
+        /// Testuje połączenie z bazą Supabase bez faktycznego logowania.
+        /// Zwraca true jeśli połączenie jest możliwe, false w przeciwnym razie.
+        /// </summary>
+        public async Task<bool> TestConnectionAsync(string url, string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+            {
+                Debug.WriteLine("[SupabaseService] TestConnection: puste dane");
+                return false;
+            }
+
+            try
+            {
+                var options = new SupabaseOptions
+                {
+                    AutoRefreshToken = false,
+                    AutoConnectRealtime = false
+                };
+                var testClient = new SbClient(url, apiKey, options);
+
+                // Inicjalizacja klienta - rzuci wyjątek jeśli URL/Key są nieprawidłowe
+                await testClient.InitializeAsync();
+
+                Debug.WriteLine("[SupabaseService] TestConnection: SUCCESS");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SupabaseService] TestConnection: FAILED - {ex.Message}");
+                return false;
+            }
         }
 
         public Task<bool> RestoreSessionIfAnyAsync()
@@ -9893,7 +10632,7 @@ namespace GrafikoMat.Services
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Services\UxActionOrchestrator.cs (7229 bytes)
+===== FILE: GrafikoMat\Services\UxActionOrchestrator.cs (7273 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Controls;
@@ -9998,6 +10737,7 @@ namespace GrafikoMat.Services
         public async Task<bool> PerformLongRunningTaskAsync(
             Guid viewId,
             string title,
+            string engineName,
             Func<IProgress<(double progress, string? statusText)>, CancellationToken, Task> operationAsync,
             string? successMessage = null,
             string errorMessageTitle = "Błąd",
@@ -10011,7 +10751,7 @@ namespace GrafikoMat.Services
             try
             {
                 // Pokaż nakładkę z progressem (ProgressBar lub ProgressRing w zależności od showIndeterminateProgress)
-                _messenger.Send(new ShowProgressOverlayMessage(viewId, title, isCancellable, showIndeterminateProgress));
+                _messenger.Send(new ShowProgressOverlayMessage(viewId, title, engineName, isCancellable, showIndeterminateProgress));
 
                 // Małe opóźnienie aby overlay się wyświetlił
                 await Task.Delay(100);
@@ -11124,7 +11864,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (16816 bytes)
+===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (16934 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11163,7 +11903,7 @@ namespace GrafikoMat.ViewModels
         }
 
         public bool HasConfigurableParameters =>
-            SelectedEngine?.Type is SolverType.SimulatedAnnealing or SolverType.Genetic or SolverType.AntColony or SolverType.TabuSearch;
+            SelectedEngine != null; // Timeout jest konfigurowalny dla wszystkich silników
 
         // === TIMEOUT ===
         private int _timeoutMinutesValue;
@@ -11316,7 +12056,7 @@ namespace GrafikoMat.ViewModels
             // Backtracking
             EngineOptions.Add(new EngineOption(
                 SolverType.Backtracking,
-                "BacktrackingSolver",
+                "BacktrackingSolver (algorytm z nawrotami)",
                 "Wyobraź sobie skrupulatnego bibliotekarza, który musi ułożyć książki na półkach według bardzo ścisłych reguł. Zaczyna od pierwszej półki i pierwszej książki, stawia ją, a następnie bierze drugą i sprawdza, czy pasuje obok. Jeśli tak, kontynuuje. Jeśli jednak dojdzie do momentu, w którym żadna z pozostałych książek nie pasuje, cofa się (stąd 'backtrack' - nawrót), zabiera ostatnio postawioną książkę i próbuje na jej miejsce postawić inną. Powtarza ten proces, systematycznie sprawdzając każdą możliwą kombinację, aż znajdzie idealne ułożenie lub wyczerpie wszystkie możliwości. Jest to metoda gwarantująca znalezienie najlepszego rozwiązania, ale jej koszt czasowy może być ogromny, jeśli problem ma wiele możliwych kombinacji (jak grafik z wieloma lekarzami i dniami).",
                 "Algorytm z nawrotami",
                 "Przeszukiwanie zupełne",
@@ -11328,7 +12068,7 @@ namespace GrafikoMat.ViewModels
             // A*
             EngineOptions.Add(new EngineOption(
                 SolverType.AStar,
-                "AStarSolver",
+                "AStarSolver (algorytm A*)",
                 "Ten algorytm działa jak zaawansowany system nawigacji GPS w mieście z niezliczoną ilością dróg. Zamiast jechać na ślepo, A* w każdym momencie analizuje dwie rzeczy: koszt już przebytej trasy (ile dyżurów już przypisano i jak dobrze) oraz szacowany koszt dotarcia do celu (jak 'obiecujące' są pozostałe dni do obsadzenia). Dzięki tej heurystycznej ocenie przyszłości, algorytm inteligentnie wybiera najbardziej obiecujące ścieżki, odcinając te, które już na wczesnym etapie wydają się prowadzić do gorszego wyniku. To sprawia, że jest znacznie wydajniejszy od czystego backtrackingu, zachowując przy tym zdolność do znalezienia optymalnego rozwiązania. W przeciwieństwie do metaheurystyk, A* jest deterministyczny i jednowątkowy, ale jego przeszukiwanie jest kierowane heurystyką, co drastycznie redukuje przestrzeń poszukiwań.",
                 "Wielokryterialny algorytm A*",
                 "Przeszukiwanie heurystyczne",
@@ -11340,7 +12080,7 @@ namespace GrafikoMat.ViewModels
             // Genetic
             EngineOptions.Add(new EngineOption(
                 SolverType.Genetic,
-                "GeneticSolver",
+                "GeneticSolver (algorytm genetyczny)",
                 "Działa na zasadach ewolucji biologicznej. Na początku tworzy dużą 'populację' całkowicie losowych grafików. Następnie ocenia 'przystosowanie' każdego z nich – jak dobrze spełnia założone kryteria. Najlepsze grafiki ('osobniki') są wybierane do 'rozmnażania': ich fragmenty są ze sobą mieszane (krzyżowanie), tworząc nowe 'potomstwo' dziedziczące cechy po 'rodzicach'. Dodatkowo wprowadzane są losowe 'mutacje' (np. zmiana lekarza w jednym dniu), aby zwiększyć różnorodność. Z pokolenia na pokolenie słabe rozwiązania wymierają, a cała populacja ewoluuje w kierunku rozwiązań o bardzo wysokiej jakości. To potężna, wielowątkowa technika stosująca równoległą ewaluację populacji, idealna do złożonych problemów optymalizacyjnych.",
                 "Algorytm genetyczny",
                 "Metaheurystyka",
@@ -11352,7 +12092,7 @@ namespace GrafikoMat.ViewModels
             // Simulated Annealing
             EngineOptions.Add(new EngineOption(
                 SolverType.SimulatedAnnealing,
-                "SimulatedAnnealingSolver",
+                "SimulatedAnnealingSolver (algorytm symulowanego wyżarzania)",
                 "Naśladuje proces wyżarzania stali w hucie. Metal jest najpierw podgrzewany do bardzo wysokiej temperatury, co pozwala atomom na swobodne przemieszczanie się, a następnie jest bardzo powoli schładzany, aby atomy mogły ułożyć się w idealnie uporządkowaną strukturę krystaliczną. W algorytmie 'temperatura' to prawdopodobieństwo akceptacji gorszego rozwiązania. Na początku, przy wysokiej temperaturze, algorytm chętnie akceptuje nawet zmiany pogarszające wynik, co pozwala mu 'wyskakiwać' z lokalnych optimów i eksplorować całą przestrzeń rozwiązań. W miarę jak temperatura spada, staje się coraz bardziej wybredny, akceptując już tylko te zmiany, które faktycznie poprawiają grafik. Tempo schładzania jest kluczowym parametrem równoważącym jakość i czas obliczeń.",
                 "Algorytm symulowanego wyżarzania",
                 "Metaheurystyka",
@@ -11364,7 +12104,7 @@ namespace GrafikoMat.ViewModels
             // Tabu Search
             EngineOptions.Add(new EngineOption(
                 SolverType.TabuSearch,
-                "TabuSearchSolver",
+                "TabuSearchSolver (algorytm przeszukiwania z zabronieniami)",
                 "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
                 "Algorytm przeszukiwania z zabronieniami",
                 "Metaheurystyka",
@@ -11376,7 +12116,7 @@ namespace GrafikoMat.ViewModels
             // Ant Colony
             EngineOptions.Add(new EngineOption(
                 SolverType.AntColony,
-                "AntColonySolver",
+                "AntColonySolver (algorytm kolonii mrówek)",
                 "Algorytm inspirowany sposobem, w jaki mrówki znajdują najkrótsze trasy do źródeł pożywienia. Każda 'mrówka' (agent) próbuje zbudować kompletny grafik, poruszając się dzień po dniu i wybierając lekarzy. Wybory nie są losowe: mrówki kierują się śladami feromonowymi – cyfrowymi znacznikami pozostawianymi przez poprzednie mrówki. Im lepszy był grafik, tym więcej feromonu zostawiono na jego 'ścieżce'. Nowe mrówki są więc naturalnie przyciągane do sprawdzonych, obiecujących decyzji, zachowując jednak pewną losowość pozwalającą odkrywać nowe możliwości. Z czasem feromony częściowo parują, więc stare, słabe ścieżki są zapominane. Efekt? Kolonia stopniowo konwerguje wokół najlepszych strategii, tworząc wysokiej jakości rozwiązania dzięki współpracy wielu niezależnych agentów działających równolegle.",
                 "Algorytm kolonii mrówek",
                 "Metaheurystyka",
@@ -11389,7 +12129,410 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (23643 bytes)
+===== FILE: GrafikoMat\ViewModels\GeneralSettingsViewModel.cs (15064 bytes)
+----- BEGIN -----
+using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using GrafikoMat.Common;
+using GrafikoMat.Core.Scheduling;
+using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Models;
+using GrafikoMat.Services;
+using System;
+using System.Diagnostics;
+using System.Management;
+using System.Threading.Tasks;
+
+namespace GrafikoMat.ViewModels
+{
+    public class GeneralSettingsViewModel : ObservableObject
+    {
+        private readonly SettingsService _settingsService;
+        private readonly SupabaseService _supabaseService;
+        private readonly IUxActionOrchestrator _orchestrator;
+        private AppSettings _appSettings;
+        private Guid _viewId;
+        private bool _isInitializing = true;
+
+        // === MOTYW ===
+        private AppTheme _selectedTheme;
+        public AppTheme SelectedTheme
+        {
+            get => _selectedTheme;
+            set
+            {
+                if (SetProperty(ref _selectedTheme, value) && !_isInitializing)
+                {
+                    // Zastosuj zmianę wizualnie natychmiast (bez zapisu - zapis jest przyciskiem)
+                    ApplyThemeChangeVisually(value);
+                }
+            }
+        }
+
+        private void ApplyThemeChangeVisually(AppTheme theme)
+        {
+            try
+            {
+                Microsoft.UI.Xaml.ElementTheme newElementTheme = theme switch
+                {
+                    AppTheme.Light => Microsoft.UI.Xaml.ElementTheme.Light,
+                    AppTheme.Dark => Microsoft.UI.Xaml.ElementTheme.Dark,
+                    _ => Microsoft.UI.Xaml.ElementTheme.Default
+                };
+
+                // Bezpieczne sprawdzenie czy okno jest gotowe
+                if (App.MainRoot?.Content is Microsoft.UI.Xaml.FrameworkElement rootElement)
+                {
+                    rootElement.RequestedTheme = newElementTheme;
+                    App.MainRoot.RefreshTheme();
+                }
+
+                ThemeManagerService.Instance.SetTheme(newElementTheme);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ApplyThemeChangeVisually error: {ex.Message}");
+                // Ignoruj błąd - motyw zostanie zastosowany przy następnym zapisie
+            }
+        }
+
+        // === TIMEOUT ===
+        private int _timeoutMinutesValue;
+        public int TimeoutMinutesValue
+        {
+            get => _timeoutMinutesValue;
+            set => SetProperty(ref _timeoutMinutesValue, value);
+        }
+        public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
+        public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
+        public int TimeoutMinutesStep => SolverDefaults.TimeoutMinutes.Step;
+
+        // === WIELOWĄTKOWOŚĆ ===
+        private bool _isAutoThreadCount;
+        public bool IsAutoThreadCount
+        {
+            get => _isAutoThreadCount;
+            set
+            {
+                if (SetProperty(ref _isAutoThreadCount, value))
+                {
+                    OnPropertyChanged(nameof(IsCustomThreadCount));
+                    OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                }
+            }
+        }
+
+        public bool IsCustomThreadCount
+        {
+            get => !IsAutoThreadCount;
+            set => IsAutoThreadCount = !value;
+        }
+
+        private int _customThreadCountValue;
+        public int CustomThreadCountValue
+        {
+            get => _customThreadCountValue;
+            set
+            {
+                if (SetProperty(ref _customThreadCountValue, value))
+                {
+                    OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                }
+            }
+        }
+
+        public bool IsMaxThreadsWarningVisible => IsCustomThreadCount && CustomThreadCountValue >= DetectedThreadCount;
+
+        public int CustomThreadCountMin => SolverDefaults.CustomThreadCount.Min;
+        public int CustomThreadCountMax => SolverDefaults.CustomThreadCount.Max;
+        public int CustomThreadCountStep => SolverDefaults.CustomThreadCount.Step;
+        public int DetectedThreadCount => ParallelismConfig.ProcessorCount;
+        public int OptimalThreadCount => ParallelismConfig.OptimalParallelism;
+        public string ProcessorName => GetProcessorName();
+        public string AutoThreadCountLabel => "Automatycznie (zalecane)";
+
+        private static string GetProcessorName()
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT Name FROM Win32_Processor"))
+                {
+                    foreach (var obj in searcher.Get())
+                    {
+                        var name = obj["Name"]?.ToString()?.Trim();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            return name;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // W przypadku błędu zwróć podstawową informację
+            }
+            return "Nieznany procesor";
+        }
+
+        // === BAZA DANYCH ===
+        private string _supabaseUrl = string.Empty;
+        public string SupabaseUrl
+        {
+            get => _supabaseUrl;
+            set => SetProperty(ref _supabaseUrl, value);
+        }
+
+        private string _supabaseAnonKey = string.Empty;
+        public string SupabaseAnonKey
+        {
+            get => _supabaseAnonKey;
+            set => SetProperty(ref _supabaseAnonKey, value);
+        }
+
+        private string _connectionTestStatus = string.Empty;
+        public string ConnectionTestStatus
+        {
+            get => _connectionTestStatus;
+            set => SetProperty(ref _connectionTestStatus, value);
+        }
+
+        private bool _connectionTestSuccess;
+        public bool ConnectionTestSuccess
+        {
+            get => _connectionTestSuccess;
+            set => SetProperty(ref _connectionTestSuccess, value);
+        }
+
+        // === ZACHOWANIE PRZY TIMEOUT ===
+        private TimeoutBehavior _timeoutBehavior;
+        public TimeoutBehavior TimeoutBehavior
+        {
+            get => _timeoutBehavior;
+            set => SetProperty(ref _timeoutBehavior, value);
+        }
+
+        public bool IsShowResultAndInform
+        {
+            get => TimeoutBehavior == TimeoutBehavior.ShowResultAndInform;
+            set
+            {
+                if (value)
+                {
+                    TimeoutBehavior = TimeoutBehavior.ShowResultAndInform;
+                    OnPropertyChanged(nameof(IsAskToExtend));
+                }
+            }
+        }
+
+        public bool IsAskToExtend
+        {
+            get => TimeoutBehavior == TimeoutBehavior.AskToExtend;
+            set
+            {
+                if (value)
+                {
+                    TimeoutBehavior = TimeoutBehavior.AskToExtend;
+                    OnPropertyChanged(nameof(IsShowResultAndInform));
+                }
+            }
+        }
+
+        // === LOGI APLIKACJI (TO-DO) ===
+        private AppLogLevel _appLogLevel;
+        public AppLogLevel AppLogLevel
+        {
+            get => _appLogLevel;
+            set => SetProperty(ref _appLogLevel, value);
+        }
+
+        // === LOGI SILNIKÓW (TO-DO) ===
+        private SolverLogLevel _solverLogLevel;
+        public SolverLogLevel SolverLogLevel
+        {
+            get => _solverLogLevel;
+            set => SetProperty(ref _solverLogLevel, value);
+        }
+
+        public IAsyncRelayCommand SaveCommand { get; }
+        public IRelayCommand ResetTimeoutCommand { get; }
+        public IRelayCommand ResetThreadCountCommand { get; }
+        public IAsyncRelayCommand TestConnectionCommand { get; }
+
+        public GeneralSettingsViewModel(SettingsService settingsService, SupabaseService supabaseService, AppSettings appSettings)
+        {
+            _settingsService = settingsService;
+            _supabaseService = supabaseService;
+            _appSettings = appSettings;
+            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+
+            // Załaduj aktualne wartości
+            _selectedTheme = appSettings.Theme;
+            _timeoutMinutesValue = appSettings.TimeoutMinutes;
+            _timeoutBehavior = appSettings.TimeoutBehavior;
+            _appLogLevel = appSettings.AppLogLevel;
+            _solverLogLevel = appSettings.SolverLogLevel;
+
+            // Wielowątkowość
+            _isAutoThreadCount = appSettings.CustomThreadCount == null;
+            _customThreadCountValue = appSettings.CustomThreadCount ?? ParallelismConfig.OptimalParallelism;
+
+            // Baza danych
+            _supabaseUrl = appSettings.SupabaseUrl ?? string.Empty;
+            _supabaseAnonKey = appSettings.SupabaseAnonKey ?? string.Empty;
+
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            ResetTimeoutCommand = new RelayCommand(ResetTimeout);
+            ResetThreadCountCommand = new RelayCommand(ResetThreadCount);
+            TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
+
+            // Zakończ inicjalizację - teraz zmiany będą aplikowane
+            _isInitializing = false;
+        }
+
+        public void SetViewId(Guid viewId) => _viewId = viewId;
+
+        private void ResetTimeout()
+        {
+            TimeoutMinutesValue = SolverDefaults.TimeoutMinutes.Default;
+        }
+
+        private void ResetThreadCount()
+        {
+            IsAutoThreadCount = true;
+            CustomThreadCountValue = ParallelismConfig.OptimalParallelism;
+        }
+
+        private async Task TestConnectionAsync()
+        {
+            if (string.IsNullOrWhiteSpace(SupabaseUrl) || string.IsNullOrWhiteSpace(SupabaseAnonKey))
+            {
+                ConnectionTestStatus = "Wypełnij oba pola";
+                ConnectionTestSuccess = false;
+                return;
+            }
+
+            ConnectionTestStatus = "Testowanie...";
+            ConnectionTestSuccess = false;
+
+            bool success = await _supabaseService.TestConnectionAsync(SupabaseUrl, SupabaseAnonKey);
+
+            if (success)
+            {
+                ConnectionTestStatus = "✓ Połączenie udane";
+                ConnectionTestSuccess = true;
+            }
+            else
+            {
+                ConnectionTestStatus = "✗ Błąd połączenia";
+                ConnectionTestSuccess = false;
+            }
+        }
+
+        private async Task SaveSettingsAsync()
+        {
+            // Sprawdź czy dane bazy się zmieniły
+            bool dbChanged = (_appSettings.SupabaseUrl != SupabaseUrl ||
+                             _appSettings.SupabaseAnonKey != SupabaseAnonKey);
+
+            if (dbChanged)
+            {
+                // Test połączenia w tle
+                bool testOk = false;
+                try
+                {
+                    await _orchestrator.PerformActionAsync(
+                        viewId: _viewId,
+                        actionAsync: async () =>
+                        {
+                            testOk = await _supabaseService.TestConnectionAsync(SupabaseUrl, SupabaseAnonKey);
+                            if (!testOk)
+                            {
+                                throw new Exception("Nie można połączyć się z bazą danych. Sprawdź poprawność danych dostępowych.");
+                            }
+                        },
+                        verificationAsync: null,
+                        successMessage: null,
+                        errorMessageTitle: "Błąd połączenia z bazą"
+                    );
+                }
+                catch
+                {
+                    return; // Anuluj zapis
+                }
+
+                // Jeśli test przeszedł, zapisz wszystko
+                var newSettings = _appSettings with
+                {
+                    Theme = SelectedTheme,
+                    TimeoutMinutes = TimeoutMinutesValue,
+                    TimeoutBehavior = TimeoutBehavior,
+                    AppLogLevel = AppLogLevel,
+                    SolverLogLevel = SolverLogLevel,
+                    CustomThreadCount = IsAutoThreadCount ? null : CustomThreadCountValue,
+                    SupabaseUrl = SupabaseUrl,
+                    SupabaseAnonKey = SupabaseAnonKey
+                };
+
+                await _settingsService.SaveSettingsAsync(newSettings);
+                _appSettings = newSettings;
+
+                // Countdown i restart
+                await ShowCountdownAndRestartAsync();
+            }
+            else
+            {
+                // Normalny zapis bez restartu
+                var newSettings = _appSettings with
+                {
+                    Theme = SelectedTheme,
+                    TimeoutMinutes = TimeoutMinutesValue,
+                    TimeoutBehavior = TimeoutBehavior,
+                    AppLogLevel = AppLogLevel,
+                    SolverLogLevel = SolverLogLevel,
+                    CustomThreadCount = IsAutoThreadCount ? null : CustomThreadCountValue
+                };
+
+                await _orchestrator.PerformActionAsync(
+                    viewId: _viewId,
+                    actionAsync: async () => await _settingsService.SaveSettingsAsync(newSettings),
+                    verificationAsync: async () =>
+                    {
+                        var saved = await _settingsService.LoadSettingsAsync(forceReload: true);
+                        return saved.Theme == newSettings.Theme &&
+                               saved.TimeoutMinutes == newSettings.TimeoutMinutes &&
+                               saved.TimeoutBehavior == newSettings.TimeoutBehavior &&
+                               saved.CustomThreadCount == newSettings.CustomThreadCount;
+                    },
+                    successMessage: "Ustawienia ogólne zostały pomyślnie zapisane.",
+                    errorMessageTitle: "Błąd zapisu ustawień"
+                );
+
+                _appSettings = newSettings;
+                WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
+
+                // Zastosuj zmianę motywu natychmiast
+                ApplyThemeChangeVisually(SelectedTheme);
+            }
+        }
+
+        private async Task ShowCountdownAndRestartAsync()
+        {
+            // Prosty komunikat - restart po 1 sekundzie
+            await Task.Delay(1000);
+
+            // Restart aplikacji
+            var exePath = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(exePath))
+            {
+                Process.Start(exePath);
+                Environment.Exit(0);
+            }
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (24422 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11839,10 +12982,23 @@ namespace GrafikoMat.ViewModels
             // Wykryj czy solver jest deterministyczny (nie ma sensownego progressu 0-100%)
             bool isDeterministicSolver = SolverMessages.IsDeterministicSolver(settings.SelectedSolver);
 
+            // Wygeneruj nazwę silnika do wyświetlenia
+            var engineName = settings.SelectedSolver switch
+            {
+                SolverType.Backtracking => "BacktrackingSolver (algorytm z nawrotami)",
+                SolverType.AStar => "AStarSolver (algorytm A*)",
+                SolverType.Genetic => "GeneticSolver (algorytm genetyczny)",
+                SolverType.SimulatedAnnealing => "SimulatedAnnealingSolver (algorytm symulowanego wyżarzania)",
+                SolverType.TabuSearch => "TabuSearchSolver (algorytm przeszukiwania z tabu)",
+                SolverType.AntColony => "AntColonySolver (algorytm kolonii mrówek)",
+                _ => settings.SelectedSolver.ToString()
+            };
+
             // Użyj orkiestratora do długotrwałej operacji z progressem
             bool success = await _orchestrator.PerformLongRunningTaskAsync(
                 viewId: _viewId,
                 title: "Generowanie grafiku",
+                engineName: engineName,
                 operationAsync: async (progress, cancellationToken) =>
                 {
                     // Walidacja nastąpi w ScheduleSolverFactory.Create() - rzuci ArgumentException
@@ -14661,8 +15817,9 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml (1912 bytes)
+===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml (3009 bytes)
 ----- BEGIN -----
+<!-- GrafikoMat\Views\Settings\ConnectionSettingsView.xaml -->
 <UserControl
     x:Class="GrafikoMat.Views.Settings.ConnectionSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -14685,6 +15842,27 @@ namespace GrafikoMat.Views.Settings
                  Wprowadź tutaj dane połączeniowe do bazy danych GrafikoMat w Supabase.
             </TextBlock>
 
+            <!-- Komunikat błędu (jeśli ErrorMessage nie jest null/empty) -->
+            <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12"
+                    x:Name="ErrorBorder"
+                    x:Load="False">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xEA39;"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                        <TextBlock Text="Błąd połączenia" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ErrorMessageTextBlock"
+                               TextWrapping="Wrap" 
+                               FontSize="12"/>
+                </StackPanel>
+            </Border>
+
             <TextBox x:Name="UrlTextBox" Header="Supabase URL" Width="550"/>
             <TextBox x:Name="ApiKeyTextBox" Header="Supabase Anon Key" Width="550"/>
 
@@ -14701,6 +15879,7 @@ namespace GrafikoMat.Views.Settings
         </StackPanel>
     </controls:ActionContainer>
 </UserControl>
+
 ----- END -----
 
 ===== FILE: GrafikoMat\Views\Settings\ConnectionSettingsView.xaml.cs (5317 bytes)
@@ -14843,7 +16022,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (32268 bytes)
+===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (34172 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.EngineSettingsView"
@@ -15062,29 +16241,59 @@ namespace GrafikoMat.Views.Settings
                                 </TransitionCollection>
                             </StackPanel.Transitions>
 
-                            <!-- TIMEOUT (dla wszystkich silników) -->
+                            <!-- TIMEOUT (globalny dla wszystkich silników) -->
                             <StackPanel Spacing="8">
-                                <Slider Minimum="{x:Bind ViewModel.TimeoutMinutesMin}" 
-                                        Maximum="{x:Bind ViewModel.TimeoutMinutesMax}" 
-                                        StepFrequency="{x:Bind ViewModel.TimeoutMinutesStep}" 
-                                        Value="{x:Bind ViewModel.TimeoutMinutesValue, Mode=TwoWay}">
-                                    <Slider.Header>
-                                        <StackPanel Orientation="Horizontal" Spacing="4">
-                                            <TextBlock Text="Maksymalny czas obliczeń (minuty)"/>
-                                            <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
-                                                <ToolTipService.ToolTip>
-                                                    <ToolTip MaxWidth="400">
-                                                        <TextBlock TextWrapping="Wrap">
-                                                            Limit czasu, po którym algorytm zakończy działanie i zwróci najlepszy znaleziony dotychczas wynik.<LineBreak/><LineBreak/>
-                                                            <Run FontWeight="Bold">Krótszy czas:</Run> szybszy rezultat, ale może być niższej jakości.<LineBreak/>
-                                                            <Run FontWeight="Bold">Dłuższy czas:</Run> większa szansa na znalezienie lepszego rozwiązania.
-                                                        </TextBlock>
-                                                    </ToolTip>
-                                                </ToolTipService.ToolTip>
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </Slider.Header>
-                                </Slider>
+                                <TextBlock Text="Maksymalny czas obliczeń" FontWeight="SemiBold" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <TextBlock Text="Parametr globalny - dotyczy wszystkich silników obliczeniowych" 
+                                           FontSize="12" 
+                                           Opacity="0.7" 
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Slider Grid.Column="0"
+                                            Minimum="{x:Bind ViewModel.TimeoutMinutesMin}" 
+                                            Maximum="{x:Bind ViewModel.TimeoutMinutesMax}" 
+                                            StepFrequency="{x:Bind ViewModel.TimeoutMinutesStep}" 
+                                            Value="{x:Bind ViewModel.TimeoutMinutesValue, Mode=TwoWay}"
+                                            Margin="0,0,12,0">
+                                        <Slider.Header>
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="Czas (minuty)"/>
+                                                <TextBlock Text="[?]" FontWeight="Bold" VerticalAlignment="Center">
+                                                    <ToolTipService.ToolTip>
+                                                        <ToolTip MaxWidth="450">
+                                                            <TextBlock TextWrapping="Wrap">
+                                                                <Run FontWeight="Bold">Globalny limit czasu dla wszystkich silników obliczeniowych.</Run><LineBreak/><LineBreak/>
+                                                                Po przekroczeniu tego czasu algorytm zakończy działanie i zwróci najlepszy znaleziony dotychczas wynik.<LineBreak/><LineBreak/>
+                                                                <Run FontWeight="Bold">Krótszy czas:</Run> szybszy rezultat, ale może być niższej jakości.<LineBreak/>
+                                                                <Run FontWeight="Bold">Dłuższy czas:</Run> większa szansa na znalezienie lepszego rozwiązania.<LineBreak/><LineBreak/>
+                                                                ⚠️ <Run FontWeight="Bold">Uwaga:</Run> Ta wartość jest współdzielona przez wszystkie silniki - zmiana tutaj wpłynie na każdy wybrany algorytm.
+                                                            </TextBlock>
+                                                        </ToolTip>
+                                                    </ToolTipService.ToolTip>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Slider.Header>
+                                    </Slider>
+
+                                    <Border Grid.Column="1"
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                            CornerRadius="4"
+                                            Padding="12,8"
+                                            MinWidth="60"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind ViewModel.TimeoutMinutesValue, Mode=OneWay}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                   HorizontalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
                             </StackPanel>
 
                             <!-- SIMULATED ANNEALING -->
@@ -15324,7 +16533,502 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (10415 bytes)
+===== FILE: GrafikoMat\Views\Settings\GeneralSettingsView.xaml (23396 bytes)
+----- BEGIN -----
+
+<UserControl
+    x:Class="GrafikoMat.Views.Settings.GeneralSettingsView"
+    x:Name="RootControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:services="using:GrafikoMat.Services"
+    xmlns:common="using:GrafikoMat.Common"
+    mc:Ignorable="d">
+
+	<UserControl.Resources>
+		<common:EnumToBoolConverter x:Key="EnumToBoolConverter"/>
+		<common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+	</UserControl.Resources>
+
+	<ScrollViewer VerticalScrollBarVisibility="Auto">
+		<StackPanel Padding="20" Spacing="32">
+
+			<TextBlock Text="Ustawienia Ogólne"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,12"/>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: WYGLĄD APLIKACJI                    -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Wygląd aplikacji"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Motyw kolorystyczny interfejsu"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<RadioButton Content="Jasny"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Light, ElementName=RootControl}"/>
+					<RadioButton Content="Ciemny"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dark, ElementName=RootControl}"/>
+					<RadioButton Content="Systemowy"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=SystemDefault, ElementName=RootControl}"/>
+				</StackPanel>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: LIMIT CZASU OBLICZEŃ                -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Limit czasu obliczeń"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Globalny parametr dla wszystkich silników obliczeniowych"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Slider timeout -->
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+
+					<Slider Grid.Column="0"
+                            Width="400"
+                            Minimum="{x:Bind ViewModel.TimeoutMinutesMin}"
+                            Maximum="{x:Bind ViewModel.TimeoutMinutesMax}"
+                            StepFrequency="{x:Bind ViewModel.TimeoutMinutesStep}"
+                            Value="{x:Bind ViewModel.TimeoutMinutesValue, Mode=TwoWay}"
+                            Margin="0,0,12,0">
+						<Slider.Header>
+							<StackPanel Orientation="Horizontal" Spacing="6">
+								<TextBlock Text="Maksymalny czas (minuty):"/>
+								<TextBlock Text="{x:Bind ViewModel.TimeoutMinutesValue, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+								<FontIcon Glyph="&#xE946;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                          VerticalAlignment="Center">
+									<ToolTipService.ToolTip>
+										<ToolTip MaxWidth="450">
+											<TextBlock TextWrapping="Wrap">
+												<Run FontWeight="Bold">Globalny limit czasu dla wszystkich silników obliczeniowych.</Run><LineBreak/><LineBreak/>
+												Po przekroczeniu tego czasu algorytm zakończy działanie i zwróci najlepszy znaleziony dotychczas grafik. <Run FontWeight="Bold">Uwaga: grafik może być niekompletny i nieoptymalny.</Run><LineBreak/><LineBreak/>
+												<Run FontWeight="Bold">Krótszy czas:</Run> szybszy rezultat, ale może być niższej jakości.<LineBreak/>
+												<Run FontWeight="Bold">Dłuższy czas:</Run> większa szansa na znalezienie lepszego, kompletnego rozwiązania.<LineBreak/><LineBreak/>
+												⚠️ <Run FontWeight="Bold">Uwaga:</Run> Ta wartość jest współdzielona przez wszystkie silniki - zmiana tutaj wpłynie na każdy wybrany algorytm.
+											</TextBlock>
+										</ToolTip>
+									</ToolTipService.ToolTip>
+								</FontIcon>
+							</StackPanel>
+						</Slider.Header>
+					</Slider>
+
+					<Button Grid.Column="1"
+                            Content="Przywróć domyślny: 10 min"
+                            Command="{x:Bind ViewModel.ResetTimeoutCommand}"
+                            VerticalAlignment="Bottom"/>
+				</Grid>
+
+				<!-- RadioButtons - zachowanie przy timeout -->
+				<StackPanel Spacing="8" Margin="0,12,0,0">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Przy przekroczeniu limitu czasu:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="400">
+									<TextBlock TextWrapping="Wrap">
+										Określa jak aplikacja zachowa się gdy algorytm przekroczy maksymalny dozwolony czas obliczeń.<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Poinformuj i zwróć:</Run> Wyświetli dialog informacyjny o przekroczeniu limitu i automatycznie zwróci najlepszy znaleziony dotychczas grafik (może być niekompletny).<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Zapytaj czy przedłużyć:</Run> Wyświetli dialog z opcją przedłużenia czasu obliczeniowego o kolejne 10 minut lub zakończenia z obecnym wynikiem.
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+
+					<RadioButton Content="Poinformuj i zwróć najlepszy znaleziony grafik (może być niekompletny)"
+                                 IsChecked="{x:Bind ViewModel.IsShowResultAndInform, Mode=TwoWay}"/>
+					<RadioButton Content="Zapytaj czy przedłużyć czas obliczeniowy"
+                                 IsChecked="{x:Bind ViewModel.IsAskToExtend, Mode=TwoWay}"/>
+				</StackPanel>
+
+				<!-- TO-DO Badge dla logiki timeout -->
+				<Border Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        CornerRadius="4"
+                        Padding="8,6"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Left">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<FontIcon Glyph="&#xE9D9;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+						<TextBlock FontSize="11" Foreground="{ThemeResource SystemFillColorCautionBrush}">
+							<Run FontWeight="SemiBold">TO-DO:</Run>
+							<Run>Logika dialogów przy timeout - w trakcie implementacji</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: WIELOWĄTKOWOŚĆ                      -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Wielowątkowość"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Parametr dla silników metaheurystycznych (SimulatedAnnealingSolver, TabuSearchSolver, GeneticSolver, AntColonySolver)"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Info o procesorze na górze -->
+				<Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12">
+					<StackPanel Spacing="4">
+						<TextBlock FontWeight="SemiBold" FontSize="13">
+							<Run>Wykryty procesor:</Run>
+						</TextBlock>
+						<TextBlock TextWrapping="Wrap" FontSize="13">
+							<Run Text="{x:Bind ViewModel.ProcessorName, Mode=OneTime}"/><Run Text=", "/><Run FontWeight="SemiBold" Text="{x:Bind ViewModel.DetectedThreadCount, Mode=OneTime}"/><Run Text=" wątków"/>						</TextBlock>
+					</StackPanel>
+				</Border>
+
+				<!-- RadioButtons - Auto / Niestandardowe -->
+				<StackPanel Spacing="8">
+					<RadioButton Content="{x:Bind ViewModel.AutoThreadCountLabel, Mode=OneTime}"
+                                 IsChecked="{x:Bind ViewModel.IsAutoThreadCount, Mode=TwoWay}"
+                                 GroupName="ThreadCountMode"/>
+
+					<RadioButton Content="Niestandardowa liczba wątków"
+                                 IsChecked="{x:Bind ViewModel.IsCustomThreadCount, Mode=TwoWay}"
+                                 GroupName="ThreadCountMode"/>
+				</StackPanel>
+
+				<!-- Slider + przycisk reset + ostrzeżenie o max wątkach obok -->
+				<Grid Margin="24,8,0,0">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="*"/>
+					</Grid.ColumnDefinitions>
+
+					<StackPanel Grid.Column="0" Spacing="8">
+						<Slider Width="350"
+                            Minimum="{x:Bind ViewModel.CustomThreadCountMin}"
+                            Maximum="{x:Bind ViewModel.CustomThreadCountMax}"
+                            StepFrequency="{x:Bind ViewModel.CustomThreadCountStep}"
+                            Value="{x:Bind ViewModel.CustomThreadCountValue, Mode=TwoWay}"
+                            IsEnabled="{x:Bind ViewModel.IsCustomThreadCount, Mode=OneWay}">
+							<Slider.Header>
+								<StackPanel Orientation="Horizontal" Spacing="6">
+									<TextBlock Text="Liczba wątków:"/>
+									<TextBlock Text="{x:Bind ViewModel.CustomThreadCountValue, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+									<FontIcon Glyph="&#xE946;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                          VerticalAlignment="Center">
+										<ToolTipService.ToolTip>
+											<ToolTip MaxWidth="450">
+												<TextBlock TextWrapping="Wrap">
+													<Run FontWeight="Bold">Określa ile wątków procesora (CPU) będzie używanych przez silniki obliczeniowe.</Run><LineBreak/><LineBreak/>
+													<Run FontWeight="Bold">Więcej wątków:</Run> szybsze obliczenia (lepsza wydajność)<LineBreak/>
+													<Run FontWeight="Bold">Mniej wątków:</Run> wolniejsze obliczenia, ale więcej zasobów dla interfejsu<LineBreak/><LineBreak/>
+													⚠️ <Run FontWeight="Bold">Uwaga:</Run> Zbyt duża wartość może spowolnić interfejs użytkownika podczas obliczeń.
+												</TextBlock>
+											</ToolTip>
+										</ToolTipService.ToolTip>
+									</FontIcon>
+								</StackPanel>
+							</Slider.Header>
+						</Slider>
+
+						<Button Content="Przywróć Auto"
+                            Command="{x:Bind ViewModel.ResetThreadCountCommand}"
+                            HorizontalAlignment="Left"/>
+					</StackPanel>
+
+					<!-- Ostrzeżenie o maksymalnych wątkach OBOK slidera -->
+					<Border Grid.Column="1"
+                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Top"
+                        Visibility="{x:Bind ViewModel.IsMaxThreadsWarningVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+						<StackPanel Spacing="6">
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<FontIcon Glyph="&#xE7BA;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+								<TextBlock Text="Uwaga" FontWeight="SemiBold"/>
+							</StackPanel>
+							<TextBlock TextWrapping="Wrap" FontSize="12">
+								Ustawiając użycie wszystkich wątków procesora ryzykujesz zablokowaniem interfejsu użytkownika Windows na czas generowania grafiku. Zalecamy pozostawienie co najmniej 1 wątku wolnego dla systemu.
+							</TextBlock>
+						</StackPanel>
+					</Border>
+				</Grid>
+
+				<!-- Info box POD sliderem -->
+				<Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="0,8,0,0">
+					<StackPanel Spacing="6">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE946;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+							<TextBlock Text="Informacje o wielowątkowości" FontWeight="SemiBold"/>
+						</StackPanel>
+						<TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8">
+							<Run>• Tryb automatyczny wykorzystuje</Run>
+							<Run FontWeight="SemiBold" Text="{x:Bind ViewModel.OptimalThreadCount, Mode=OneTime}"/>
+							<Run>wątków (pozostawia 1 wolny dla UI i systemu)</Run><LineBreak/>
+							<Run>• Wielowątkowość CPU przyspiesza generowanie grafików nawet kilkunastokrotnie</Run><LineBreak/>
+							<Run>• Zalecane: pozostaw tryb automatyczny</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+				</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: POŁĄCZENIE Z BAZĄ DANYCH           -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Połączenie z bazą danych"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Dane dostępowe Supabase"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<TextBox Header="Supabase URL"
+                         Text="{x:Bind ViewModel.SupabaseUrl, Mode=TwoWay}"
+                         Width="550"
+                         HorizontalAlignment="Left"/>
+
+				<PasswordBox Header="Supabase Anon Key"
+                             Password="{x:Bind ViewModel.SupabaseAnonKey, Mode=TwoWay}"
+                             Width="550"
+                             HorizontalAlignment="Left"/>
+
+				<StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+					<Button Content="Testuj połączenie"
+                            Command="{x:Bind ViewModel.TestConnectionCommand}"/>
+					<TextBlock Text="{x:Bind ViewModel.ConnectionTestStatus, Mode=OneWay}"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+				</StackPanel>
+
+				<Border Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="0,8,0,0">
+					<StackPanel Spacing="6">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE7BA;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource SystemFillColorAttentionBrush}"/>
+							<TextBlock Text="Ważne" FontWeight="SemiBold"/>
+						</StackPanel>
+						<TextBlock TextWrapping="Wrap" FontSize="12">
+							<Run>• Zmiana danych dostępowych spowoduje wylogowanie i automatyczny restart aplikacji</Run><LineBreak/>
+							<Run>• Upewnij się, że dane są poprawne przed zapisem (użyj przycisku "Testuj połączenie")</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: LOGOWANIE (TO-DO - DISABLED)        -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12" Opacity="0.5">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Logowanie i diagnostyka"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Zapisywanie logów działania (funkcja w przygotowaniu)"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Logi aplikacji -->
+				<StackPanel Spacing="6">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Logi aplikacji:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="400">
+									<TextBlock TextWrapping="Wrap">
+										Logowanie zdarzeń związanych z działaniem aplikacji (błędy, ostrzeżenia, informacje o połączeniu z bazą danych itp.)
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+					<ComboBox SelectedIndex="1" MinWidth="300" IsEnabled="False">
+						<ComboBoxItem Content="Wyłączone"/>
+						<ComboBoxItem Content="Tylko błędy"/>
+						<ComboBoxItem Content="Błędy + ostrzeżenia"/>
+						<ComboBoxItem Content="Pełne (wszystkie zdarzenia)"/>
+					</ComboBox>
+				</StackPanel>
+
+				<!-- Logi silników -->
+				<StackPanel Spacing="6" Margin="0,12,0,0">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Logi silników obliczeniowych:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="450">
+									<TextBlock TextWrapping="Wrap">
+										Logowanie procesu generowania grafiku przez algorytmy.<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Podstawowy:</Run> ~1 KB na generowanie (tylko podsumowanie)<LineBreak/>
+										<Run FontWeight="Bold">Szczegółowy:</Run> ~10-50 KB na generowanie (postęp + statystyki)<LineBreak/>
+										<Run FontWeight="Bold">Debug:</Run> ~100 KB - 10 MB na generowanie (tylko dla debugowania!)
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+					<ComboBox SelectedIndex="0" MinWidth="300" IsEnabled="False">
+						<ComboBoxItem Content="Wyłączone"/>
+						<ComboBoxItem Content="Podstawowy (podsumowanie)"/>
+						<ComboBoxItem Content="Szczegółowy (postęp + statystyki)"/>
+						<ComboBoxItem Content="Debug (pełna diagnostyka)"/>
+					</ComboBox>
+				</StackPanel>
+
+				<TextBlock Text="ℹ️ Logi zapisywane w katalogu: logs/"
+                           FontSize="12"
+                           Opacity="0.7"
+                           Margin="0,8,0,0"/>
+
+				<!-- TO-DO Badge -->
+				<Border Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        CornerRadius="4"
+                        Padding="8,6"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Left">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<FontIcon Glyph="&#xE9D9;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+						<TextBlock FontSize="11" Foreground="{ThemeResource SystemFillColorCautionBrush}">
+							<Run FontWeight="SemiBold">TO-DO:</Run>
+							<Run>System logowania - w trakcie implementacji</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- Przycisk Zapisz -->
+			<Button Content="Zapisz ustawienia"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.SaveCommand}"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0"/>
+
+		</StackPanel>
+	</ScrollViewer>
+</UserControl>
+
+----- END -----
+
+===== FILE: GrafikoMat\Views\Settings\GeneralSettingsView.xaml.cs (574 bytes)
+----- BEGIN -----
+using GrafikoMat.Services;
+using GrafikoMat.ViewModels;
+using Microsoft.UI.Xaml.Controls;
+
+namespace GrafikoMat.Views.Settings
+{
+    public sealed partial class GeneralSettingsView : UserControl
+    {
+        public GeneralSettingsViewModel ViewModel { get; }
+
+        public GeneralSettingsView(SettingsService settingsService, SupabaseService supabaseService, AppSettings appSettings)
+        {
+            this.InitializeComponent();
+            ViewModel = new GeneralSettingsViewModel(settingsService, supabaseService, appSettings);
+        }
+    }
+}
+----- END -----
+
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (10840 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.PrioritiesSettingsView"
@@ -15381,129 +17085,134 @@ namespace GrafikoMat.Views.Settings
 
         <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
 
-        <ListView x:Name="ActivePrioritiesListView" 
-                  Grid.Row="3"
-                  ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
-                  CanReorderItems="True"
-                  AllowDrop="True"
-                  SelectionMode="None">
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" MaxHeight="400">
+            <ListView x:Name="ActivePrioritiesListView" 
+                      ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
+                      CanReorderItems="True"
+                      AllowDrop="True"
+                      SelectionMode="None">
 
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0,0,0,8"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                </Style>
-            </ListView.ItemContainerStyle>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0,0,0,8"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
 
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:PriorityOptionViewModel">
-                    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4">
-                        <Grid MinHeight="64">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="60"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Grid Grid.Column="0">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PriorityOptionViewModel">
+                        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                MinWidth="400">
+                            <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="64"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Kolumna strzałek -->
-                                <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
-                                    <Button VerticalAlignment="Top"
+                                <Grid Grid.Column="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="64"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Kolumna strzałek -->
+                                    <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
+                                        <Button VerticalAlignment="Top"
                                             Command="{x:Bind MoveUpCommand}"
                                             Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                             Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                        <FontIcon Glyph="&#xE70E;" FontSize="12"/>
-                                    </Button>
-                                    <Button VerticalAlignment="Bottom"
+                                            <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button VerticalAlignment="Bottom"
                                             Command="{x:Bind MoveDownCommand}"
                                             Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                             Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                        <FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                                    </Button>
-                                </Grid>
+                                            <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                    </Grid>
 
-                                <!-- Kółko z rangą -->
-                                <Border Grid.Column="1"
+                                    <!-- Kółko z rangą -->
+                                    <Border Grid.Column="1"
                                         Width="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
                                         Height="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
                                         Background="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToBrushConverter}}"
                                         CornerRadius="100"
                                         VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Rank, Mode=OneWay}"
+                                        <TextBlock Text="{x:Bind Rank, Mode=OneWay}"
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center">
-                                        <TextBlock.RenderTransform>
-                                            <TranslateTransform Y="-0.5"/>
-                                        </TextBlock.RenderTransform>
-                                    </TextBlock>
-                                </Border>
+                                            <TextBlock.RenderTransform>
+                                                <TranslateTransform Y="-0.5"/>
+                                            </TextBlock.RenderTransform>
+                                        </TextBlock>
+                                    </Border>
 
-                                <!-- Nazwa i opis -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                    <!-- Nazwa i opis -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                                <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
+
+        <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+            <ListView ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
+                      SelectionMode="None">
+
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0,0,0,8"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PriorityOptionViewModel">
+                        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Opacity="0.5"
+                                MinWidth="400">
+                            <Grid MinHeight="64">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
                                     <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
                                     <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                                 </StackPanel>
+
+                                <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                                <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                             </Grid>
-
-                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
-                            <CheckBox Grid.Column="1"
-                                      Style="{StaticResource CompactCheckBoxStyle}"
-                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-
-        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
-        <ListView Grid.Row="5"
-                  ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
-                  SelectionMode="None">
-
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0,0,0,8"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                </Style>
-            </ListView.ItemContainerStyle>
-
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:PriorityOptionViewModel">
-                    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Opacity="0.5">
-                        <Grid MinHeight="64">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="60"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
-                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
-                            </StackPanel>
-
-                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
-                            <CheckBox Grid.Column="1"
-                                      Style="{StaticResource CompactCheckBoxStyle}"
-                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </ScrollViewer>
 
         <Button Grid.Row="6"
                 Content="Zapisz ustawienia"
@@ -16395,7 +18104,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (6249 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (5453 bytes)
 ----- BEGIN -----
 using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
@@ -16416,6 +18125,7 @@ namespace GrafikoMat.Views
     {
         private IUnitRepository? _unitRepository;
         private SettingsService? _settingsService;
+        private SupabaseService? _supabaseService;
         private AppSettings? _appSettings;
         public event Action? ReloadRequired;
         public event Action<List<UiAction>>? ActionButtonsChanged;
@@ -16424,32 +18134,27 @@ namespace GrafikoMat.Views
         {
             this.InitializeComponent();
 
-            // ZMIANA: Użycie nowej listy obiektów z poprawną kolejnością
+            // ZMIANA: Usunięto "Połączenie z Bazą Danych" z listy (przeniesione do Ustawień Ogólnych)
             SettingsMenu.ItemsSource = new List<SettingsMenuItem>
-            {
-                new("Wygląd i Motyw", "Zmiana jasnego i ciemnego motywu aplikacji."),
-                new("Połączenie z Bazą Danych", "Konfiguracja adresu URL i klucza API dla Supabase."),
-                new("Zarządzanie Jednostkami", "Dodawanie i edycja szpitali oraz oddziałów."),
-                new("Priorytety Obliczeń Grafiku", "Ustalanie kolejności i wagi kryteriów optymalizacji."),
-                new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
-            };
+    {
+        new("Ustawienia Ogólne", "Globalne ustawienia aplikacji"),
+        new("Zarządzanie Jednostkami", "Dodawanie i edycja szpitali oraz oddziałów."),
+        new("Priorytety Obliczeń Grafiku", "Ustalanie kolejności i wagi kryteriów optymalizacji."),
+        new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
+    };
 
             SettingsMenu.SelectedIndex = -1;
         }
-
-        public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, AppSettings settings)
+        public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, SupabaseService supabaseService, AppSettings settings)
         {
             _unitRepository = unitRepository;
             _settingsService = settingsService;
+            _supabaseService = supabaseService;
             _appSettings = settings;
-
-            // ZMIANA: Usunięto domyślne zaznaczanie pierwszego elementu
-            // SettingsMenu.SelectedIndex = 0;
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // ZMIANA: Dostosowanie do nowego typu danych w menu
             if (e.AddedItems.FirstOrDefault() is not SettingsMenuItem selectedItem)
             {
                 SettingsDetailContent.Content = null;
@@ -16472,26 +18177,23 @@ namespace GrafikoMat.Views
 
             switch (selectedItemName)
             {
-                case "Połączenie z Bazą Danych":
-                    var connectionView = new ConnectionSettingsView();
-                    // Upewniamy się, że NIE ustawiamy IsInitialSetupMode (domyślnie false)
-                    connectionView.Initialize(_settingsService, _appSettings);
-                    // ZMIANA: Ta linia jest teraz POPRAWNA, bo ReloadRequired istnieje
-                    connectionView.ReloadRequired += () => ReloadRequired?.Invoke();
-                    viewToLoad = connectionView;
+                case "Ustawienia Ogólne":
+                    if (_appSettings != null && _supabaseService != null)
+                    {
+                        var generalView = new GeneralSettingsView(_settingsService, _supabaseService, _appSettings);
+                        var containerGeneral = new ActionContainer { Content = generalView };
+                        generalView.ViewModel.SetViewId(containerGeneral.GetViewId());
+                        viewToLoad = containerGeneral;
+                    }
                     break;
                 case "Zarządzanie Jednostkami":
                     if (_unitRepository != null)
                     {
                         var unitsView = new UnitsSettingsView(_unitRepository);
-
-                        // DODAJ OBSŁUGĘ AKCJI
                         unitsView.ActionsChanged += (actions) =>
                         {
-                            // Przekazanie akcji do MainWindow przez event
                             ActionButtonsChanged?.Invoke(actions);
                         };
-
                         viewToLoad = unitsView;
                     }
                     else
@@ -16504,7 +18206,6 @@ namespace GrafikoMat.Views
                     {
                         var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
-                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
                         var containerPriorities = new ActionContainer { Content = prioritiesView };
                         prioritiesViewModel.SetViewId(containerPriorities.GetViewId());
                         viewToLoad = containerPriorities;
@@ -16514,20 +18215,12 @@ namespace GrafikoMat.Views
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
-                        // Używamy ActionContainer do opakowania, aby zapewnić spójny UX z zapisem
                         var containerEngine = new ActionContainer { Content = engineView };
                         engineView.ViewModel.SetViewId(containerEngine.GetViewId());
                         viewToLoad = containerEngine;
                     }
                     break;
-                case "Wygląd i Motyw":
-                    var appearanceView = new AppearanceSettingsView();
-                    if (_appSettings != null)
-                    {
-                        appearanceView.Initialize(_settingsService, _appSettings);
-                    }
-                    viewToLoad = appearanceView;
-                    break;
+                    // USUNIĘTE: case "Połączenie z Bazą Danych" - przeniesione do Ustawień Ogólnych
             }
 
             SettingsDetailContent.Content = viewToLoad;
@@ -23870,7 +25563,7 @@ pause
 
 ----- END -----
 
-===== FILE: UpdateProject.bat (2136 bytes)
+===== FILE: UpdateProject.bat (2140 bytes)
 ----- BEGIN -----
 @echo off
 setlocal EnableExtensions
@@ -23926,7 +25619,7 @@ REM ========================================
 echo [2/2] Aktualizacja Claude Project...
 
 cd /d "%ROOT_DIR%"
-py -m claude-pyrojects.cli update
+python -m claude-pyrojects.cli update
 
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" (

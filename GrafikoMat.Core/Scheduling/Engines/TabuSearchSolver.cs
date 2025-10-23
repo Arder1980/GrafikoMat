@@ -16,7 +16,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// Kluczowe optymalizacje:
     /// 1. Move-based tabu list (hash par (dzień, lekarz))
     /// 2. Adaptive neighborhood size (5→15 w zależności od stagnacji)
-    /// 3. Parallel evaluation sąsiadów
+    /// 3. Parallel evaluation sąsiadów (automatycznie dopasowana do liczby wątków procesora)
     /// 4. Early stopping (60 iteracji bez poprawy)
     /// 5. Szybsza dywersyfikacja (co 25 iteracji)
     /// </summary>
@@ -31,6 +31,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly IProgress<double>? _progressReporter;
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
+        private readonly ParallelOptions _parallelOptions;
 
         private const int EARLY_STOP_THRESHOLD = 60;
         private const int DIVERSIFICATION_INTERVAL = 25;
@@ -46,7 +47,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int maxIterations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -57,6 +59,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _tabuListSize = tabuListSize;
             _maxIterations = maxIterations;
+
+            // Konfiguracja wielowątkowości
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -175,7 +180,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             var tabuSet = new HashSet<(DateTime, Guid?)>(tabuList);
 
-            Parallel.ForEach(neighbors, neighbor =>
+            Parallel.ForEach(neighbors, _parallelOptions, neighbor =>
             {
                 bool isTabu = false;
                 foreach (var kvp in neighbor)

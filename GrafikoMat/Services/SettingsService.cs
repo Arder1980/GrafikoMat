@@ -11,6 +11,47 @@ namespace GrafikoMat.Services
 {
     public enum AppTheme { Light, Dark, SystemDefault }
 
+    /// <summary>
+    /// Zachowanie aplikacji przy przekroczeniu limitu czasu obliczeń.
+    /// </summary>
+    public enum TimeoutBehavior
+    {
+        /// <summary>Pokaż dialog informacyjny i zwróć najlepsze znalezione rozwiązanie</summary>
+        ShowResultAndInform,
+        /// <summary>Zapytaj użytkownika czy przedłużyć czas obliczeniowy</summary>
+        AskToExtend
+    }
+
+    /// <summary>
+    /// Poziom logowania zdarzeń aplikacji.
+    /// </summary>
+    public enum AppLogLevel
+    {
+        /// <summary>Brak logowania</summary>
+        Off,
+        /// <summary>Tylko błędy krytyczne</summary>
+        ErrorsOnly,
+        /// <summary>Błędy + ostrzeżenia</summary>
+        ErrorsAndWarnings,
+        /// <summary>Pełne logowanie wszystkich zdarzeń</summary>
+        Full
+    }
+
+    /// <summary>
+    /// Poziom logowania procesu generowania grafiku przez silniki.
+    /// </summary>
+    public enum SolverLogLevel
+    {
+        /// <summary>Brak logowania silników</summary>
+        Off,
+        /// <summary>Podstawowy - tylko podsumowanie (~1 KB na generowanie)</summary>
+        Basic,
+        /// <summary>Szczegółowy - postęp + statystyki (~10-50 KB na generowanie)</summary>
+        Detailed,
+        /// <summary>Debug - pełna diagnostyka (~100 KB - 10 MB na generowanie)</summary>
+        Debug
+    }
+
     public record PrioritySetting(SolverPriority Priority, bool IsActive);
 
     public record AppSettings
@@ -29,6 +70,16 @@ namespace GrafikoMat.Services
 
         // Timeout globalny (w minutach)
         public int TimeoutMinutes { get; init; } = SolverDefaults.TimeoutMinutes.Default;
+
+        // Wielowątkowość (null = automatyczne wykrywanie)
+        public int? CustomThreadCount { get; init; } = SolverDefaults.CustomThreadCount.Default;
+
+        // Zachowanie przy przekroczeniu timeout
+        public TimeoutBehavior TimeoutBehavior { get; init; } = TimeoutBehavior.ShowResultAndInform;
+
+        // Poziomy logowania
+        public AppLogLevel AppLogLevel { get; init; } = AppLogLevel.ErrorsOnly;
+        public SolverLogLevel SolverLogLevel { get; init; } = SolverLogLevel.Off;
 
         // Parametry silników - używamy wartości domyślnych z SolverDefaults
         public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
@@ -49,6 +100,22 @@ namespace GrafikoMat.Services
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
+
+        /// <summary>
+        /// Zwraca domyślną kolejność priorytetów używaną przy pierwszym uruchomieniu aplikacji.
+        /// Kolejność od najważniejszego do najmniej ważnego.
+        /// </summary>
+        private static List<PrioritySetting> GetDefaultPriorities()
+        {
+            return new List<PrioritySetting>
+            {
+                new(SolverPriority.InitialContinuity, true),
+                new(SolverPriority.TotalAssignments, true),
+                new(SolverPriority.Fairness, true),
+                new(SolverPriority.Spacing, true),
+                new(SolverPriority.DeclarationCompliance, true)
+            };
+        }
 
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
@@ -71,6 +138,13 @@ namespace GrafikoMat.Services
             }
 
             _currentSettings ??= new AppSettings();
+
+            // ✅ NOWE: Jeśli lista priorytetów jest pusta, użyj domyślnych wartości
+            if (_currentSettings.Priorities.Count == 0)
+            {
+                _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
+            }
+
             return _currentSettings;
         }
 
@@ -91,27 +165,25 @@ namespace GrafikoMat.Services
 
         public SolverParameters BuildSolverParameters(AppSettings settings)
         {
+            // Po LoadSettingsAsync() lista Priorities zawsze ma wartości (domyślne lub zapisane)
             var activePriorities = settings.Priorities
                 .Where(p => p.IsActive)
                 .Select(p => p.Priority)
                 .ToList();
 
+            // Bezpieczeństwo - jeśli wszystkie priorytety są nieaktywne, użyj domyślnych
             if (activePriorities.Count == 0)
             {
-                activePriorities = new List<SolverPriority>
-                {
-                    SolverPriority.InitialContinuity,
-                    SolverPriority.TotalAssignments,
-                    SolverPriority.Fairness,
-                    SolverPriority.Spacing,
-                    SolverPriority.DeclarationCompliance
-                };
+                activePriorities = GetDefaultPriorities()
+                    .Select(p => p.Priority)
+                    .ToList();
             }
 
             return new SolverParameters
             {
                 SolverType = settings.SelectedSolver,
                 TimeoutMinutes = settings.TimeoutMinutes,
+                CustomThreadCount = settings.CustomThreadCount,
                 CoolingRate = settings.CoolingRate,
                 GeneticPopulationSize = settings.GeneticPopulationSize,
                 GeneticGenerations = settings.GeneticGenerations,

@@ -52,7 +52,7 @@ REM ========================================
 echo [2/2] Aktualizacja Claude Project...
 
 cd /d "%ROOT_DIR%"
-py -m claude-pyrojects.cli update
+python -m claude-pyrojects.cli update
 
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" (

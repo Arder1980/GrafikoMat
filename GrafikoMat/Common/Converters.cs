@@ -175,4 +175,57 @@ namespace GrafikoMat.Common
             throw new NotImplementedException();
         }
     }
+
+    public class EnumToBoolConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value == null || parameter == null)
+                return false;
+
+            string? enumValue = value.ToString();
+            string? targetValue = parameter.ToString();
+
+            return enumValue == targetValue;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool isChecked && isChecked && parameter is string enumString)
+            {
+                try
+                {
+                    // Dla x:Bind, targetType może być Object zamiast właściwego typu enum
+                    // Musimy spróbować znaleźć właściwy typ
+
+                    // Próbujemy najpierw użyć przekazanego targetType
+                    if (targetType != null && targetType != typeof(object) && targetType.IsEnum)
+                    {
+                        return Enum.Parse(targetType, enumString);
+                    }
+
+                    // Jeśli targetType to object lub nie jest enumem, próbujemy znaleźć typ na podstawie nazwy
+                    // Sprawdzamy popularne typy enum w aplikacji
+                    var enumTypes = new[]
+                    {
+                        typeof(GrafikoMat.Services.AppTheme),
+                        typeof(GrafikoMat.Core.Scheduling.Models.SolverType)
+                    };
+
+                    foreach (var enumType in enumTypes)
+                    {
+                        if (Enum.IsDefined(enumType, enumString))
+                        {
+                            return Enum.Parse(enumType, enumString);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"EnumToBoolConverter.ConvertBack error: {ex.Message}");
+                }
+            }
+            return DependencyProperty.UnsetValue;
+        }
+    }
 }

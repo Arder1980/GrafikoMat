@@ -53,129 +53,134 @@
 
         <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
 
-        <ListView x:Name="ActivePrioritiesListView" 
-                  Grid.Row="3"
-                  ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
-                  CanReorderItems="True"
-                  AllowDrop="True"
-                  SelectionMode="None">
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" MaxHeight="400">
+            <ListView x:Name="ActivePrioritiesListView" 
+                      ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
+                      CanReorderItems="True"
+                      AllowDrop="True"
+                      SelectionMode="None">
 
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0,0,0,8"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                </Style>
-            </ListView.ItemContainerStyle>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0,0,0,8"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
 
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:PriorityOptionViewModel">
-                    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4">
-                        <Grid MinHeight="64">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="60"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Grid Grid.Column="0">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PriorityOptionViewModel">
+                        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                MinWidth="400">
+                            <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="64"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Kolumna strzałek -->
-                                <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
-                                    <Button VerticalAlignment="Top"
+                                <Grid Grid.Column="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="64"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Kolumna strzałek -->
+                                    <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="12,0,0,0">
+                                        <Button VerticalAlignment="Top"
                                             Command="{x:Bind MoveUpCommand}"
                                             Visibility="{x:Bind IsMoveUpEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                             Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                        <FontIcon Glyph="&#xE70E;" FontSize="12"/>
-                                    </Button>
-                                    <Button VerticalAlignment="Bottom"
+                                            <FontIcon Glyph="&#xE70E;" FontSize="12"/>
+                                        </Button>
+                                        <Button VerticalAlignment="Bottom"
                                             Command="{x:Bind MoveDownCommand}"
                                             Visibility="{x:Bind IsMoveDownEnabled, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
                                             Style="{StaticResource SubtleButtonStyle}" Padding="6" Height="32">
-                                        <FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                                    </Button>
-                                </Grid>
+                                            <FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                                        </Button>
+                                    </Grid>
 
-                                <!-- Kółko z rangą -->
-                                <Border Grid.Column="1"
+                                    <!-- Kółko z rangą -->
+                                    <Border Grid.Column="1"
                                         Width="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
                                         Height="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToSizeConverter}}"
                                         Background="{x:Bind Rank, Mode=OneWay, Converter={StaticResource RankToBrushConverter}}"
                                         CornerRadius="100"
                                         VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Rank, Mode=OneWay}"
+                                        <TextBlock Text="{x:Bind Rank, Mode=OneWay}"
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimary}"
                                                FontWeight="SemiBold"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center">
-                                        <TextBlock.RenderTransform>
-                                            <TranslateTransform Y="-0.5"/>
-                                        </TextBlock.RenderTransform>
-                                    </TextBlock>
-                                </Border>
+                                            <TextBlock.RenderTransform>
+                                                <TranslateTransform Y="-0.5"/>
+                                            </TextBlock.RenderTransform>
+                                        </TextBlock>
+                                    </Border>
 
-                                <!-- Nazwa i opis -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                    <!-- Nazwa i opis -->
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="12,0,12,0">
+                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                                <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
+
+        <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+            <ListView ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
+                      SelectionMode="None">
+
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0,0,0,8"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    </Style>
+                </ListView.ItemContainerStyle>
+
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PriorityOptionViewModel">
+                        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Opacity="0.5"
+                                MinWidth="400">
+                            <Grid MinHeight="64">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="60"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
                                     <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
                                     <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
                                 </StackPanel>
+
+                                <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
+                                <CheckBox Grid.Column="1"
+                                      Style="{StaticResource CompactCheckBoxStyle}"
+                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
                             </Grid>
-
-                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
-                            <CheckBox Grid.Column="1"
-                                      Style="{StaticResource CompactCheckBoxStyle}"
-                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
-
-        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
-        <ListView Grid.Row="5"
-                  ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
-                  SelectionMode="None">
-
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0,0,0,8"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                </Style>
-            </ListView.ItemContainerStyle>
-
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:PriorityOptionViewModel">
-                    <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Opacity="0.5">
-                        <Grid MinHeight="64">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="60"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="24,0,12,0">
-                                <TextBlock Text="{x:Bind Name, Mode=OneWay}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{x:Bind Description, Mode=OneWay}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"/>
-                            </StackPanel>
-
-                            <!-- ZMIANA: Natywny CheckBox z minimalnym custom stylem -->
-                            <CheckBox Grid.Column="1"
-                                      Style="{StaticResource CompactCheckBoxStyle}"
-                                      IsChecked="{x:Bind IsActive, Mode=TwoWay}"/>
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </ScrollViewer>
 
         <Button Grid.Row="6"
                 Content="Zapisz ustawienia"

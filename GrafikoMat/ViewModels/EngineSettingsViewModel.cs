@@ -35,7 +35,9 @@ namespace GrafikoMat.ViewModels
         }
 
         public bool HasConfigurableParameters =>
-            SelectedEngine?.Type is SolverType.SimulatedAnnealing or SolverType.Genetic or SolverType.AntColony or SolverType.TabuSearch;
+            SelectedEngine != null &&
+            SelectedEngine.Type != SolverType.Backtracking &&
+            SelectedEngine.Type != SolverType.AStar;
 
         // === TIMEOUT ===
         private int _timeoutMinutesValue;
@@ -188,7 +190,7 @@ namespace GrafikoMat.ViewModels
             // Backtracking
             EngineOptions.Add(new EngineOption(
                 SolverType.Backtracking,
-                "BacktrackingSolver",
+                "BacktrackingSolver (algorytm z nawrotami)",
                 "Wyobraź sobie skrupulatnego bibliotekarza, który musi ułożyć książki na półkach według bardzo ścisłych reguł. Zaczyna od pierwszej półki i pierwszej książki, stawia ją, a następnie bierze drugą i sprawdza, czy pasuje obok. Jeśli tak, kontynuuje. Jeśli jednak dojdzie do momentu, w którym żadna z pozostałych książek nie pasuje, cofa się (stąd 'backtrack' - nawrót), zabiera ostatnio postawioną książkę i próbuje na jej miejsce postawić inną. Powtarza ten proces, systematycznie sprawdzając każdą możliwą kombinację, aż znajdzie idealne ułożenie lub wyczerpie wszystkie możliwości. Jest to metoda gwarantująca znalezienie najlepszego rozwiązania, ale jej koszt czasowy może być ogromny, jeśli problem ma wiele możliwych kombinacji (jak grafik z wieloma lekarzami i dniami).",
                 "Algorytm z nawrotami",
                 "Przeszukiwanie zupełne",
@@ -200,7 +202,7 @@ namespace GrafikoMat.ViewModels
             // A*
             EngineOptions.Add(new EngineOption(
                 SolverType.AStar,
-                "AStarSolver",
+                "AStarSolver (algorytm A*)",
                 "Ten algorytm działa jak zaawansowany system nawigacji GPS w mieście z niezliczoną ilością dróg. Zamiast jechać na ślepo, A* w każdym momencie analizuje dwie rzeczy: koszt już przebytej trasy (ile dyżurów już przypisano i jak dobrze) oraz szacowany koszt dotarcia do celu (jak 'obiecujące' są pozostałe dni do obsadzenia). Dzięki tej heurystycznej ocenie przyszłości, algorytm inteligentnie wybiera najbardziej obiecujące ścieżki, odcinając te, które już na wczesnym etapie wydają się prowadzić do gorszego wyniku. To sprawia, że jest znacznie wydajniejszy od czystego backtrackingu, zachowując przy tym zdolność do znalezienia optymalnego rozwiązania. W przeciwieństwie do metaheurystyk, A* jest deterministyczny i jednowątkowy, ale jego przeszukiwanie jest kierowane heurystyką, co drastycznie redukuje przestrzeń poszukiwań.",
                 "Wielokryterialny algorytm A*",
                 "Przeszukiwanie heurystyczne",
@@ -212,7 +214,7 @@ namespace GrafikoMat.ViewModels
             // Genetic
             EngineOptions.Add(new EngineOption(
                 SolverType.Genetic,
-                "GeneticSolver",
+                "GeneticSolver (algorytm genetyczny)",
                 "Działa na zasadach ewolucji biologicznej. Na początku tworzy dużą 'populację' całkowicie losowych grafików. Następnie ocenia 'przystosowanie' każdego z nich – jak dobrze spełnia założone kryteria. Najlepsze grafiki ('osobniki') są wybierane do 'rozmnażania': ich fragmenty są ze sobą mieszane (krzyżowanie), tworząc nowe 'potomstwo' dziedziczące cechy po 'rodzicach'. Dodatkowo wprowadzane są losowe 'mutacje' (np. zmiana lekarza w jednym dniu), aby zwiększyć różnorodność. Z pokolenia na pokolenie słabe rozwiązania wymierają, a cała populacja ewoluuje w kierunku rozwiązań o bardzo wysokiej jakości. To potężna, wielowątkowa technika stosująca równoległą ewaluację populacji, idealna do złożonych problemów optymalizacyjnych.",
                 "Algorytm genetyczny",
                 "Metaheurystyka",
@@ -224,7 +226,7 @@ namespace GrafikoMat.ViewModels
             // Simulated Annealing
             EngineOptions.Add(new EngineOption(
                 SolverType.SimulatedAnnealing,
-                "SimulatedAnnealingSolver",
+                "SimulatedAnnealingSolver (algorytm symulowanego wyżarzania)",
                 "Naśladuje proces wyżarzania stali w hucie. Metal jest najpierw podgrzewany do bardzo wysokiej temperatury, co pozwala atomom na swobodne przemieszczanie się, a następnie jest bardzo powoli schładzany, aby atomy mogły ułożyć się w idealnie uporządkowaną strukturę krystaliczną. W algorytmie 'temperatura' to prawdopodobieństwo akceptacji gorszego rozwiązania. Na początku, przy wysokiej temperaturze, algorytm chętnie akceptuje nawet zmiany pogarszające wynik, co pozwala mu 'wyskakiwać' z lokalnych optimów i eksplorować całą przestrzeń rozwiązań. W miarę jak temperatura spada, staje się coraz bardziej wybredny, akceptując już tylko te zmiany, które faktycznie poprawiają grafik. Tempo schładzania jest kluczowym parametrem równoważącym jakość i czas obliczeń.",
                 "Algorytm symulowanego wyżarzania",
                 "Metaheurystyka",
@@ -236,7 +238,7 @@ namespace GrafikoMat.ViewModels
             // Tabu Search
             EngineOptions.Add(new EngineOption(
                 SolverType.TabuSearch,
-                "TabuSearchSolver",
+                "TabuSearchSolver (algorytm przeszukiwania z zabronieniami)",
                 "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
                 "Algorytm przeszukiwania z zabronieniami",
                 "Metaheurystyka",
@@ -248,7 +250,7 @@ namespace GrafikoMat.ViewModels
             // Ant Colony
             EngineOptions.Add(new EngineOption(
                 SolverType.AntColony,
-                "AntColonySolver",
+                "AntColonySolver (algorytm kolonii mrówek)",
                 "Algorytm inspirowany sposobem, w jaki mrówki znajdują najkrótsze trasy do źródeł pożywienia. Każda 'mrówka' (agent) próbuje zbudować kompletny grafik, poruszając się dzień po dniu i wybierając lekarzy. Wybory nie są losowe: mrówki kierują się śladami feromonowymi – cyfrowymi znacznikami pozostawianymi przez poprzednie mrówki. Im lepszy był grafik, tym więcej feromonu zostawiono na jego 'ścieżce'. Nowe mrówki są więc naturalnie przyciągane do sprawdzonych, obiecujących decyzji, zachowując jednak pewną losowość pozwalającą odkrywać nowe możliwości. Z czasem feromony częściowo parują, więc stare, słabe ścieżki są zapominane. Efekt? Kolonia stopniowo konwerguje wokół najlepszych strategii, tworząc wysokiej jakości rozwiązania dzięki współpracy wielu niezależnych agentów działających równolegle.",
                 "Algorytm kolonii mrówek",
                 "Metaheurystyka",

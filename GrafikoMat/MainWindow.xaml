@@ -158,6 +158,12 @@
         </Border>
 
         <!-- PANEL AKCJI -->
+        <!-- PANEL AKCJI -->
+        <!-- Centralne miejsce dla przycisków akcji z widoków.
+             Dla spójności UX, wszystkie główne przyciski akcji widoków powinny być
+             rejestrowane tutaj przez IUxActionOrchestrator (event ActionsChanged).
+             Przyciski pomocnicze mogą pozostać w widokach, ale główne akcje (Zapisz, Generuj, itp.)
+             należy umieszczać w tym panelu dla jednolitego wyglądu i zachowania. -->
         <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,12" Opacity="0">
             <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
                 <Grid>
@@ -184,7 +190,7 @@
                 </Grid>
             </Border>
         </Grid>
-
+        
         <!-- DOLNY PASEK STATUSU -->
         <Grid x:Name="BottomStatusBar" Grid.Row="4" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,0" Opacity="0">
             <Grid.RenderTransform>

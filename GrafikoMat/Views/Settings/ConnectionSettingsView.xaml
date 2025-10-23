@@ -1,4 +1,5 @@
-﻿<UserControl
+<!-- GrafikoMat\Views\Settings\ConnectionSettingsView.xaml -->
+<UserControl
     x:Class="GrafikoMat.Views.Settings.ConnectionSettingsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -19,6 +20,27 @@
             <TextBlock TextWrapping="Wrap">
                  Wprowadź tutaj dane połączeniowe do bazy danych GrafikoMat w Supabase.
             </TextBlock>
+
+            <!-- Komunikat błędu (jeśli ErrorMessage nie jest null/empty) -->
+            <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+                    BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12"
+                    x:Name="ErrorBorder"
+                    x:Load="False">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xEA39;"
+                                  FontSize="16"
+                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                        <TextBlock Text="Błąd połączenia" FontWeight="SemiBold"/>
+                    </StackPanel>
+                    <TextBlock x:Name="ErrorMessageTextBlock"
+                               TextWrapping="Wrap" 
+                               FontSize="12"/>
+                </StackPanel>
+            </Border>
 
             <TextBox x:Name="UrlTextBox" Header="Supabase URL" Width="550"/>
             <TextBox x:Name="ApiKeyTextBox" Header="Supabase Anon Key" Width="550"/>

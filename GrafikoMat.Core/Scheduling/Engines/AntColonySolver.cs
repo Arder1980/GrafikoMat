@@ -48,6 +48,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly Random _random = new();
+        private readonly ParallelOptions _parallelOptions;
 
         private Dictionary<DateTime, Dictionary<string, double>> _pheromoneMatrix = new();
         private int _currentGeneration;
@@ -60,7 +61,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             int maxGenerations,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -73,6 +75,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _maxGenerations = maxGenerations;
             _currentGeneration = 0;
             _noImprovementCount = 0;
+
+            // Konfiguracja wielowątkowości
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -94,7 +99,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                 var solutions = new ConcurrentBag<Dictionary<DateTime, DoctorProfile?>>();
 
-                Parallel.For(0, _numAnts, ant =>
+                Parallel.For(0, _numAnts, _parallelOptions, ant =>
                 {
                     _cancellationToken.ThrowIfCancellationRequested();
                     var solution = BuildSolutionForAnt();

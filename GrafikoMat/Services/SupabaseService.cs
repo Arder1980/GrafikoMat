@@ -42,6 +42,40 @@ namespace GrafikoMat.Services
             Debug.WriteLine("[SupabaseService] Initialize: klient utworzony.");
         }
 
+        /// <summary>
+        /// Testuje połączenie z bazą Supabase bez faktycznego logowania.
+        /// Zwraca true jeśli połączenie jest możliwe, false w przeciwnym razie.
+        /// </summary>
+        public async Task<bool> TestConnectionAsync(string url, string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey))
+            {
+                Debug.WriteLine("[SupabaseService] TestConnection: puste dane");
+                return false;
+            }
+
+            try
+            {
+                var options = new SupabaseOptions
+                {
+                    AutoRefreshToken = false,
+                    AutoConnectRealtime = false
+                };
+                var testClient = new SbClient(url, apiKey, options);
+
+                // Inicjalizacja klienta - rzuci wyjątek jeśli URL/Key są nieprawidłowe
+                await testClient.InitializeAsync();
+
+                Debug.WriteLine("[SupabaseService] TestConnection: SUCCESS");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SupabaseService] TestConnection: FAILED - {ex.Message}");
+                return false;
+            }
+        }
+
         public Task<bool> RestoreSessionIfAnyAsync()
         {
             Debug.WriteLine("[SupabaseService] Restore: START");

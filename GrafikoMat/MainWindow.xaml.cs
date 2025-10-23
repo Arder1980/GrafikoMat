@@ -34,8 +34,15 @@ namespace GrafikoMat
 {
     public sealed partial class MainWindow : Window, IRecipient<SettingsHaveChangedMessage>, IRecipient<UnitDataChangedMessage>
     {
+        // Bazowe minimalne wymiary (przy 100% DPI scaling)
         private const int MIN_W = 1600;
         private const int MIN_H = 1000;
+
+        // Przeskalowane wymiary (obliczane dynamicznie na podstawie DPI)
+        private int _scaledMinWidth = MIN_W;
+        private int _scaledMinHeight = MIN_H;
+        private double _currentScaleFactor = 1.0;
+
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
         public ObservableCollection<UiAction> ActionsLeft { get; } = new();
@@ -82,10 +89,16 @@ namespace GrafikoMat
             this.SetTitleBar(DragBar);
             InitAppWindow();
 
+            // Inicjalizuj backdrop z kaskadowym fallbackiem (Acrylic → Mica → Solid)
             _backdropManager = new AcrylicBackdropManager();
             _backdropManager.Initialize(this);
+            // Nie musimy już ręcznie obsługiwać fallbacku - AcrylicBackdropManager robi to automatycznie
 
             RootGrid.Loaded += async (s, e) => {
+                // WAŻNE: Oblicz DPI scale gdy XAML jest już załadowany
+                CalculateScaleFactor();
+                System.Diagnostics.Debug.WriteLine($"RootGrid.Loaded: DPI calculated, scale={_currentScaleFactor:F2}x");
+
                 ApplyTitleBarMenuStyling();
                 await InitializeApplicationAsync();
             };
@@ -804,7 +817,7 @@ namespace GrafikoMat
                 });
             };
 
-            _settingsView.Initialize(_unitRepository, _settingsService, _appSettings);
+            _settingsView.Initialize(_unitRepository, _settingsService, _supabaseService, _appSettings);
 
             if (!forceRefresh)
             {
@@ -1151,6 +1164,12 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
+            // Odepnij event handlery AppWindow
+            if (_appWindow != null)
+            {
+                _appWindow.Changed -= OnAppWindowChanged;
+            }
+
             _backdropManager?.Dispose();
             _backdropManager = null;
 
@@ -1180,6 +1199,7 @@ namespace GrafikoMat
         private void OnActualThemeChanged(FrameworkElement sender, object args)
         {
             ApplyTitleBarMenuStyling();
+            // BackdropManager automatycznie obsługuje zmiany motywu
             _ = DispatcherQueue.TryEnqueue(async () => await SaveWindowStateAsync());
         }
 
@@ -1345,9 +1365,108 @@ namespace GrafikoMat
                     presenter.IsMaximizable = true;
                     presenter.IsMinimizable = true;
                 }
+
+                // DPI scale będzie obliczony w RootGrid.Loaded (gdy XamlRoot jest dostępny)
+
+                // Monitoruj zmiany rozmiaru i wymuszaj minimalny rozmiar
+                _appWindow.Changed += OnAppWindowChanged;
+
+                System.Diagnostics.Debug.WriteLine($"InitAppWindow: Window initialized, DPI will be calculated in RootGrid.Loaded");
             }
 
+            // Zachowaj hook Win32 jako backup (niektóre systemy go respektują)
             SubclassWindow(hwnd);
+        }
+
+        private void CalculateScaleFactor()
+        {
+            try
+            {
+                // Użyj XamlRoot.RasterizationScale - najbardziej niezawodna metoda w WinUI 3
+                if (RootGrid?.XamlRoot != null)
+                {
+                    _currentScaleFactor = RootGrid.XamlRoot.RasterizationScale;
+
+                    // Oblicz przeskalowane minimalne wymiary
+                    _scaledMinWidth = (int)Math.Ceiling(MIN_W * _currentScaleFactor);
+                    _scaledMinHeight = (int)Math.Ceiling(MIN_H * _currentScaleFactor);
+
+                    System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor: RasterizationScale={_currentScaleFactor:F2}x ({(_currentScaleFactor * 100):F0}%)");
+                    System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor: Base={MIN_W}×{MIN_H}, Scaled={_scaledMinWidth}×{_scaledMinHeight}");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("CalculateScaleFactor: XamlRoot not available yet, using defaults");
+                    _currentScaleFactor = 1.0;
+                    _scaledMinWidth = MIN_W;
+                    _scaledMinHeight = MIN_H;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"CalculateScaleFactor failed: {ex.Message}, using defaults");
+                _currentScaleFactor = 1.0;
+                _scaledMinWidth = MIN_W;
+                _scaledMinHeight = MIN_H;
+            }
+        }
+
+        private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            // Sprawdź czy okno zostało przeniesione (może zmienić się DPI)
+            if (args.DidPositionChange)
+            {
+                // Przelicz scale factor - mogliśmy przejść na monitor z innym DPI
+                var oldScaleFactor = _currentScaleFactor;
+                CalculateScaleFactor();
+
+                if (Math.Abs(_currentScaleFactor - oldScaleFactor) > 0.01)
+                {
+                    System.Diagnostics.Debug.WriteLine($"DPI changed: {oldScaleFactor:F2}x → {_currentScaleFactor:F2}x");
+
+                    // Wymuszaj nowy minimalny rozmiar jeśli okno jest za małe dla nowego DPI
+                    if (_appWindow != null)
+                    {
+                        var currentSize = _appWindow.Size;
+                        if (currentSize.Width < _scaledMinWidth || currentSize.Height < _scaledMinHeight)
+                        {
+                            _appWindow.Resize(new SizeInt32(
+                                Math.Max(currentSize.Width, _scaledMinWidth),
+                                Math.Max(currentSize.Height, _scaledMinHeight)
+                            ));
+                        }
+                    }
+                }
+            }
+
+            // Sprawdź czy zmienił się rozmiar
+            if (args.DidSizeChange && _appWindow != null)
+            {
+                var currentSize = _appWindow.Size;
+                bool needsResize = false;
+                int newWidth = currentSize.Width;
+                int newHeight = currentSize.Height;
+
+                // Użyj przeskalowanych wymiarów
+                if (currentSize.Width < _scaledMinWidth)
+                {
+                    newWidth = _scaledMinWidth;
+                    needsResize = true;
+                    System.Diagnostics.Debug.WriteLine($"AppWindow: Width too small ({currentSize.Width}), enforcing {_scaledMinWidth} (scale={_currentScaleFactor:F2}x)");
+                }
+
+                if (currentSize.Height < _scaledMinHeight)
+                {
+                    newHeight = _scaledMinHeight;
+                    needsResize = true;
+                    System.Diagnostics.Debug.WriteLine($"AppWindow: Height too small ({currentSize.Height}), enforcing {_scaledMinHeight} (scale={_currentScaleFactor:F2}x)");
+                }
+
+                if (needsResize)
+                {
+                    _appWindow.Resize(new SizeInt32(newWidth, newHeight));
+                }
+            }
         }
 
         private void SubclassWindow(IntPtr hwnd)
@@ -1369,9 +1488,17 @@ namespace GrafikoMat
                 if (msg == WM_GETMINMAXINFO)
                 {
                     var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-                    mmi.ptMinTrackSize.x = MIN_W;
-                    mmi.ptMinTrackSize.y = MIN_H;
+
+                    // Log przed zmianą
+                    System.Diagnostics.Debug.WriteLine($"WM_GETMINMAXINFO: Before - ptMinTrackSize=({mmi.ptMinTrackSize.x}, {mmi.ptMinTrackSize.y})");
+
+                    // Użyj przeskalowanych wymiarów
+                    mmi.ptMinTrackSize.x = _scaledMinWidth;
+                    mmi.ptMinTrackSize.y = _scaledMinHeight;
                     Marshal.StructureToPtr(mmi, lParam, true);
+
+                    // Log po zmianie
+                    System.Diagnostics.Debug.WriteLine($"WM_GETMINMAXINFO: After - Set to ({_scaledMinWidth}, {_scaledMinHeight}) at {_currentScaleFactor:F2}x scale");
                 }
                 else if ((msg == WM_SIZE || msg == WM_MOVE) && !_isClosing && _appWindow != null && _settingsService != null && DispatcherQueue != null)
                 {

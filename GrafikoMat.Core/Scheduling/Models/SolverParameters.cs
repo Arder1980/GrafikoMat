@@ -1,4 +1,6 @@
-﻿namespace GrafikoMat.Core.Scheduling.Models
+﻿using System;
+
+namespace GrafikoMat.Core.Scheduling.Models
 {
     /// <summary>
     /// Przechowuje konfigurowalne parametry dla silników obliczeniowych.
@@ -10,6 +12,9 @@
 
         // Timeout globalny (w minutach)
         public int TimeoutMinutes { get; init; } = 10;
+
+        // Wielowątkowość (null = auto-detection)
+        public int? CustomThreadCount { get; init; } = null;
 
         // Simulated Annealing
         public double CoolingRate { get; init; } = SolverDefaults.CoolingRate.Default;
@@ -37,8 +42,15 @@
 
         /// <summary>
         /// Timeout dla wszystkich silników (w minutach).
+        /// Parametr globalny - ta sama wartość jest używana przez wszystkie silniki obliczeniowe.
         /// </summary>
-        public static (int Default, int Min, int Max, int Step) TimeoutMinutes => (10, 1, 30, 1);
+        public static (int Default, int Min, int Max, int Step) TimeoutMinutes => (10, 1, 60, 1);
+
+        /// <summary>
+        /// Liczba wątków do wykorzystania w algorytmach równoległych.
+        /// Min = 1, Max = liczba wątków procesora, Default = null (auto-detection).
+        /// </summary>
+        public static (int? Default, int Min, int Max, int Step) CustomThreadCount => (null, 1, Environment.ProcessorCount, 1);
 
         /// <summary>
         /// Simulated Annealing: Tempo schładzania (cooling rate).

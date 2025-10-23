@@ -17,6 +17,10 @@ namespace GrafikoMat
     {
         public static MainWindow MainRoot { get; private set; }
 
+        // Win32 API do wykrywania DPI
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
         public App()
         {
             this.InitializeComponent();
@@ -120,6 +124,30 @@ namespace GrafikoMat
 
             if (appWindow != null && appWindow.Presenter is OverlappedPresenter presenter)
             {
+                // Oblicz DPI scale factor dla ekranu używając Win32 API
+                double scaleFactor = 1.0;
+                try
+                {
+                    uint dpi = GetDpiForWindow(hwnd);
+                    scaleFactor = dpi / 96.0; // 96 DPI = 100% scaling
+                    System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Detected DPI={dpi}, scale={scaleFactor:F2}x");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Failed to get DPI: {ex.Message}");
+                    scaleFactor = 1.0;
+                }
+
+                // Bazowe rozmiary (logiczne)
+                const int baseWidth = 1600;
+                const int baseHeight = 1000;
+
+                // Przeskalowane rozmiary (fizyczne)
+                int scaledWidth = (int)Math.Ceiling(baseWidth * scaleFactor);
+                int scaledHeight = (int)Math.Ceiling(baseHeight * scaleFactor);
+
+                System.Diagnostics.Debug.WriteLine($"ApplyInitialWindowState: Base={baseWidth}×{baseHeight}, Scaled={scaledWidth}×{scaledHeight}");
+
                 // Sprawdzamy, czy to pierwsze uruchomienie (brak zapisanej pozycji i nie był zmaksymalizowany)
                 bool isFirstRun = !settings.WasWindowMaximized &&
                                   settings.LastWindowPosition.X == 0 &&
@@ -128,22 +156,19 @@ namespace GrafikoMat
                 if (isFirstRun)
                 {
                     // --- LOGIKA DLA PIERWSZEGO URUCHOMIENIA ---
-                    const int defaultWidth = 1600;
-                    const int defaultHeight = 1000;
-
                     // WAŻNE: Najpierw jawnie przywróć okno (jeśli było zminimalizowane)
                     presenter.Restore();
 
-                    // Ustawiamy domyślny rozmiar
-                    appWindow.Resize(new SizeInt32(defaultWidth, defaultHeight));
+                    // Ustawiamy domyślny rozmiar (DPI-aware)
+                    appWindow.Resize(new SizeInt32(scaledWidth, scaledHeight));
 
                     // Pobieramy informacje o ekranie, na którym jest okno
                     DisplayArea displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Nearest);
                     if (displayArea != null)
                     {
                         // Obliczamy pozycję, aby wyśrodkować okno
-                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - defaultWidth) / 2;
-                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - defaultHeight) / 2;
+                        int centerX = displayArea.WorkArea.X + (displayArea.WorkArea.Width - scaledWidth) / 2;
+                        int centerY = displayArea.WorkArea.Y + (displayArea.WorkArea.Height - scaledHeight) / 2;
 
                         // Przesuwamy okno na środek
                         appWindow.Move(new PointInt32(centerX, centerY));
@@ -162,10 +187,10 @@ namespace GrafikoMat
                         // WAŻNE: Najpierw jawnie przywróć okno
                         presenter.Restore();
 
-                        // Potem ustaw rozmiar i pozycję
+                        // Potem ustaw rozmiar i pozycję (z DPI-aware minimum)
                         var lastSize = settings.LastWindowSize;
                         var lastPos = settings.LastWindowPosition;
-                        appWindow.Resize(new SizeInt32(Math.Max(1600, lastSize.Width), Math.Max(1000, lastSize.Height)));
+                        appWindow.Resize(new SizeInt32(Math.Max(scaledWidth, lastSize.Width), Math.Max(scaledHeight, lastSize.Height)));
                         appWindow.Move(new PointInt32(lastPos.X, lastPos.Y));
                     }
                 }

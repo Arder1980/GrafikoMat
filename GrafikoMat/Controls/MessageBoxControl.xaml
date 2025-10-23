@@ -1,0 +1,77 @@
+<!-- GrafikoMat\Controls\MessageBoxControl.xaml -->
+<UserControl
+    x:Class="GrafikoMat.Controls.MessageBoxControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:media="using:Microsoft.UI.Xaml.Media">
+
+    <Grid x:Name="RootGrid"
+          Background="{ThemeResource ControlFillColorDefaultBrush}"
+          Padding="0"
+          CornerRadius="10"
+          MinWidth="340"
+          MaxWidth="500">
+
+        <!-- Miękki cień -->
+        <Grid.Shadow>
+            <media:ThemeShadow/>
+        </Grid.Shadow>
+
+        <!-- Subtelna ramka w kolorze systemowym -->
+        <Border BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                CornerRadius="10"/>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Lewy pasek koloru -->
+            <Border x:Name="StatusBorder" 
+                    Grid.Column="0"
+                    Background="#10B981"
+                    CornerRadius="10,0,0,10"/>
+
+            <!-- Ikona (większa o 50%, wycentrowana) -->
+            <Grid Grid.Column="1" 
+                  Width="64" 
+                  Margin="16,16,16,16">
+                <Viewbox Width="72" Height="72">
+                    <FontIcon x:Name="StatusIcon" 
+                              Glyph="&#xF13E;" 
+                              Foreground="#10B981"
+                              FontWeight="Bold"/>
+                </Viewbox>
+            </Grid>
+
+            <!-- Separator -->
+            <Rectangle Grid.Column="1"
+                       Width="1"
+                       Opacity="0.1"
+                       Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                       Margin="0,12,0,12"
+                       HorizontalAlignment="Right"/>
+
+            <!-- Tekst -->
+            <StackPanel Grid.Column="2" 
+                        Margin="20,16,24,16"
+                        VerticalAlignment="Center"
+                        Spacing="6">
+                <TextBlock x:Name="TitleTextBlock" 
+                           Text="Tytuł"
+                           FontWeight="Bold"
+                           FontSize="15"
+                           TextWrapping="Wrap"/>
+                <TextBlock x:Name="MessageTextBlock" 
+                           Text="Wiadomość"
+                           FontSize="13"
+                           Opacity="0.75"
+                           TextWrapping="Wrap"
+                           LineHeight="18"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

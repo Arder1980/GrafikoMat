@@ -19,6 +19,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             ValidateInput(input, activePriorities);
 
             var timeout = TimeSpan.FromMinutes(parameters.TimeoutMinutes);
+            int? customThreadCount = parameters.CustomThreadCount;
 
             switch (parameters.SolverType)
             {
@@ -26,16 +27,16 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
 
                 case SolverType.SimulatedAnnealing:
-                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token);
+                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token, customThreadCount);
 
                 case SolverType.Genetic:
-                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token);
+                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token, customThreadCount);
 
                 case SolverType.TabuSearch:
-                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token);
+                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token, customThreadCount);
 
                 case SolverType.AntColony:
-                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token);
+                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token, customThreadCount);
 
                 case SolverType.AStar:
                     return new AStarSolver(input, activePriorities, timeout, progress, token);

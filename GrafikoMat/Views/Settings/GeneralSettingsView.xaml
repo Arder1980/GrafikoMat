@@ -1,0 +1,469 @@
+
+<UserControl
+    x:Class="GrafikoMat.Views.Settings.GeneralSettingsView"
+    x:Name="RootControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:GrafikoMat.ViewModels"
+    xmlns:services="using:GrafikoMat.Services"
+    xmlns:common="using:GrafikoMat.Common"
+    mc:Ignorable="d">
+
+	<UserControl.Resources>
+		<common:EnumToBoolConverter x:Key="EnumToBoolConverter"/>
+		<common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+	</UserControl.Resources>
+
+	<ScrollViewer VerticalScrollBarVisibility="Auto">
+		<StackPanel Padding="20" Spacing="32">
+
+			<TextBlock Text="Ustawienia Ogólne"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       Margin="0,0,0,12"/>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: WYGLĄD APLIKACJI                    -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Wygląd aplikacji"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Motyw kolorystyczny interfejsu"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<StackPanel Orientation="Horizontal" Spacing="12">
+					<RadioButton Content="Jasny"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Light, ElementName=RootControl}"/>
+					<RadioButton Content="Ciemny"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=Dark, ElementName=RootControl}"/>
+					<RadioButton Content="Systemowy"
+                                 GroupName="Theme"
+                                 IsChecked="{Binding ViewModel.SelectedTheme, Mode=TwoWay, Converter={StaticResource EnumToBoolConverter}, ConverterParameter=SystemDefault, ElementName=RootControl}"/>
+				</StackPanel>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: LIMIT CZASU OBLICZEŃ                -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Limit czasu obliczeń"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Globalny parametr dla wszystkich silników obliczeniowych"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Slider timeout -->
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+
+					<Slider Grid.Column="0"
+                            Width="400"
+                            Minimum="{x:Bind ViewModel.TimeoutMinutesMin}"
+                            Maximum="{x:Bind ViewModel.TimeoutMinutesMax}"
+                            StepFrequency="{x:Bind ViewModel.TimeoutMinutesStep}"
+                            Value="{x:Bind ViewModel.TimeoutMinutesValue, Mode=TwoWay}"
+                            Margin="0,0,12,0">
+						<Slider.Header>
+							<StackPanel Orientation="Horizontal" Spacing="6">
+								<TextBlock Text="Maksymalny czas (minuty):"/>
+								<TextBlock Text="{x:Bind ViewModel.TimeoutMinutesValue, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+								<FontIcon Glyph="&#xE946;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                          VerticalAlignment="Center">
+									<ToolTipService.ToolTip>
+										<ToolTip MaxWidth="450">
+											<TextBlock TextWrapping="Wrap">
+												<Run FontWeight="Bold">Globalny limit czasu dla wszystkich silników obliczeniowych.</Run><LineBreak/><LineBreak/>
+												Po przekroczeniu tego czasu algorytm zakończy działanie i zwróci najlepszy znaleziony dotychczas grafik. <Run FontWeight="Bold">Uwaga: grafik może być niekompletny i nieoptymalny.</Run><LineBreak/><LineBreak/>
+												<Run FontWeight="Bold">Krótszy czas:</Run> szybszy rezultat, ale może być niższej jakości.<LineBreak/>
+												<Run FontWeight="Bold">Dłuższy czas:</Run> większa szansa na znalezienie lepszego, kompletnego rozwiązania.<LineBreak/><LineBreak/>
+												⚠️ <Run FontWeight="Bold">Uwaga:</Run> Ta wartość jest współdzielona przez wszystkie silniki - zmiana tutaj wpłynie na każdy wybrany algorytm.
+											</TextBlock>
+										</ToolTip>
+									</ToolTipService.ToolTip>
+								</FontIcon>
+							</StackPanel>
+						</Slider.Header>
+					</Slider>
+
+					<Button Grid.Column="1"
+                            Content="Przywróć domyślny: 10 min"
+                            Command="{x:Bind ViewModel.ResetTimeoutCommand}"
+                            VerticalAlignment="Bottom"/>
+				</Grid>
+
+				<!-- RadioButtons - zachowanie przy timeout -->
+				<StackPanel Spacing="8" Margin="0,12,0,0">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Przy przekroczeniu limitu czasu:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="400">
+									<TextBlock TextWrapping="Wrap">
+										Określa jak aplikacja zachowa się gdy algorytm przekroczy maksymalny dozwolony czas obliczeń.<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Poinformuj i zwróć:</Run> Wyświetli dialog informacyjny o przekroczeniu limitu i automatycznie zwróci najlepszy znaleziony dotychczas grafik (może być niekompletny).<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Zapytaj czy przedłużyć:</Run> Wyświetli dialog z opcją przedłużenia czasu obliczeniowego o kolejne 10 minut lub zakończenia z obecnym wynikiem.
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+
+					<RadioButton Content="Poinformuj i zwróć najlepszy znaleziony grafik (może być niekompletny)"
+                                 IsChecked="{x:Bind ViewModel.IsShowResultAndInform, Mode=TwoWay}"/>
+					<RadioButton Content="Zapytaj czy przedłużyć czas obliczeniowy"
+                                 IsChecked="{x:Bind ViewModel.IsAskToExtend, Mode=TwoWay}"/>
+				</StackPanel>
+
+				<!-- TO-DO Badge dla logiki timeout -->
+				<Border Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        CornerRadius="4"
+                        Padding="8,6"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Left">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<FontIcon Glyph="&#xE9D9;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+						<TextBlock FontSize="11" Foreground="{ThemeResource SystemFillColorCautionBrush}">
+							<Run FontWeight="SemiBold">TO-DO:</Run>
+							<Run>Logika dialogów przy timeout - w trakcie implementacji</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: WIELOWĄTKOWOŚĆ                      -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Wielowątkowość"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Parametr dla silników metaheurystycznych (SimulatedAnnealingSolver, TabuSearchSolver, GeneticSolver, AntColonySolver)"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Info o procesorze na górze -->
+				<Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12">
+					<StackPanel Spacing="4">
+						<TextBlock FontWeight="SemiBold" FontSize="13">
+							<Run>Wykryty procesor:</Run>
+						</TextBlock>
+						<TextBlock TextWrapping="Wrap" FontSize="13">
+							<Run Text="{x:Bind ViewModel.ProcessorName, Mode=OneTime}"/><Run Text=", "/><Run FontWeight="SemiBold" Text="{x:Bind ViewModel.DetectedThreadCount, Mode=OneTime}"/><Run Text=" wątków"/>						</TextBlock>
+					</StackPanel>
+				</Border>
+
+				<!-- RadioButtons - Auto / Niestandardowe -->
+				<StackPanel Spacing="8">
+					<RadioButton Content="{x:Bind ViewModel.AutoThreadCountLabel, Mode=OneTime}"
+                                 IsChecked="{x:Bind ViewModel.IsAutoThreadCount, Mode=TwoWay}"
+                                 GroupName="ThreadCountMode"/>
+
+					<RadioButton Content="Niestandardowa liczba wątków"
+                                 IsChecked="{x:Bind ViewModel.IsCustomThreadCount, Mode=TwoWay}"
+                                 GroupName="ThreadCountMode"/>
+				</StackPanel>
+
+				<!-- Slider + przycisk reset + ostrzeżenie o max wątkach obok -->
+				<Grid Margin="24,8,0,0">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="*"/>
+					</Grid.ColumnDefinitions>
+
+					<StackPanel Grid.Column="0" Spacing="8">
+						<Slider Width="350"
+                            Minimum="{x:Bind ViewModel.CustomThreadCountMin}"
+                            Maximum="{x:Bind ViewModel.CustomThreadCountMax}"
+                            StepFrequency="{x:Bind ViewModel.CustomThreadCountStep}"
+                            Value="{x:Bind ViewModel.CustomThreadCountValue, Mode=TwoWay}"
+                            IsEnabled="{x:Bind ViewModel.IsCustomThreadCount, Mode=OneWay}">
+							<Slider.Header>
+								<StackPanel Orientation="Horizontal" Spacing="6">
+									<TextBlock Text="Liczba wątków:"/>
+									<TextBlock Text="{x:Bind ViewModel.CustomThreadCountValue, Mode=OneWay}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+									<FontIcon Glyph="&#xE946;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                          VerticalAlignment="Center">
+										<ToolTipService.ToolTip>
+											<ToolTip MaxWidth="450">
+												<TextBlock TextWrapping="Wrap">
+													<Run FontWeight="Bold">Określa ile wątków procesora (CPU) będzie używanych przez silniki obliczeniowe.</Run><LineBreak/><LineBreak/>
+													<Run FontWeight="Bold">Więcej wątków:</Run> szybsze obliczenia (lepsza wydajność)<LineBreak/>
+													<Run FontWeight="Bold">Mniej wątków:</Run> wolniejsze obliczenia, ale więcej zasobów dla interfejsu<LineBreak/><LineBreak/>
+													⚠️ <Run FontWeight="Bold">Uwaga:</Run> Zbyt duża wartość może spowolnić interfejs użytkownika podczas obliczeń.
+												</TextBlock>
+											</ToolTip>
+										</ToolTipService.ToolTip>
+									</FontIcon>
+								</StackPanel>
+							</Slider.Header>
+						</Slider>
+
+						<Button Content="Przywróć Auto"
+                            Command="{x:Bind ViewModel.ResetThreadCountCommand}"
+                            HorizontalAlignment="Left"/>
+					</StackPanel>
+
+					<!-- Ostrzeżenie o maksymalnych wątkach OBOK slidera -->
+					<Border Grid.Column="1"
+                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Top"
+                        Visibility="{x:Bind ViewModel.IsMaxThreadsWarningVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+						<StackPanel Spacing="6">
+							<StackPanel Orientation="Horizontal" Spacing="8">
+								<FontIcon Glyph="&#xE7BA;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+								<TextBlock Text="Uwaga" FontWeight="SemiBold"/>
+							</StackPanel>
+							<TextBlock TextWrapping="Wrap" FontSize="12">
+								Ustawiając użycie wszystkich wątków procesora ryzykujesz zablokowaniem interfejsu użytkownika Windows na czas generowania grafiku. Zalecamy pozostawienie co najmniej 1 wątku wolnego dla systemu.
+							</TextBlock>
+						</StackPanel>
+					</Border>
+				</Grid>
+
+				<!-- Info box POD sliderem -->
+				<Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="0,8,0,0">
+					<StackPanel Spacing="6">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE946;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+							<TextBlock Text="Informacje o wielowątkowości" FontWeight="SemiBold"/>
+						</StackPanel>
+						<TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8">
+							<Run>• Tryb automatyczny wykorzystuje</Run>
+							<Run FontWeight="SemiBold" Text="{x:Bind ViewModel.OptimalThreadCount, Mode=OneTime}"/>
+							<Run>wątków (pozostawia 1 wolny dla UI i systemu)</Run><LineBreak/>
+							<Run>• Wielowątkowość CPU przyspiesza generowanie grafików nawet kilkunastokrotnie</Run><LineBreak/>
+							<Run>• Zalecane: pozostaw tryb automatyczny</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+				</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: POŁĄCZENIE Z BAZĄ DANYCH           -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Połączenie z bazą danych"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Dane dostępowe Supabase"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<TextBox Header="Supabase URL"
+                         Text="{x:Bind ViewModel.SupabaseUrl, Mode=TwoWay}"
+                         Width="550"
+                         HorizontalAlignment="Left"/>
+
+				<PasswordBox Header="Supabase Anon Key"
+                             Password="{x:Bind ViewModel.SupabaseAnonKey, Mode=TwoWay}"
+                             Width="550"
+                             HorizontalAlignment="Left"/>
+
+				<StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+					<Button Content="Testuj połączenie"
+                            Command="{x:Bind ViewModel.TestConnectionCommand}"/>
+					<TextBlock Text="{x:Bind ViewModel.ConnectionTestStatus, Mode=OneWay}"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+				</StackPanel>
+
+				<Border Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
+                        BorderBrush="{ThemeResource SystemFillColorAttentionBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12"
+                        Margin="0,8,0,0">
+					<StackPanel Spacing="6">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<FontIcon Glyph="&#xE7BA;"
+                                      FontSize="16"
+                                      Foreground="{ThemeResource SystemFillColorAttentionBrush}"/>
+							<TextBlock Text="Ważne" FontWeight="SemiBold"/>
+						</StackPanel>
+						<TextBlock TextWrapping="Wrap" FontSize="12">
+							<Run>• Zmiana danych dostępowych spowoduje wylogowanie i automatyczny restart aplikacji</Run><LineBreak/>
+							<Run>• Upewnij się, że dane są poprawne przed zapisem (użyj przycisku "Testuj połączenie")</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- ============================================ -->
+			<!-- SEKCJA: LOGOWANIE (TO-DO - DISABLED)        -->
+			<!-- ============================================ -->
+			<StackPanel Spacing="12" Opacity="0.5">
+				<Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Margin="-20,0,-20,0">
+					<StackPanel Spacing="4">
+						<TextBlock Text="Logowanie i diagnostyka"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+						<TextBlock Text="Zapisywanie logów działania (funkcja w przygotowaniu)"
+                                   FontSize="12"
+                                   Opacity="0.7"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Logi aplikacji -->
+				<StackPanel Spacing="6">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Logi aplikacji:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="400">
+									<TextBlock TextWrapping="Wrap">
+										Logowanie zdarzeń związanych z działaniem aplikacji (błędy, ostrzeżenia, informacje o połączeniu z bazą danych itp.)
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+					<ComboBox SelectedIndex="1" MinWidth="300" IsEnabled="False">
+						<ComboBoxItem Content="Wyłączone"/>
+						<ComboBoxItem Content="Tylko błędy"/>
+						<ComboBoxItem Content="Błędy + ostrzeżenia"/>
+						<ComboBoxItem Content="Pełne (wszystkie zdarzenia)"/>
+					</ComboBox>
+				</StackPanel>
+
+				<!-- Logi silników -->
+				<StackPanel Spacing="6" Margin="0,12,0,0">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="Logi silników obliczeniowych:" FontWeight="SemiBold"/>
+						<FontIcon Glyph="&#xE946;"
+                                  FontSize="14"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                  VerticalAlignment="Center">
+							<ToolTipService.ToolTip>
+								<ToolTip MaxWidth="450">
+									<TextBlock TextWrapping="Wrap">
+										Logowanie procesu generowania grafiku przez algorytmy.<LineBreak/><LineBreak/>
+										<Run FontWeight="Bold">Podstawowy:</Run> ~1 KB na generowanie (tylko podsumowanie)<LineBreak/>
+										<Run FontWeight="Bold">Szczegółowy:</Run> ~10-50 KB na generowanie (postęp + statystyki)<LineBreak/>
+										<Run FontWeight="Bold">Debug:</Run> ~100 KB - 10 MB na generowanie (tylko dla debugowania!)
+									</TextBlock>
+								</ToolTip>
+							</ToolTipService.ToolTip>
+						</FontIcon>
+					</StackPanel>
+					<ComboBox SelectedIndex="0" MinWidth="300" IsEnabled="False">
+						<ComboBoxItem Content="Wyłączone"/>
+						<ComboBoxItem Content="Podstawowy (podsumowanie)"/>
+						<ComboBoxItem Content="Szczegółowy (postęp + statystyki)"/>
+						<ComboBoxItem Content="Debug (pełna diagnostyka)"/>
+					</ComboBox>
+				</StackPanel>
+
+				<TextBlock Text="ℹ️ Logi zapisywane w katalogu: logs/"
+                           FontSize="12"
+                           Opacity="0.7"
+                           Margin="0,8,0,0"/>
+
+				<!-- TO-DO Badge -->
+				<Border Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                        CornerRadius="4"
+                        Padding="8,6"
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Left">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<FontIcon Glyph="&#xE9D9;"
+                                  FontSize="12"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+						<TextBlock FontSize="11" Foreground="{ThemeResource SystemFillColorCautionBrush}">
+							<Run FontWeight="SemiBold">TO-DO:</Run>
+							<Run>System logowania - w trakcie implementacji</Run>
+						</TextBlock>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+
+			<!-- Przycisk Zapisz -->
+			<Button Content="Zapisz ustawienia"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.SaveCommand}"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0"/>
+
+		</StackPanel>
+	</ScrollViewer>
+</UserControl>

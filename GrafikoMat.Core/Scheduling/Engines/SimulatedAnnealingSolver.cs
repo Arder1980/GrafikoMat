@@ -19,13 +19,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// - Early stopping przy stagnacji (500 iteracji bez poprawy)
     /// - Cache odwiedzonych stanów (HashSet) - unika duplikatów
     /// - Smart neighbor generation (swap, shift, single) zależna od temperatury
-    /// - Równoległa eksploracja 4 kandydatów w każdej iteracji
+    /// - Równoległa eksploracja kandydatów (automatycznie dopasowana do liczby wątków procesora)
     /// 
     /// OCZEKIWANY REZULTAT: 85-90% redukcja czasu, 97-99% jakości
     /// </summary>
     public class SimulatedAnnealingSolver : IScheduleSolver
     {
-        private const int PARALLEL_CANDIDATES = 4;
         private const int MAX_STAGNATION = 500;
         private const int MAX_VISITED_CACHE = 50000;
 
@@ -41,6 +40,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly double _coolingRate;
         private readonly int _iterationsPerTemperature;
         private readonly double _initialTemperature;
+        private readonly int _parallelCandidates;
+        private readonly ParallelOptions _parallelOptions;
 
         private HashSet<string> _visitedStates = new();
 
@@ -50,7 +51,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             double coolingRate,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int? customThreadCount = null)
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -67,6 +69,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _initialTemperature = 500.0 * problemComplexity;
             _coolingRate = daysCount > 20 ? 0.97 : (coolingRate > 0 ? coolingRate : 0.985);
             _iterationsPerTemperature = Math.Max(30, doctorCount * 2);
+
+            // Konfiguracja wielowątkowości
+            _parallelCandidates = ParallelismConfig.GetCandidatesCount(customThreadCount);
+            _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -104,7 +110,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
                     var candidates = new ConcurrentBag<(Dictionary<DateTime, DoctorProfile?> solution, double fitness, string hash)>();
 
-                    Parallel.For(0, PARALLEL_CANDIDATES, candidateIdx =>
+                    Parallel.For(0, _parallelCandidates, _parallelOptions, candidateIdx =>
                     {
                         try
                         {
