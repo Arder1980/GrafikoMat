@@ -25,7 +25,7 @@ namespace GrafikoMat.ViewModels
     {
         private ScheduleSolution? _lastGeneratedSolution = null;
 
-        protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
+        protected new bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
         {
             if (EqualityComparer<T>.Default.Equals(backingStore, value))
             {

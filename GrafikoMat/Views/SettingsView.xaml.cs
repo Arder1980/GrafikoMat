@@ -22,7 +22,9 @@ namespace GrafikoMat.Views
         private SettingsService? _settingsService;
         private SupabaseService? _supabaseService;
         private AppSettings? _appSettings;
+        #pragma warning disable CS0067
         public event Action? ReloadRequired;
+        #pragma warning restore CS0067
         public event Action<List<UiAction>>? ActionButtonsChanged;
 
         public SettingsView()

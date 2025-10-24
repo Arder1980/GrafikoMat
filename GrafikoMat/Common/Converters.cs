@@ -146,8 +146,8 @@ namespace GrafikoMat.Common
 
     public class BooleanToBrushConverter : IValueConverter
     {
-        public Brush TrueBrush { get; set; }
-        public Brush FalseBrush { get; set; }
+        public Brush TrueBrush { get; set; } = null!;
+        public Brush FalseBrush { get; set; } = null!;
 
         public object Convert(object value, Type targetType, object parameter, string language)
         {

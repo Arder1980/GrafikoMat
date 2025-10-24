@@ -101,7 +101,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 for (int s = 0; s < states; s++)
                 {
-                    table[d, s] = ((ulong)random.Next() << 32) | (ulong)random.Next();
+                    table[d, s] = ((ulong)(uint)random.Next() << 32) | (ulong)(uint)random.Next();
                 }
             }
             return table;

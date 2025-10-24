@@ -10,7 +10,9 @@ namespace GrafikoMat.Views
         public ChangePasswordViewModel ViewModel { get; }
 
         public event Action? PasswordChangeSuccess;
+        #pragma warning disable CS0067
         public event Action? PasswordChangeCancelled;
+        #pragma warning restore CS0067
 
         public ChangePasswordView(SupabaseService supabaseService)
         {

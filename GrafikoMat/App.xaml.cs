@@ -15,7 +15,7 @@ namespace GrafikoMat
 {
     public partial class App : Application
     {
-        public static MainWindow MainRoot { get; private set; }
+        public static MainWindow MainRoot { get; private set; } = null!;
 
         // Win32 API do wykrywania DPI
         [System.Runtime.InteropServices.DllImport("user32.dll")]

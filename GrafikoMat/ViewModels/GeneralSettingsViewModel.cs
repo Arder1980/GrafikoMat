@@ -328,8 +328,8 @@ namespace GrafikoMat.ViewModels
                                 throw new Exception("Nie można połączyć się z bazą danych. Sprawdź poprawność danych dostępowych.");
                             }
                         },
-                        verificationAsync: null,
-                        successMessage: null,
+                        verificationAsync: null!,
+                        successMessage: null!,
                         errorMessageTitle: "Błąd połączenia z bazą"
                     );
                 }
