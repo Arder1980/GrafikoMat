@@ -66,8 +66,12 @@ namespace GrafikoMat
                     settings = new AppSettings();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                // POPRAWKA ŚREDNIA: Loguj szczegóły błędu zamiast po cichu ignorować
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyThemeEarly] Error loading settings: {ex.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyThemeEarly] Message: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyThemeEarly] Stack trace: {ex.StackTrace}");
                 settings = new AppSettings();
             }
 
@@ -113,8 +117,12 @@ namespace GrafikoMat
                     settings = new AppSettings();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                // POPRAWKA ŚREDNIA: Loguj szczegóły błędu zamiast po cichu ignorować
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyInitialWindowState] Error loading settings: {ex.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyInitialWindowState] Message: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[App.ApplyInitialWindowState] Stack trace: {ex.StackTrace}");
                 settings = new AppSettings();
             }
 

@@ -11,7 +11,8 @@ namespace GrafikoMat.Services
     public class UxActionOrchestrator : IUxActionOrchestrator, IRecipient<HideOverlayExplicitlyMessage>, IRecipient<CancelOperationMessage>
     {
         private readonly IMessenger _messenger;
-        private readonly Dictionary<Guid, CancellationTokenSource> _cancellationSources = new();
+        // POPRAWKA: ConcurrentDictionary zamiast Dictionary dla thread safety
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, CancellationTokenSource> _cancellationSources = new();
 
         public UxActionOrchestrator(IMessenger messenger)
         {
@@ -165,8 +166,8 @@ namespace GrafikoMat.Services
             }
             finally
             {
-                // Usuń CancellationTokenSource
-                _cancellationSources.Remove(viewId);
+                // Usuń CancellationTokenSource - użyj TryRemove dla ConcurrentDictionary
+                _cancellationSources.TryRemove(viewId, out _);
                 cts.Dispose();
             }
         }

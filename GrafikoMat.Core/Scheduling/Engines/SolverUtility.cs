@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace GrafikoMat.Core.Scheduling.Engines
 {
@@ -16,7 +17,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
     internal class SolverUtility
     {
         private readonly ScheduleInput _scheduleInput;
-        private readonly Random _random = new();
+        // POPRAWKA: ThreadLocal<Random> zamiast pojedynczego Random dla thread safety
+        private readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => new Random(Guid.NewGuid().GetHashCode()));
 
         public SolverUtility(ScheduleInput scheduleInput)
         {
@@ -72,7 +74,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 var candidates = ConstraintValidationService.GetValidCandidatesForDay(day, _scheduleInput, assignments, workload, usedConditionals);
                 if (candidates.Any())
                 {
-                    var selected = candidates[_random.Next(candidates.Count)];
+                    var selected = candidates[_random.Value!.Next(candidates.Count)];
                     assignments[day] = selected;
                     workload[selected.Abbreviation]++;
                     if (_scheduleInput.Availability[day][selected.Abbreviation] == AvailabilityType.ConditionallyAvailable)
@@ -94,7 +96,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
         public Dictionary<DateTime, DoctorProfile?> GenerateNeighbor(Dictionary<DateTime, DoctorProfile?> currentSchedule)
         {
             var newSchedule = new Dictionary<DateTime, DoctorProfile?>(currentSchedule);
-            var dayToChange = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
+            var dayToChange = _scheduleInput.DaysInMonth[_random.Value!.Next(_scheduleInput.DaysInMonth.Count)];
 
             var workload = CalculateWorkload(newSchedule);
             var usedConditionals = CalculateUsedConditionals(newSchedule).Keys.ToHashSet();
@@ -102,7 +104,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             var candidates = ConstraintValidationService.GetValidCandidatesForDay(dayToChange, _scheduleInput, newSchedule, workload, usedConditionals);
             if (candidates.Any())
             {
-                newSchedule[dayToChange] = candidates[_random.Next(candidates.Count)];
+                newSchedule[dayToChange] = candidates[_random.Value!.Next(candidates.Count)];
             }
             else
             {
@@ -126,7 +128,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             double swapThreshold = 0.4 + (0.4 * tempRatio);
             double shiftThreshold = 0.8 + (0.15 * tempRatio);
 
-            double rand = _random.NextDouble();
+            double rand = _random.Value!.NextDouble();
 
             if (rand < swapThreshold)
                 return GenerateSwapNeighbor(currentSchedule);
@@ -146,8 +148,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             if (_scheduleInput.DaysInMonth.Count < 2)
                 return newSchedule;
 
-            var day1 = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
-            var day2 = _scheduleInput.DaysInMonth[_random.Next(_scheduleInput.DaysInMonth.Count)];
+            var day1 = _scheduleInput.DaysInMonth[_random.Value!.Next(_scheduleInput.DaysInMonth.Count)];
+            var day2 = _scheduleInput.DaysInMonth[_random.Value!.Next(_scheduleInput.DaysInMonth.Count)];
 
             if (day1 == day2)
                 return newSchedule;
@@ -173,8 +175,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             if (sortedDays.Count < 3)
                 return newSchedule;
 
-            int startIdx = _random.Next(sortedDays.Count - 2);
-            int blockLength = Math.Min(_random.Next(2, 6), sortedDays.Count - startIdx);
+            int startIdx = _random.Value!.Next(sortedDays.Count - 2);
+            int blockLength = Math.Min(_random.Value!.Next(2, 6), sortedDays.Count - startIdx);
 
             // Sprawdź czy to faktycznie ciągły blok tego samego lekarza
             var firstDoctor = newSchedule[sortedDays[startIdx]];
@@ -195,7 +197,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 return newSchedule; // Nie jest ciągły, zwróć bez zmian
 
             // Przesuń blok o 1-3 dni (forward lub backward)
-            int shift = _random.Next(-3, 4);
+            int shift = _random.Value!.Next(-3, 4);
             if (shift == 0 || startIdx + shift < 0 || startIdx + shift + blockLength > sortedDays.Count)
                 return newSchedule;
 

@@ -93,7 +93,18 @@ namespace GrafikoMat.Services
             var fh = new FileSessionHandler();
             var saved = await fh.LoadAsync().ConfigureAwait(false);
             Debug.WriteLine("[SupabaseService] Restore: LoadAsync() -> " + (saved is null ? "NULL" : "OK"));
-            if (saved is null || _client is null) return false;
+
+            if (saved is null)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: No saved session found");
+                return false;
+            }
+
+            if (_client is null)
+            {
+                Debug.WriteLine("[SupabaseService] Restore: Client is null");
+                return false;
+            }
 
             var auth = _client.Auth;
             var authType = auth.GetType();
@@ -106,9 +117,18 @@ namespace GrafikoMat.Services
                     await InvokeAwaitIfTask(setSession3, auth, saved.AccessToken, saved.RefreshToken, true);
                     if (auth.CurrentSession != null)
                     {
+                        Debug.WriteLine("[SupabaseService] Restore: Session restored via SetSession");
                         await SaveCurrentSessionAsync().ConfigureAwait(false);
                         return true;
                     }
+                    else
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: SetSession succeeded but CurrentSession is null");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: SetSession method not found");
                 }
 
                 var refreshToken2 = authType.GetMethod("RefreshToken", BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(string), typeof(string) }, null);
@@ -118,9 +138,18 @@ namespace GrafikoMat.Services
                     await InvokeAwaitIfTask(refreshToken2, auth, saved.AccessToken, saved.RefreshToken);
                     if (auth.CurrentSession != null)
                     {
+                        Debug.WriteLine("[SupabaseService] Restore: Session restored via RefreshToken");
                         await SaveCurrentSessionAsync().ConfigureAwait(false);
                         return true;
                     }
+                    else
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: RefreshToken succeeded but CurrentSession is null");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshToken method not found");
                 }
 
                 var refreshNoArgs = authType.GetMethod("RefreshSession", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
@@ -130,17 +159,31 @@ namespace GrafikoMat.Services
                     await InvokeAwaitIfTask(refreshNoArgs, auth);
                     if (auth.CurrentSession != null)
                     {
+                        Debug.WriteLine("[SupabaseService] Restore: Session restored via RefreshSession");
                         await SaveCurrentSessionAsync().ConfigureAwait(false);
                         return true;
                     }
+                    else
+                    {
+                        Debug.WriteLine("[SupabaseService] Restore: RefreshSession succeeded but CurrentSession is null");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[SupabaseService] Restore: RefreshSession method not found");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("[SupabaseService] Restore: EX -> " + ex.Message);
+                Debug.WriteLine($"[SupabaseService] Restore: Exception during session restore: {ex.GetType().Name}");
+                Debug.WriteLine($"[SupabaseService] Restore: Exception message: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Debug.WriteLine($"[SupabaseService] Restore: Inner exception: {ex.InnerException.Message}");
+                }
             }
 
-            Debug.WriteLine("[SupabaseService] Restore: END -> FALSE");
+            Debug.WriteLine("[SupabaseService] Restore: All restore methods failed -> FALSE");
             return false;
         }
 

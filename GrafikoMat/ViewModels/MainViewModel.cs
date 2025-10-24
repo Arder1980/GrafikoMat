@@ -133,10 +133,31 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        public async void Receive(UnitDataChangedMessage message)
+        public void Receive(UnitDataChangedMessage message)
         {
-            await LoadUserAndUnitDataAsync();
-            LoadDataForActiveUnit();
+            // POPRAWKA: async void jest niebezpieczne - zamiast tego używamy fire-and-forget z Task.Run
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await LoadUserAndUnitDataAsync();
+
+                    // Przełącz na UI thread dla LoadDataForActiveUnit
+                    if (App.MainRoot?.DispatcherQueue != null)
+                    {
+                        await App.MainRoot.DispatcherQueue.EnqueueAsync(() =>
+                        {
+                            LoadDataForActiveUnit();
+                            return Task.CompletedTask;
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainViewModel] Receive(UnitDataChangedMessage) failed: {ex.Message}");
+                    // W przypadku błędu - loguj ale nie crashuj aplikacji
+                }
+            });
         }
 
         public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
@@ -473,8 +494,20 @@ namespace GrafikoMat.ViewModels
                         progress.Report((p, statusText));
                     }), token: cancellationToken);
 
-                    var solution = await Task.Run(() => solver.FindOptimalSolution(), cancellationToken);
-                    _lastGeneratedSolution = solution;
+                    // POPRAWKA: FindOptimalSolution() już obsługuje CancellationToken wewnętrznie
+                    // Task.Run nie jest potrzebny - solver sam zarządza wątkami
+                    _lastGeneratedSolution = await Task.Run(() =>
+                    {
+                        try
+                        {
+                            return solver.FindOptimalSolution();
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Token został anulowany w trakcie wykonywania solvera
+                            throw;
+                        }
+                    }, cancellationToken);
                 },
                 successMessage: "Grafik został wygenerowany pomyślnie.",
                 errorMessageTitle: "Błąd generowania grafiku",

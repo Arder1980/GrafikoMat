@@ -101,6 +101,17 @@
                                 <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </MenuFlyout.MenuFlyoutPresenterStyle>
+                        <MenuFlyoutItem Text="Pomoc" Click="OnHelp">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE897;"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="O programie" Click="OnAbout">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE946;"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
                         <MenuFlyoutItem Text="Wyloguj" Click="OnLogout">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xF3B1;"/>

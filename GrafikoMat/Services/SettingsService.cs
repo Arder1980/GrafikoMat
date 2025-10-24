@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
 
@@ -100,6 +101,7 @@ namespace GrafikoMat.Services
         private const string SETTINGS_FILENAME = "settings.json";
         private static readonly string _settingsPath = Path.Combine(ApplicationData.Current.LocalFolder.Path, SETTINGS_FILENAME);
         private AppSettings? _currentSettings;
+        private readonly SemaphoreSlim _settingsLock = new SemaphoreSlim(1, 1);
 
         /// <summary>
         /// Zwraca domyślną kolejność priorytetów używaną przy pierwszym uruchomieniu aplikacji.
@@ -119,47 +121,72 @@ namespace GrafikoMat.Services
 
         public async Task<AppSettings> LoadSettingsAsync(bool forceReload = false)
         {
+            // Szybka ścieżka bez locka jeśli nie wymuszamy przeładowania
             if (_currentSettings != null && !forceReload)
             {
                 return _currentSettings;
             }
 
+            await _settingsLock.WaitAsync();
             try
             {
-                if (File.Exists(_settingsPath))
+                // Double-check po uzyskaniu locka
+                if (_currentSettings != null && !forceReload)
                 {
-                    var json = await File.ReadAllTextAsync(_settingsPath);
-                    _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
+                    return _currentSettings;
                 }
+
+                try
+                {
+                    if (File.Exists(_settingsPath))
+                    {
+                        var json = await File.ReadAllTextAsync(_settingsPath);
+                        _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
+                    }
+                }
+                catch (Exception)
+                {
+                    _currentSettings = null;
+                }
+
+                _currentSettings ??= new AppSettings();
+
+                // ✅ NOWE: Jeśli lista priorytetów jest pusta, użyj domyślnych wartości
+                if (_currentSettings.Priorities.Count == 0)
+                {
+                    _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
+                }
+
+                return _currentSettings;
             }
-            catch (Exception)
+            finally
             {
-                _currentSettings = null;
+                _settingsLock.Release();
             }
-
-            _currentSettings ??= new AppSettings();
-
-            // ✅ NOWE: Jeśli lista priorytetów jest pusta, użyj domyślnych wartości
-            if (_currentSettings.Priorities.Count == 0)
-            {
-                _currentSettings = _currentSettings with { Priorities = GetDefaultPriorities() };
-            }
-
-            return _currentSettings;
         }
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
-            _currentSettings = settings;
+            await _settingsLock.WaitAsync();
             try
             {
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                var json = JsonSerializer.Serialize(settings, options);
-                await File.WriteAllTextAsync(_settingsPath, json);
+                _currentSettings = settings;
+                try
+                {
+                    var options = new JsonSerializerOptions { WriteIndented = true };
+                    var json = JsonSerializer.Serialize(settings, options);
+                    await File.WriteAllTextAsync(_settingsPath, json);
+                }
+                catch (Exception ex)
+                {
+                    // Logowanie błędu zapisu
+                    System.Diagnostics.Debug.WriteLine($"[SettingsService] SaveSettingsAsync failed: {ex.Message}");
+                    throw; // Propaguj wyjątek aby wywołujący mógł zareagować
+                }
             }
-            catch (Exception)
+            finally
             {
-                // W przypadku błędu - logowanie lub rethrow
+                _settingsLock.Release();
             }
         }
 

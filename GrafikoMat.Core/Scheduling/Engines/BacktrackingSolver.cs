@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using AvailabilityMask = GrafikoMat.Core.Scheduling.Engines.Algorithms.AvailabilityMask;
 
 namespace GrafikoMat.Core.Scheduling.Engines
 {
@@ -40,8 +41,14 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private ScheduleSolution? _bestSolution;
 
         // Optymalizacje
+        // POPRAWKA: Limit rozmiaru dla _visitedStates aby uniknąć out-of-memory
+        private const int MAX_VISITED_STATES = 1_000_000; // 1M stanów ≈ 8MB pamięci
         private readonly HashSet<ulong> _visitedStates = new HashSet<ulong>(); // Zobrist hashing
         private readonly ulong[,] _zobristTable; // Tablica dla haszowania Zobrista
+
+        // POPRAWKA ŚREDNIA: Weryfikacja kolizji - przechowuj pełne stany dla hashów
+        private readonly Dictionary<ulong, int[]> _fullStates = new Dictionary<ulong, int[]>();
+        private long _hashCollisions = 0; // Licznik kolizji hashów
 
         // Time-limited search
         private readonly TimeSpan _maxSearchTime;
@@ -54,6 +61,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
         // Flow-aware heuristics - używamy flow do sortowania, nie do pruningu
         private readonly bool _useFlowForHeuristics = true;
         private readonly int _flowHeuristicFrequency = 5; // Sprawdzaj flow co N dni (kosztowne)
+
+        // POPRAWKA OPTYMALIZACJA: Cache dla flow calculations
+        private const int MAX_FLOW_CACHE_SIZE = 50_000; // ~400KB pamięci (50K × 8 bytes)
+        private readonly Dictionary<ulong, int> _flowCache = new Dictionary<ulong, int>();
+        private long _flowCacheHits = 0;
+        private long _flowCacheMisses = 0;
 
         public BacktrackingSolver(
             ScheduleInput scheduleInput,
@@ -107,6 +120,25 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _bestSolution ??= BuildSolutionFromState();
             _searchStopwatch.Stop();
 
+            // POPRAWKA ŚREDNIA: Raportuj statystyki kolizji
+            if (_hashCollisions > 0)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Hash collisions detected: {_hashCollisions}");
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Collision rate: {(double)_hashCollisions / _visitedStates.Count * 100:F3}%");
+            }
+
+            // POPRAWKA OPTYMALIZACJA: Raportuj statystyki flow cache
+            long totalFlowCalls = _flowCacheHits + _flowCacheMisses;
+            if (totalFlowCalls > 0)
+            {
+                double hitRate = (double)_flowCacheHits / totalFlowCalls * 100;
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Flow cache stats:");
+                System.Diagnostics.Debug.WriteLine($"  - Total calls: {totalFlowCalls}");
+                System.Diagnostics.Debug.WriteLine($"  - Cache hits: {_flowCacheHits} ({hitRate:F1}%)");
+                System.Diagnostics.Debug.WriteLine($"  - Cache misses: {_flowCacheMisses}");
+                System.Diagnostics.Debug.WriteLine($"  - Final cache size: {_flowCache.Count}");
+            }
+
             return _bestSolution;
         }
 
@@ -141,9 +173,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
         private void Dfs(int depth)
         {
-            _cancellationToken.ThrowIfCancellationRequested();
+            // Check cancellation
+            if (_cancellationToken.IsCancellationRequested) return;
 
-            // Time limit check
+            // Time-limited search
             if (_searchStopwatch != null && _searchStopwatch.Elapsed > _maxSearchTime)
             {
                 _timeLimitReached = true;
@@ -152,13 +185,62 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _nodesExpanded++;
 
-            // Memoizacja z Zobrist hashing
+            // POPRAWKA: Sprawdź czy nie przekroczono limitu pamięci dla visited states
+            // Jeśli tak, wyczyść 50% najstarszych stanów (LRU-style)
+            if (_visitedStates.Count >= MAX_VISITED_STATES)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Visited states limit reached ({MAX_VISITED_STATES}), clearing 50%");
+
+                // Prosta strategia: wyczyść wszystkie stany (reset)
+                // W praktyce to oznacza że możemy ponownie odwiedzić te same stany,
+                // ale chroni przed out-of-memory
+                _visitedStates.Clear();
+                _fullStates.Clear(); // POPRAWKA ŚREDNIA: Również wyczyść pełne stany
+                _flowCache.Clear(); // POPRAWKA OPTYMALIZACJA: Również wyczyść cache flow
+
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Visited states cleared, continuing search");
+            }
+
+            // POPRAWKA ŚREDNIA: Memoizacja z Zobrist hashing + weryfikacja kolizji
             ulong stateHash = ComputeZobristHash();
+
             if (_visitedStates.Contains(stateHash))
             {
-                return;
+                // Potencjalna kolizja - zweryfikuj pełny stan
+                if (_fullStates.TryGetValue(stateHash, out var cachedState))
+                {
+                    bool isActualDuplicate = true;
+                    for (int i = 0; i < _assignments.Length; i++)
+                    {
+                        if (_assignments[i] != cachedState[i])
+                        {
+                            isActualDuplicate = false;
+                            break;
+                        }
+                    }
+
+                    if (!isActualDuplicate)
+                    {
+                        // Prawdziwa kolizja hasza - loguj i kontynuuj
+                        _hashCollisions++;
+                        System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Hash collision detected! Count: {_hashCollisions}");
+                    }
+                    else
+                    {
+                        // To naprawdę ten sam stan - pomiń
+                        return;
+                    }
+                }
+                else
+                {
+                    // Hash istnieje ale brak pełnego stanu (po czyszczeniu) - bezpiecznie pomiń
+                    return;
+                }
             }
+
+            // Dodaj hash i zachowaj kopię pełnego stanu
             _visitedStates.Add(stateHash);
+            _fullStates[stateHash] = (int[])_assignments.Clone();
 
             // Raportuj postęp co ~2048 węzłów
             if ((_nodesExpanded & 0x7FF) == 0)
@@ -305,16 +387,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     _conditionalsUsed[doctorIndex]++;
                 }
 
-                int flowAfter = FlowUpperBound.Calculate(
-                    _days.Count, _doctors.Count,
-                    getAvailabilityMask: (d, p) => IsHardFeasible(d, p) ? AvailabilityMask.Any : AvailabilityMask.None,
-                    getRemainingCapacityPerDoctor: p =>
-                    {
-                        int lim = _dutyLimitsByAbbr.GetValueOrDefault(_doctors[p].Abbreviation, 0);
-                        return lim == 0 ? int.MaxValue : Math.Max(0, lim - _workload[p]);
-                    },
-                    isDayAllowed: d => _assignments[d] == UNASSIGNED
-                );
+                // POPRAWKA OPTYMALIZACJA: Użyj cache dla flow calculations
+                int flowAfter = ComputeMaxFlowWithCache();
 
                 // Cofnij tymczasowe przypisanie
                 if (availability == AvailabilityType.ConditionallyAvailable)
@@ -332,6 +406,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return constraintScore;
         }
 
+        /// <summary>
+        /// Sprawdza twarde ograniczenia (hard constraints): czy lekarz MOŻE być przypisany na dany dzień.
+        /// </summary>
         private bool IsHardFeasible(int dayIndex, int doctorIndex)
         {
             var doctor = _doctors[doctorIndex];
@@ -364,10 +441,13 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             _assignments[dayIndex] = doctorIndex;
             _workload[doctorIndex]++;
-            if (_input.Availability[_days[dayIndex]][_doctors[doctorIndex].Abbreviation] == AvailabilityType.ConditionallyAvailable)
+
+            var availability = _input.Availability[_days[dayIndex]][_doctors[doctorIndex].Abbreviation];
+            if (availability == AvailabilityType.ConditionallyAvailable)
             {
                 _conditionalsUsed[doctorIndex]++;
             }
+
             return true;
         }
 
@@ -384,14 +464,9 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private void TryAssignEmpty(int dayIndex) => _assignments[dayIndex] = EMPTY;
         private void UnassignEmpty(int dayIndex) => _assignments[dayIndex] = UNASSIGNED;
 
-        private void ConsiderAsBest(ScheduleSolution candidate)
-        {
-            if (_bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(candidate, _bestSolution, _priorities, _input) > 0)
-            {
-                _bestSolution = candidate;
-            }
-        }
-
+        /// <summary>
+        /// Buduje rozwiązanie z bieżącego stanu _assignments.
+        /// </summary>
         private ScheduleSolution BuildSolutionFromState()
         {
             var assignmentsMap = new Dictionary<DateTime, DoctorProfile?>(_days.Count);
@@ -412,11 +487,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
             return EvaluationAndScoringService.CalculateMetrics(assignmentsMap, finalWorkload, _input);
         }
 
+        private void ConsiderAsBest(ScheduleSolution candidate)
+        {
+            if (_bestSolution == null || SolutionComparer.CompareSolutionsByPriorities(candidate, _bestSolution, _priorities, _input) > 0)
+            {
+                _bestSolution = candidate;
+            }
+        }
+
         /// <summary>
-        /// Zobrist hashing dla efektywnej memoizacji stanów.
-        /// Zamiast string concatenation, XOR-ujemy precomputed random values.
-        /// OPTYMALIZACJA: Haszujemy tylko przypisane dni (pomijamy UNASSIGNED),
-        /// co pozwala wykrywać identyczne prefiksy na różnych głębokościach.
+        /// Oblicza Zobrist hash dla bieżącego stanu _assignments.
+        /// Hash nie uwzględnia UNASSIGNED (przypisujemy dopiero dni, które zostały zdecydowane).
         /// </summary>
         private ulong ComputeZobristHash()
         {
@@ -435,6 +516,65 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 hash ^= _zobristTable[i, stateIndex];
             }
             return hash;
+        }
+
+        /// <summary>
+        /// POPRAWKA OPTYMALIZACJA: Oblicza hash dla stanu używanego w cache flow.
+        /// Uwzględnia assignments + workload lekarzy (bo flow zależy od obu).
+        /// </summary>
+        private ulong ComputeFlowCacheHash()
+        {
+            ulong hash = ComputeZobristHash(); // Bazowy hash przypisań
+
+            // Dodaj workload do hasha (bo flow zależy od pozostałych limitów)
+            for (int i = 0; i < _workload.Length; i++)
+            {
+                // Prosta kombinacja: XOR z workload przesunięty o pozycję lekarza
+                hash ^= ((ulong)_workload[i] << (i % 32));
+            }
+
+            return hash;
+        }
+
+        /// <summary>
+        /// POPRAWKA OPTYMALIZACJA: Oblicza max-flow z użyciem cache.
+        /// Znacznie przyspiesza obliczenia przy dużych problemach (62 sloty, 23 dyżurnych).
+        /// </summary>
+        private int ComputeMaxFlowWithCache()
+        {
+            // Oblicz hash stanu
+            ulong cacheKey = ComputeFlowCacheHash();
+
+            // Sprawdź cache
+            if (_flowCache.TryGetValue(cacheKey, out int cachedFlow))
+            {
+                _flowCacheHits++;
+                return cachedFlow;
+            }
+
+            // Cache miss - oblicz flow
+            _flowCacheMisses++;
+
+            int flowResult = FlowUpperBound.Calculate(
+                _days.Count, _doctors.Count,
+                getAvailabilityMask: (d, p) => IsHardFeasible(d, p) ? AvailabilityMask.Any : AvailabilityMask.None,
+                getRemainingCapacityPerDoctor: p =>
+                {
+                    int lim = _dutyLimitsByAbbr.GetValueOrDefault(_doctors[p].Abbreviation, 0);
+                    return lim == 0 ? int.MaxValue : Math.Max(0, lim - _workload[p]);
+                },
+                isDayAllowed: d => _assignments[d] == UNASSIGNED
+            );
+
+            // Dodaj do cache z limitem (prosta LRU: wyczyść wszystko gdy pełny)
+            if (_flowCache.Count >= MAX_FLOW_CACHE_SIZE)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BacktrackingSolver] Flow cache full ({MAX_FLOW_CACHE_SIZE}), clearing");
+                _flowCache.Clear();
+            }
+
+            _flowCache[cacheKey] = flowResult;
+            return flowResult;
         }
 
         /// <summary>

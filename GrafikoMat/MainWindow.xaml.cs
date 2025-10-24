@@ -910,6 +910,9 @@ namespace GrafikoMat
             if (_isClosing || _isAnimating) return;
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
+
+            // POPRAWKA: Dispose DeclarationsViewModel przed nullowaniem
+            _currentDeclarationsView?.ViewModel?.Dispose();
             _currentDeclarationsView = null;
             _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
 
@@ -1185,15 +1188,41 @@ namespace GrafikoMat
             _activeStoryboard = null;
             _isAnimating = false;
 
+            // POPRAWKA: Cleanup event handlers przed dispose
+
+            // Odepnij event handlery ViewModel
+            if (ViewModel != null)
+            {
+                ViewModel.PropertyChanged -= OnMainViewModelPropertyChanged;
+            }
+
             // Odepnij event handlery AppWindow
             if (_appWindow != null)
             {
                 _appWindow.Changed -= OnAppWindowChanged;
             }
 
+            // Odepnij event handler motywu
+            if (this.Content is FrameworkElement rootElement)
+            {
+                rootElement.ActualThemeChanged -= OnActualThemeChanged;
+            }
+
+            // Odepnij event handlery hamburger menu (jeśli były załączone)
+            if (_hamburgerEventsAttached && TitleBarMenuButton != null)
+            {
+                TitleBarMenuButton.PointerEntered -= OnHamburgerPointerEntered;
+                TitleBarMenuButton.PointerExited -= OnHamburgerPointerExited;
+                TitleBarMenuButton.PointerPressed -= OnHamburgerPointerPressed;
+                TitleBarMenuButton.PointerReleased -= OnHamburgerPointerReleased;
+                _hamburgerEventsAttached = false;
+            }
+
+            // Dispose backdrop manager
             _backdropManager?.Dispose();
             _backdropManager = null;
 
+            // Przywróć oryginalny WndProc
             if (_oldWndProc != IntPtr.Zero)
             {
                 try
@@ -1208,13 +1237,25 @@ namespace GrafikoMat
                 _oldWndProc = IntPtr.Zero;
             }
 
+            // Zwolnij GCHandle
             if (_wndProcGCHandle.IsAllocated)
             {
                 _wndProcGCHandle.Free();
             }
 
+            // Wyrejestruj z messengera
             WeakReferenceMessenger.Default.Unregister<SettingsHaveChangedMessage>(this);
             WeakReferenceMessenger.Default.Unregister<UnitDataChangedMessage>(this);
+
+            // Cleanup widoków
+            _settingsView = null;
+            _managementView = null;
+
+            // POPRAWKA: Dispose DeclarationsViewModel przed nullowaniem
+            _currentDeclarationsView?.ViewModel?.Dispose();
+            _currentDeclarationsView = null;
+
+            System.Diagnostics.Debug.WriteLine("[MainWindow] Cleanup completed");
         }
 
         private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -1567,6 +1608,96 @@ namespace GrafikoMat
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
+            }
+        }
+
+        private void OnHelp(object? sender, RoutedEventArgs e)
+        {
+            if (_isClosing) return;
+            _ = ShowInfo("Pomoc", "Funkcja pomocy będzie wkrótce dostępna.");
+        }
+
+        private async void OnAbout(object? sender, RoutedEventArgs e)
+        {
+            if (_isClosing) return;
+
+            var stackPanel = new StackPanel { Spacing = 8 };
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "GrafikoMat Dyżurowy",
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Generator grafików dyżurów lekarskich",
+                FontSize = 14,
+                Opacity = 0.8
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Wersja: 1.0\n© 2025 Adam Lemanowicz",
+                FontSize = 12,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+
+            var licensePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            licensePanel.Children.Add(new TextBlock { Text = "Licencja:", FontSize = 12 });
+            var licenseLink = new HyperlinkButton
+            {
+                Content = "MIT License",
+                NavigateUri = new Uri("https://opensource.org/licenses/MIT"),
+                Padding = new Thickness(0),
+                FontSize = 12
+            };
+            licensePanel.Children.Add(licenseLink);
+            stackPanel.Children.Add(licensePanel);
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Autor koncepcji i architektury:\nAdam Lemanowicz",
+                FontSize = 12,
+                Margin = new Thickness(0, 12, 0, 0)
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Kod generowany przez modele AI:\n• Claude Sonnet 4.5 (Anthropic)\n• ChatGPT o1 (OpenAI)\n• Gemini 2.5 Pro (Google)",
+                FontSize = 12,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Program powstał w oparciu o współpracę człowieka z AI,\ngdzie autor definiuje wymagania i weryfikuje rezultaty,\na modele językowe implementują funkcjonalności.",
+                FontSize = 11,
+                Opacity = 0.7,
+                Margin = new Thickness(0, 12, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "O programie";
+            dialog.Content = stackPanel;
+            dialog.CloseButtonText = "OK";
+            dialog.DefaultButton = ContentDialogButton.Close;
+
+            // Upewnij się, że dialog ma właściwy XamlRoot dla animacji
+            if (RootGrid?.XamlRoot != null)
+            {
+                dialog.XamlRoot = RootGrid.XamlRoot;
+            }
+
+            try
+            {
+                await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error showing About dialog: {ex.Message}");
             }
         }
 

@@ -28,12 +28,13 @@ namespace GrafikoMat.ViewModels
     public enum SlotPart { Full, Day, Night }
     public record SelectedSlot(int Index, SlotPart Part);
 
-    public sealed class DeclarationsViewModel : ObservableObject
+    public sealed partial class DeclarationsViewModel : ObservableObject, IDisposable
     {
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
         private bool _use12hShiftsByDefault;
         private MonthLayout _monthLayout;
+        private bool _isDisposed;
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -482,7 +483,7 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(SelectedDoctor));
             OnPropertyChanged(nameof(SelectedDoctorIndex));
             OnPropertyChanged(nameof(DayCells));
-            
+
             // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
             OnPropertyChanged(nameof(HasNoDoctors));
             OnPropertyChanged(nameof(HasDoctors));
@@ -603,6 +604,30 @@ namespace GrafikoMat.ViewModels
             IsWeekend = isWeekend;
             IsHoliday = isHoliday;
             HolidayName = holidayName;
+        }
+    }
+
+    // POPRAWKA: Rozszerzenie DeclarationsViewModel o Dispose
+    public sealed partial class DeclarationsViewModel
+    {
+        /// <summary>
+        /// Zwalnia zasoby używane przez ViewModel.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+
+            // Commit ostatnie zmiany przed dispose
+            CommitChangesToSharedState();
+
+            // Wyczyść kolekcje
+            Doctors.Clear();
+            DayCells.Clear();
+            SelectedSlots.Clear();
+
+            _isDisposed = true;
+
+            System.Diagnostics.Debug.WriteLine($"[DeclarationsViewModel] Disposed for {Year}-{MonthIndex + 1}");
         }
     }
 }
