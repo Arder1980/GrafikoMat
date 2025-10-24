@@ -74,6 +74,7 @@ namespace GrafikoMat
         private IDoctorRepository? _doctorRepository;
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
+        private IDeclarationRepository? _declarationRepository;
 
         public MainWindow()
         {
@@ -633,6 +634,7 @@ namespace GrafikoMat
                     _doctorRepository = new SupabaseDoctorRepository(_supabaseService);
                     _unitRepository = new SupabaseUnitRepository(_supabaseService.Client);
                     _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
+                    _declarationRepository = new SupabaseDeclarationRepository(_supabaseService);
                 }
                 else
                 {
@@ -648,7 +650,7 @@ namespace GrafikoMat
                 _unitRepository = null;
                 _assignmentRepository = null;
             }
-            ViewModel.SetRepositories(_doctorRepository, _unitRepository, _assignmentRepository);
+            ViewModel.SetRepositories(_doctorRepository, _unitRepository, _assignmentRepository, _declarationRepository);
         }
 
         private async void RefreshDataServicesAsync()
@@ -957,10 +959,16 @@ namespace GrafikoMat
                 frozenYear, frozenMonthIndex, doctorsForUnit, initialIndex,
                 ViewModel.Declarations, ViewModel.IsCurrentUserAdmin,
                 ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
-                () => { ViewModel.RefreshDeclarationsForDashboard(); }
+                () => { ViewModel.RefreshDeclarationsForDashboard(); },
+                _declarationRepository,
+                ViewModel.ActiveUnit.Id
              );
 
             declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;
+
+            // ✅ DODANE - załaduj deklaracje z Supabase
+            _ = declarationsVm.LoadDeclarationsFromSupabaseAsync();
+
             var declarationsView = new DeclarationsView();
 
             // ✅ ZMIENIONE: Zapisz aktualną jednostkę PRZED zarejestrowaniem handlera
@@ -975,11 +983,16 @@ namespace GrafikoMat
                 SwitchToDashboard();
             }
 
-            void DeclSaveAndCloseHandler()
+            async void DeclSaveAndCloseHandler()
             {
-                declarationsView.ViewModel?.SaveCommand.Execute(null);
+                // Użyj SaveAsyncCommand i poczekaj na zakończenie
+                if (declarationsView.ViewModel?.SaveAsyncCommand != null)
+                {
+                    await declarationsView.ViewModel.SaveAsyncCommand.ExecuteAsync(null);
+                }
+
                 ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
-                _previousUnitIdForDeclarations = null; // ✅ ZMIENIONE
+                _previousUnitIdForDeclarations = null;
                 SwitchToDashboard();
             }
 

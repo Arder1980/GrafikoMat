@@ -9,8 +9,8 @@
       "mtime": 1760805378.0
     },
     "Claude CLI.bat": {
-      "hash": "a6de9ff389023c4df5e99a3f271b51877b10d0bc75a68863c6ff786aecb2b99a",
-      "mtime": 1761329169.6128993
+      "hash": "2a01b8cc35297496563fe90c596d8e4da7c0e4be114a9a841b5dc22ab30ec46e",
+      "mtime": 1761337013.603013
     },
     "claude_pyrojects.config": {
       "hash": "37fba5d7a5ccb5ce4d3558524f4a0437d96a830346e696f3109e65132db0df8f",
@@ -25,8 +25,8 @@
       "mtime": 1760721545.0
     },
     "claude_pyrojects.manifest": {
-      "hash": "f76a9f1bee3f2d80589988a88fd2a9e1a564d4457bf0d91b642031425fcd93ad",
-      "mtime": 1761331975.1346962
+      "hash": "0df1884ddec399775a8a8bf5846ba23d6a08247e5604f13b84671c2a37455652",
+      "mtime": 1761332713.9182968
     },
     "ExportProject.bat": {
       "hash": "ecc291866e1c8a3ff67f29e9d42f9a15d9defa56b8e9a5dee2b309f8e3b22c1a",
@@ -34,7 +34,7 @@
     },
     "ExportProject.lastlog.txt": {
       "hash": "40c64e94808d1591a2cc100046907f9937e4d07c999849b51c99808796b4c7c6",
-      "mtime": 1761332706.786664
+      "mtime": 1761341555.7613218
     },
     "ExportProject.ps1": {
       "hash": "a6734fd6846cb2b6b68a293e4da1a4c0bb467bd106f21970b1e22701271ebdca",
@@ -57,8 +57,12 @@
       "mtime": 1761224315.0
     },
     ".claude\\CLAUDE.md": {
-      "hash": "f6a8e2d50f87d89f9850b21bbdb1df198bf4db9b9baeffd043b645703d7aeabd",
-      "mtime": 1761329670.6296134
+      "hash": "a471911d29336795aa5124f70d3320541f9860a8768644b41c9f0fb923c41ca2",
+      "mtime": 1761336019.595234
+    },
+    ".claude\\settings.local.json": {
+      "hash": "258059185ef88b390dbc4326874841e5aad0738dc8ac8754e517ab57509657c5",
+      "mtime": 1761333272.8333218
     },
     "GrafikoMat\\app.manifest": {
       "hash": "c71482deb18bd407cebc00774fe81cb48ca0dc0893e1b22483a3889bf5f1ecd9",
@@ -69,20 +73,20 @@
       "mtime": 1760851874.0
     },
     "GrafikoMat\\App.xaml.cs": {
-      "hash": "0ec04d4c101ec092c7e8322cc391899821f0c05b2e45ae079bc7692420feea95",
-      "mtime": 1761331027.0600474
+      "hash": "2c7035fbe73598c375d71274906ff9735f3d1c1722c66d37f5c490742d3078be",
+      "mtime": 1761339958.0374112
     },
     "GrafikoMat\\GrafikoMat.WinUI.csproj": {
       "hash": "873e5b3ec60e7535fb53a90a65ad24700ea903b71a9b0230f20d0b5808a4f1f6",
       "mtime": 1761247283.0
     },
     "GrafikoMat\\MainWindow.xaml": {
-      "hash": "7eb906ec12b24613a99726d72b16b336ae91eeea2813bbac438ef641ad91ed8e",
-      "mtime": 1761283030.0
+      "hash": "e3fc049c4faecde5b48228e2d801e4e927b6c0cef36b56833f898468fe4865b9",
+      "mtime": 1761333994.130887
     },
     "GrafikoMat\\MainWindow.xaml.cs": {
-      "hash": "fccea3c86a7e5315efa98397f9e0e842497e69de06bd9386b5853996d60a02d6",
-      "mtime": 1761331411.15954
+      "hash": "4df9c4a0330fc7790191107be4fea2dbd346d251dffe744aeeb9ac2407c8daa4",
+      "mtime": 1761334821.0787482
     },
     "GrafikoMat\\Package.appxmanifest": {
       "hash": "93d142cda6a1423ba0c0fef96265e61ff6f13657e2f322549c23e661460934ed",
@@ -129,8 +133,8 @@
       "mtime": 1760476716.0
     },
     "GrafikoMat\\Common\\Converters.cs": {
-      "hash": "67e4784d184e768c4b8a6a7985e85aa2b08c8c91c656186d7b7a257c71816369",
-      "mtime": 1761255071.0
+      "hash": "f1d70d593d936f533679e1e9c4b6cefbbb975400b832b3df193c34e2194693ed",
+      "mtime": 1761339986.9211824
     },
     "GrafikoMat\\Common\\DispatcherQueueExtensions.cs": {
       "hash": "c17c89f0188e5a55c28034f78b3ada4ad08cc934672dbe25091569e735e1288e",
@@ -161,8 +165,8 @@
       "mtime": 1761172984.8861053
     },
     "GrafikoMat\\Controls\\ActionContainer.xaml.cs": {
-      "hash": "a202ec893d2487507b0587d897f98bdfffbb03dcca0c48599ab9c2f7008bb422",
-      "mtime": 1761172527.20661
+      "hash": "033e360e4dd23a607b9d68254b4687aefba6d04f516e11a2e7cd1be311de128c",
+      "mtime": 1761340024.1727839
     },
     "GrafikoMat\\Controls\\AutoEqualRowsGrid.cs": {
       "hash": "42ae2a012928617d9f9b53d3a245502fb352d527cf34ae24f4fa61f64a8184df",
@@ -277,8 +281,8 @@
       "mtime": 1757436088.0
     },
     "GrafikoMat\\ViewModels\\DeclarationsViewModel.cs": {
-      "hash": "255b57d0fb7b31b86f625dcc57fcc11a8fd8a3f7c8048961488784faf0f20f6e",
-      "mtime": 1761329855.7157338
+      "hash": "3b9027108751d4be77c3fc31ca5fadd0795b4387d59dd7290ad8bcd3a51dafcd",
+      "mtime": 1761337526.8935435
     },
     "GrafikoMat\\ViewModels\\DoctorEditorViewModel.cs": {
       "hash": "1e190e2c4132357e517a14641906d8f71ce4db52235f711b3fddb1ea78fb341a",
@@ -297,16 +301,16 @@
       "mtime": 1757606523.0
     },
     "GrafikoMat\\ViewModels\\EngineSettingsViewModel.cs": {
-      "hash": "bd172c6fcf6763f71892de5e4423928547557ab219a192ed85aaa0d66c7155de",
-      "mtime": 1761255910.0
+      "hash": "8a84dbac236edcb60e2067deaba624c1cddc194d325d4080a809ba9ebd60530c",
+      "mtime": 1761341434.6142168
     },
     "GrafikoMat\\ViewModels\\GeneralSettingsViewModel.cs": {
-      "hash": "8c3c5f46ad41009bf66a0404f038ab39babce7196bfc7a6573c3cf0ba8f487e3",
-      "mtime": 1761253658.0
+      "hash": "50f0af9a67eecdee41de21abd949fc97b2b608aaf0784a6c16fc82e3c52ff1e8",
+      "mtime": 1761340089.9931462
     },
     "GrafikoMat\\ViewModels\\MainViewModel.cs": {
-      "hash": "6d294b967e1e96477fcd32b2badaaa8289c1f7d292aff1772a1616d072517a26",
-      "mtime": 1761325368.0417333
+      "hash": "e3b0dbcc63dbfd336aec242bc9055ee6f8a5679a942a6177532393bf24152ad6",
+      "mtime": 1761340049.4351015
     },
     "GrafikoMat\\ViewModels\\ManagementViewModel.cs": {
       "hash": "944eebbba09505705220626e6e5176f98fc669553ce542f5a52a0de5c8b8bbd0",
@@ -329,8 +333,8 @@
       "mtime": 1757436088.0
     },
     "GrafikoMat\\Views\\ChangePasswordView.xaml.cs": {
-      "hash": "ab2d6ea5c0a5c6b75b14afd7f23145758980667342cf934ea1dec4b1ac76addc",
-      "mtime": 1757235446.0
+      "hash": "092d528e2c968a927883dbe3b3cc70f7b65abbbd78e6e32869fe13ce945aa0a9",
+      "mtime": 1761340178.3162057
     },
     "GrafikoMat\\Views\\DashboardView.xaml": {
       "hash": "05134a99ff8fccff78b3e779e47af618d618d9b4b971a1c8f3bd5ea1c58147e2",
@@ -365,16 +369,16 @@
       "mtime": 1760370678.0
     },
     "GrafikoMat\\Views\\SettingsView.xaml": {
-      "hash": "9e0940b6947864672e3f1bbdfbd4e3f0b57426ba0a897e4cb34ae4c336e2217c",
-      "mtime": 1757854074.0
+      "hash": "d239ab73716a883a0d47bfd60f1cf5308a9db0af78b871accafd464a26cb0e5e",
+      "mtime": 1761337952.7091956
     },
     "GrafikoMat\\Views\\SettingsView.xaml.cs": {
-      "hash": "da4ee7e092baa027f94630fdb49b9a9d53a57bab422f714a4054f1609e5bc442",
-      "mtime": 1761283943.0
+      "hash": "408ec7b1bdb50def8422b5cbb69829ba721b2e812684ac676b76876735a69450",
+      "mtime": 1761340206.8109267
     },
     "GrafikoMat\\Views\\Settings\\AppearanceSettingsView.xaml": {
-      "hash": "e2e0ea9e23d56b451d51d583cabc21c0931bb71b644c29fd47769173795cf58a",
-      "mtime": 1757629645.0
+      "hash": "fbcab665ca1a415eebf663896310ce10abdc999f05311a182386899c2454ffb2",
+      "mtime": 1761338461.7685678
     },
     "GrafikoMat\\Views\\Settings\\AppearanceSettingsView.xaml.cs": {
       "hash": "ed5edca4fe2b889fcdea66b43979613ea2b9808ae99adb30851d4ba760ccc889",
@@ -389,32 +393,32 @@
       "mtime": 1760782141.0
     },
     "GrafikoMat\\Views\\Settings\\EngineSettingsView.xaml": {
-      "hash": "b5eab82cd7603f5f2c7df4ea20c69a75204c1f4480543a31c29a429350ee531b",
-      "mtime": 1761283059.0
+      "hash": "ebd3eeb0aaef7cd6a60e5d5830b7d889c1f74da8464a67ef90b1c40297cf0b2c",
+      "mtime": 1761338357.8709285
     },
     "GrafikoMat\\Views\\Settings\\EngineSettingsView.xaml.cs": {
       "hash": "23ab9333aafaad4ac1ce4f1f72da2aa2e46a857edb722f041ca750ae073d5c30",
       "mtime": 1761283943.0
     },
     "GrafikoMat\\Views\\Settings\\GeneralSettingsView.xaml": {
-      "hash": "045c98e2b7a9b62995c532618d98b91240dbceeeaa7f39b9507bab122a722543",
-      "mtime": 1761283173.0
+      "hash": "da8f219851b753dce9916d4183d7c7405e8da316a06f139ecb213f394eea4821",
+      "mtime": 1761338392.743874
     },
     "GrafikoMat\\Views\\Settings\\GeneralSettingsView.xaml.cs": {
       "hash": "78aad8436dd26379dba7b984160e2b7d232297577c0c7d3d5fcf66a0b107ea73",
       "mtime": 1761283195.0
     },
     "GrafikoMat\\Views\\Settings\\PrioritiesSettingsView.xaml": {
-      "hash": "c47ac7baeb96e3cbaaab2cdc622f6bab7133d945f146adb1d6a5fd97a3191d2b",
-      "mtime": 1761283127.0
+      "hash": "903a97a83104b1518b45d8c3582c99133f1e3e231f0d161efab47cd95bcb88eb",
+      "mtime": 1761339681.8631597
     },
     "GrafikoMat\\Views\\Settings\\PrioritiesSettingsView.xaml.cs": {
       "hash": "20f2548b0eeda7562d5fba49063f81f262200c6855a0889cd662d8dd3d6c14c4",
       "mtime": 1761283195.0
     },
     "GrafikoMat\\Views\\Settings\\UnitsSettingsView.xaml": {
-      "hash": "a6fd63e1c14f7e04cf96e5caeb091381c105a595c9304c17d64b95742c692d68",
-      "mtime": 1760822995.0
+      "hash": "95bc7da4427220cb3f2708947090d362a6cb2c307558b336def85707fd93dea1",
+      "mtime": 1761338472.8248315
     },
     "GrafikoMat\\Views\\Settings\\UnitsSettingsView.xaml.cs": {
       "hash": "2e02b7624297b4b76b95355632ddc6f63d75f8364ac8bd27b0a491c2ce7ce551",
@@ -649,8 +653,8 @@
       "mtime": 1761151783.0
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\BacktrackingSolver.cs": {
-      "hash": "032fe5b667b1605d93c6d4f6e7f3356d06104756709123531157f3f717989cda",
-      "mtime": 1761332688.9848216
+      "hash": "968a9a33b56907420586503ca7327a34c56463636bccdbfb47b85bfd76a7843f",
+      "mtime": 1761340137.0139778
     },
     "GrafikoMat.Core\\Scheduling\\Engines\\DeltaEvaluator.cs": {
       "hash": "9a64f3ec29ffbda475cead3d9644ab8303f8fa6d7a043903887669cabb87cb33",
@@ -773,5 +777,5 @@
       "mtime": 1761152864.0
     }
   },
-  "last_sync": "2025-10-24T21:05:13.914276"
+  "last_sync": "2025-10-24T23:33:41.206110"
 }

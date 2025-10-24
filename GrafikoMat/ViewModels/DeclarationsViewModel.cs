@@ -1,6 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Repositories;
 using GrafikoMat.Core.Scheduling;
 using GrafikoMat.Models;
 using Microsoft.UI.Xaml;
@@ -10,6 +11,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace GrafikoMat.ViewModels
 {
@@ -37,6 +39,10 @@ namespace GrafikoMat.ViewModels
         private bool _isDisposed;
         private bool _isDirty = false;
         private bool _isLoading = false; // Flaga zapobiegająca oznaczaniu jako dirty podczas ładowania
+
+        // ✅ DODANE - repozytorium i ID jednostki
+        private readonly IDeclarationRepository? _declarationRepository;
+        private readonly Guid? _currentUnitId;
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -79,6 +85,7 @@ namespace GrafikoMat.ViewModels
         }
 
         public RelayCommand SaveCommand { get; }
+        public AsyncRelayCommand SaveAsyncCommand { get; }
         public RelayCommand ClearSelectionCommand { get; }
         public RelayCommand SelectNextDoctorCommand { get; }
         public RelayCommand SelectPrevDoctorCommand { get; }
@@ -86,7 +93,7 @@ namespace GrafikoMat.ViewModels
         public DeclarationsViewModel(
             int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
             Dictionary<string, DoctorMonthDeclaration> sharedDeclarations, bool isAdmin,
-            bool use12hShifts, Action onSaveCallback)
+            bool use12hShifts, Action onSaveCallback, IDeclarationRepository? declarationRepository = null, Guid? unitId = null)
         {
             Year = year;
             MonthIndex = monthIndex;
@@ -95,6 +102,8 @@ namespace GrafikoMat.ViewModels
             _onSaveCallback = onSaveCallback;
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
+            _declarationRepository = declarationRepository;
+            _currentUnitId = unitId;
 
             _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
 
@@ -118,7 +127,8 @@ namespace GrafikoMat.ViewModels
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
 
-            SaveCommand = new RelayCommand(DoSave, () => _isDirty);
+            SaveCommand = new RelayCommand(() => _ = DoSaveAsync(), () => _isDirty);
+            SaveAsyncCommand = new AsyncRelayCommand(DoSaveAsync, () => _isDirty);
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
@@ -311,12 +321,207 @@ namespace GrafikoMat.ViewModels
             _sharedDeclarations[key] = result;
         }
 
-        private void DoSave()
+        private async Task DoSaveAsync()
         {
+            System.Diagnostics.Debug.WriteLine($"[SAVE] DoSaveAsync called");
             CommitChangesToSharedState();
+
+            // ✅ DODANE - zapis do Supabase jeśli repozytorium jest dostępne
+            System.Diagnostics.Debug.WriteLine($"[SAVE] _declarationRepository={_declarationRepository != null}, _currentUnitId={_currentUnitId}, SelectedDoctor={SelectedDoctor?.FullName}");
+
+            if (_declarationRepository != null && _currentUnitId.HasValue && SelectedDoctor != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SAVE] Attempting to save to Supabase...");
+                try
+                {
+                    await SaveToSupabaseAsync();
+                    System.Diagnostics.Debug.WriteLine($"[SAVE] Save to Supabase completed successfully");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SAVE] ERROR during save to Supabase: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[SAVE] Stack trace: {ex.StackTrace}");
+                    if (ex.InnerException != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SAVE] Inner exception: {ex.InnerException.Message}");
+                    }
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[SAVE] Skipping Supabase save - repository or unit not available");
+            }
+
             _onSaveCallback?.Invoke();
             _isDirty = false;
             SaveCommand.NotifyCanExecuteChanged();
+            SaveAsyncCommand.NotifyCanExecuteChanged();
+        }
+
+        /// <summary>
+        /// Ładuje wszystkie deklaracje dla jednostki z Supabase i synchronizuje ze stanem lokalnym.
+        /// </summary>
+        public async Task LoadDeclarationsFromSupabaseAsync()
+        {
+            System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] LoadDeclarationsFromSupabaseAsync called");
+
+            if (_declarationRepository == null || !_currentUnitId.HasValue)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Brak repozytorium lub unitId - pomijam ładowanie z Supabase");
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] _declarationRepository={_declarationRepository != null}, _currentUnitId={_currentUnitId}");
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Ładowanie deklaracji z Supabase dla jednostki {_currentUnitId.Value}, {Year}-{MonthIndex + 1}");
+
+                var declarations = await _declarationRepository.GetDeclarationsForUnitMonthAsync(
+                    _currentUnitId.Value,
+                    Year,
+                    MonthIndex + 1  // W bazie miesiące są 1-12
+                );
+
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Pobrano {declarations.Count} deklaracji z Supabase");
+
+                // Konwertuj deklaracje z bazy do lokalnego formatu
+                foreach (var declaration in declarations)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Przetwarzanie deklaracji dla doctor_id={declaration.DoctorId}");
+
+                    var doctor = Doctors.FirstOrDefault(d => d.Profile.Id == declaration.DoctorId);
+                    if (doctor == null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Pomijam deklarację - nie znaleziono lekarza ID={declaration.DoctorId}");
+                        continue;
+                    }
+
+                    var key = Key(doctor.Profile.FullName, Year, MonthIndex);
+                    int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+                    var doctorDeclaration = new DoctorMonthDeclaration
+                    {
+                        Doctor = doctor.Profile.FullName,
+                        Year = Year,
+                        MonthIndex = MonthIndex,
+                        Days = Enumerable.Range(0, daysInMonth).Select(_ => new DayDeclaration()).ToArray()
+                    };
+
+                    // Konwertuj dane JSON do DayDeclaration
+                    if (declaration.DeclarationDataJson?.Days != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Konwersja {declaration.DeclarationDataJson.Days.Count} dni dla {doctor.Profile.FullName}");
+                        foreach (var dayDto in declaration.DeclarationDataJson.Days)
+                        {
+                            int dayIndex = dayDto.Day - 1;
+                            if (dayIndex >= 0 && dayIndex < doctorDeclaration.Days.Length)
+                            {
+                                doctorDeclaration.Days[dayIndex] = new DayDeclaration
+                                {
+                                    Mode = dayDto.Mode == "Split12" ? DayMode.Split12 : DayMode.Full24,
+                                    Full = dayDto.Full,
+                                    Day = dayDto.DaySlot,
+                                    Night = dayDto.Night
+                                };
+                                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Dzień {dayDto.Day}: mode={dayDto.Mode}, full={dayDto.Full}, day={dayDto.DaySlot}, night={dayDto.Night}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] BRAK danych JSON dla {doctor.Profile.FullName}");
+                    }
+
+                    _sharedDeclarations[key] = doctorDeclaration;
+                    System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Załadowano deklarację dla {doctor.Profile.FullName}, key={key}");
+                }
+
+                // Odśwież widok dla aktualnie wybranego lekarza
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Odświeżanie widoku dla wybranego lekarza");
+                LoadDeclarationsForSelectedDoctor();
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Zakończono ładowanie z Supabase");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] BŁĄD podczas ładowania deklaracji z Supabase: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Zapisuje deklaracje aktualnie wybranego lekarza do Supabase.
+        /// </summary>
+        private async Task SaveToSupabaseAsync()
+        {
+            if (_declarationRepository == null || !_currentUnitId.HasValue || SelectedDoctor == null)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[SAVE] Rozpoczynam zapis deklaracji do Supabase dla {SelectedDoctor.FullName}");
+
+            // Pobierz istniejącą deklarację z bazy (jeśli istnieje)
+            var existingDeclaration = await _declarationRepository.GetDeclarationForDoctorAsync(
+                _currentUnitId.Value,
+                SelectedDoctor.Id,
+                Year,
+                MonthIndex + 1  // W bazie miesiące są 1-12, a nie 0-11
+            );
+
+            int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+            var days = new List<DayDeclarationDto>();
+
+            // Konwertuj dane z DayCells do formatu JSON
+            foreach (var cell in DayCells.Where(c => c.InMonth))
+            {
+                int dayNumber = cell.Date.Day;
+
+                var dayDto = new DayDeclarationDto
+                {
+                    Day = dayNumber,
+                    Mode = cell.IsSplit ? "Split12" : "Full24"
+                };
+
+                if (cell.IsSplit)
+                {
+                    dayDto.DaySlot = string.IsNullOrWhiteSpace(cell.SymbolDay) ? null : cell.SymbolDay;
+                    dayDto.Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
+                }
+                else
+                {
+                    dayDto.Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
+                }
+
+                days.Add(dayDto);
+            }
+
+            var declarationData = new DeclarationDataJson
+            {
+                Days = days
+            };
+
+            Declaration declaration;
+
+            if (existingDeclaration != null)
+            {
+                // Aktualizuj istniejącą deklarację
+                declaration = existingDeclaration;
+                declaration.DeclarationDataJson = declarationData;
+                System.Diagnostics.Debug.WriteLine($"[SAVE] Aktualizacja istniejącej deklaracji ID={declaration.Id}");
+            }
+            else
+            {
+                // Utwórz nową deklarację
+                declaration = new Declaration
+                {
+                    UnitId = _currentUnitId.Value,
+                    DoctorId = SelectedDoctor.Id,
+                    Year = Year,
+                    Month = MonthIndex + 1,  // W bazie miesiące są 1-12
+                    DeclarationDataJson = declarationData
+                };
+                System.Diagnostics.Debug.WriteLine($"[SAVE] Tworzenie nowej deklaracji");
+            }
+
+            await _declarationRepository.SaveDeclarationAsync(declaration);
+            System.Diagnostics.Debug.WriteLine($"[SAVE] Deklaracja zapisana pomyślnie");
         }
 
         public void SelectSingleSlot(int index, SlotPart part)

@@ -364,58 +364,65 @@ namespace GrafikoMat.Views
             // ============================================
             var mogeItem = new MenuFlyoutItem
             {
-                Text = "        Mogę",
-                IsEnabled = false,
+                Text = "        Mogę (MOG)",
+                Tag = "MOG",
                 Style = indentedStyle
             };
+            mogeItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(mogeItem);
 
             var chceItem = new MenuFlyoutItem
             {
-                Text = "        Chcę",
-                IsEnabled = false,
+                Text = "        Chcę (CHC)",
+                Tag = "CHC",
                 Style = indentedStyle
             };
+            chceItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(chceItem);
 
             var warunkowoItem = new MenuFlyoutItem
             {
-                Text = "        Mogę warunkowo",
-                IsEnabled = false,
+                Text = "        Mogę warunkowo (WAR)",
+                Tag = "WAR",
                 Style = indentedStyle
             };
+            warunkowoItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(warunkowoItem);
 
             var rezerwacjaItem = new MenuFlyoutItem
             {
-                Text = "        Rezerwacja",
-                IsEnabled = false,
+                Text = "        Rezerwacja (REZ)",
+                Tag = "REZ",
                 Style = indentedStyle
             };
+            rezerwacjaItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(rezerwacjaItem);
 
             var nieMogeItem = new MenuFlyoutItem
             {
-                Text = "        Nie mogę",
-                IsEnabled = false,
+                Text = "        Nie mogę (---)",
+                Tag = "---",
                 Style = indentedStyle
             };
+            nieMogeItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(nieMogeItem);
 
             var innyDyzurItem = new MenuFlyoutItem
             {
-                Text = "        Inny dyżur",
-                IsEnabled = false,
+                Text = "        Inny dyżur (DYZ)",
+                Tag = "DYZ",
                 Style = indentedStyle
             };
+            innyDyzurItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(innyDyzurItem);
 
             var urlopItem = new MenuFlyoutItem
             {
-                Text = "        Urlop",
-                IsEnabled = false,
+                Text = "        Urlop (URL)",
+                Tag = "URL",
                 Style = indentedStyle
             };
+            urlopItem.Click += OnDeclarationMenuItemClick;
             contextMenu.Items.Add(urlopItem);
 
             contextMenu.Items.Add(new MenuFlyoutSeparator());
@@ -484,9 +491,9 @@ namespace GrafikoMat.Views
             // ============================================
             var toggleModeItem = new MenuFlyoutItem
             {
-                Text = "Przełącz tryb (12h/24h)",
-                IsEnabled = false  // 🔧 PLACEHOLDER
+                Text = "Przełącz tryb (12h/24h)"
             };
+            toggleModeItem.Click += OnToggleModeMenuItemClick;
             contextMenu.Items.Add(toggleModeItem);
 
             contextMenu.ShowAt(CalendarGridView, point);
@@ -658,6 +665,103 @@ namespace GrafikoMat.Views
                 cell.DayNumberForeground = dayNumberFg;
                 cell.EffectiveHeaderBackground = headerBg;
             }
+        }
+
+        /// <summary>
+        /// Obsługa kliknięcia w element menu deklaracji (MOG, CHC, WAR, itp.)
+        /// </summary>
+        private void OnDeclarationMenuItemClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel == null || sender is not MenuFlyoutItem menuItem || menuItem.Tag is not string declarationCode)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[MENU] Declaration clicked: {declarationCode}");
+
+            // Zastosuj kod deklaracji do wszystkich zaznaczonych slotów
+            foreach (var selectedSlot in ViewModel.SelectedSlots)
+            {
+                if (selectedSlot.Index < 0 || selectedSlot.Index >= ViewModel.DayCells.Count)
+                    continue;
+
+                var cell = ViewModel.DayCells[selectedSlot.Index];
+                if (!cell.InMonth)
+                    continue;
+
+                switch (selectedSlot.Part)
+                {
+                    case SlotPart.Full:
+                        cell.SymbolFull = declarationCode;
+                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Full slot for day {cell.Date.Day} to {declarationCode}");
+                        break;
+
+                    case SlotPart.Day:
+                        cell.SymbolDay = declarationCode;
+                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Day slot for day {cell.Date.Day} to {declarationCode}");
+                        break;
+
+                    case SlotPart.Night:
+                        cell.SymbolNight = declarationCode;
+                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Night slot for day {cell.Date.Day} to {declarationCode}");
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Obsługa przełączania trybu 24h/12h dla zaznaczonych dni
+        /// </summary>
+        private void OnToggleModeMenuItemClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel == null)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[MENU] Toggle mode clicked");
+
+            // Zbierz unikalne indeksy dni (bez względu na część)
+            var uniqueDayIndices = ViewModel.SelectedSlots
+                .Select(s => s.Index)
+                .Distinct()
+                .ToList();
+
+            foreach (var dayIndex in uniqueDayIndices)
+            {
+                if (dayIndex < 0 || dayIndex >= ViewModel.DayCells.Count)
+                    continue;
+
+                var cell = ViewModel.DayCells[dayIndex];
+                if (!cell.InMonth)
+                    continue;
+
+                // Przełącz tryb
+                if (cell.IsSplit)
+                {
+                    // Z 12h na 24h - skopiuj dane z Day do Full
+                    cell.IsSplit = false;
+                    if (!string.IsNullOrWhiteSpace(cell.SymbolDay))
+                        cell.SymbolFull = cell.SymbolDay;
+                    else if (!string.IsNullOrWhiteSpace(cell.SymbolNight))
+                        cell.SymbolFull = cell.SymbolNight;
+
+                    cell.SymbolDay = "";
+                    cell.SymbolNight = "";
+                    System.Diagnostics.Debug.WriteLine($"[MENU] Switched day {cell.Date.Day} from 12h to 24h");
+                }
+                else
+                {
+                    // Z 24h na 12h - skopiuj dane z Full do Day
+                    cell.IsSplit = true;
+                    if (!string.IsNullOrWhiteSpace(cell.SymbolFull))
+                    {
+                        cell.SymbolDay = cell.SymbolFull;
+                        cell.SymbolNight = cell.SymbolFull;
+                    }
+                    cell.SymbolFull = "";
+                    System.Diagnostics.Debug.WriteLine($"[MENU] Switched day {cell.Date.Day} from 24h to 12h");
+                }
+            }
+
+            // Odśwież zaznaczenie
+            ViewModel.ClearSelection();
         }
 
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)

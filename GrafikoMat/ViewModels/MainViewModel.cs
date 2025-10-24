@@ -40,6 +40,7 @@ namespace GrafikoMat.ViewModels
         private IDoctorRepository? _doctorRepository;
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
+        private IDeclarationRepository? _declarationRepository;
         private SettingsService? _settingsService;
         private IUxActionOrchestrator? _orchestrator;
 
@@ -160,11 +161,12 @@ namespace GrafikoMat.ViewModels
             });
         }
 
-        public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo)
+        public void SetRepositories(IDoctorRepository? doctorRepo, IUnitRepository? unitRepo, IAssignmentRepository? assignmentRepo, IDeclarationRepository? declarationRepo = null)
         {
             _doctorRepository = doctorRepo;
             _unitRepository = unitRepo;
             _assignmentRepository = assignmentRepo;
+            _declarationRepository = declarationRepo;
         }
 
         public void SetSettingsService(SettingsService settingsService)
@@ -288,6 +290,9 @@ namespace GrafikoMat.ViewModels
                 return;
             }
 
+            // ✅ DODANE - załaduj deklaracje z Supabase dla aktywnej jednostki
+            _ = LoadDeclarationsFromSupabaseAsync();
+
             var doctorsForUnit = _allDoctors.Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived).OrderBy(d => d.LastName).ThenBy(d => d.FirstName).ToList();
             var duplicateFullNames = doctorsForUnit.GroupBy(d => d.FullName).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
 
@@ -301,6 +306,83 @@ namespace GrafikoMat.ViewModels
             }
             // Po załadowaniu lekarzy odśwież widok grafiku (może użyć _lastGeneratedSolution)
             UpdateRosterForSelectedMonth();
+        }
+
+        /// <summary>
+        /// Ładuje deklaracje z Supabase dla aktywnej jednostki i wybranego miesiąca.
+        /// </summary>
+        private async Task LoadDeclarationsFromSupabaseAsync()
+        {
+            if (_declarationRepository == null || ActiveUnit == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Brak repozytorium lub jednostki - pomijam ładowanie");
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Ładowanie deklaracji dla {ActiveUnit.Name}, {SelectedYear}-{SelectedMonthIndex + 1}");
+
+                var declarations = await _declarationRepository.GetDeclarationsForUnitMonthAsync(
+                    ActiveUnit.Id,
+                    SelectedYear,
+                    SelectedMonthIndex + 1
+                );
+
+                System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Pobrano {declarations.Count} deklaracji");
+
+                // Konwertuj do lokalnego formatu _declByKey
+                foreach (var declaration in declarations)
+                {
+                    var doctor = _allDoctors.FirstOrDefault(d => d.Id == declaration.DoctorId);
+                    if (doctor == null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Pomijam deklarację - nie znaleziono lekarza {declaration.DoctorId}");
+                        continue;
+                    }
+
+                    var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                    int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
+
+                    var doctorDeclaration = new DoctorMonthDeclaration
+                    {
+                        Doctor = doctor.FullName,
+                        Year = SelectedYear,
+                        MonthIndex = SelectedMonthIndex,
+                        Days = Enumerable.Range(0, daysInMonth).Select(_ => new DayDeclaration()).ToArray()
+                    };
+
+                    // Konwertuj dane JSON
+                    if (declaration.DeclarationDataJson?.Days != null)
+                    {
+                        foreach (var dayDto in declaration.DeclarationDataJson.Days)
+                        {
+                            int dayIndex = dayDto.Day - 1;
+                            if (dayIndex >= 0 && dayIndex < doctorDeclaration.Days.Length)
+                            {
+                                doctorDeclaration.Days[dayIndex] = new DayDeclaration
+                                {
+                                    Mode = dayDto.Mode == "Split12" ? DayMode.Split12 : DayMode.Full24,
+                                    Full = dayDto.Full,
+                                    Day = dayDto.DaySlot,
+                                    Night = dayDto.Night
+                                };
+                            }
+                        }
+                    }
+
+                    _declByKey[key] = doctorDeclaration;
+                    System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Załadowano deklarację dla {doctor.FullName}");
+                }
+
+                // Odśwież dashboard
+                RefreshDeclarationsForDashboard();
+                System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] Zakończono ładowanie");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DASHBOARD-LOAD] BŁĄD: {ex.Message}");
+            }
         }
 
         private void UpdateRosterForSelectedMonth()

@@ -1,5 +1,5 @@
 ﻿# SNAPSHOT
-# Data:       2025-10-24 21:05:06
+# Data:       2025-10-24 23:32:35
 # Katalog:    C:\Users\adaml\OneDrive\Dokumenty\GrafikoMat\
 # Maszyna:    DELL_XPS_17
 # Użytkownik: adaml
@@ -45,8 +45,9 @@ DIR  grafikomat-web\.next\server\pages\_error
 DIR  grafikomat-web\.next\static\development
 DIR  grafikomat-web\supabase\functions\admin-reset-user-password
 
-## FILES (liczba): 189
+## FILES (liczba): 190
 FILE .claude\CLAUDE.md
+FILE .claude\settings.local.json
 FILE Claude CLI.bat
 FILE claude_pyrojects.config
 FILE GrafikoMat.Core\Data\Doctor.cs
@@ -236,7 +237,7 @@ FILE grafikomat-web\tsconfig.json
 FILE UpdateProject.bat
 FILE UpdateProject-Silent.bat
 
-===== FILE: .claude\CLAUDE.md (1046 bytes)
+===== FILE: .claude\CLAUDE.md (1143 bytes)
 ----- BEGIN -----
 Zawsze mów po polsku.
 
@@ -254,90 +255,331 @@ Gdy użytkownik prosi, byś utworzył nową funkcjonalność lub wprowadził zmi
 
 
 
-W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji, zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian. 
+W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji, zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian.
+
+
+
+Po każdej odpowiedzi podawaj ile tokenów okna kontekstowego pozostało do wykorzystania.
 
 
 ----- END -----
 
-===== FILE: Claude CLI.bat (1982 bytes)
+===== FILE: .claude\settings.local.json (103 bytes)
+----- BEGIN -----
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir /B /S)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
+
+----- END -----
+
+===== FILE: Claude CLI.bat (8122 bytes)
 ----- BEGIN -----
 @echo off
 chcp 65001 > nul
+setlocal enabledelayedexpansion
+
+echo ========================================
+echo Claude Code - Setup i Launcher
+echo ========================================
+echo.
+
+REM Sprawdz czy jestesmy w trybie setup czy launcher
+if "%1"=="--setup" goto :setup
+if "%1"=="--force-setup" goto :setup
+
+REM Sprawdz czy Claude jest zainstalowany
+where claude >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo UWAGA: Claude nie jest zainstalowany!
+    echo.
+    set /p install="Czy chcesz uruchomic instalator? (tak/nie): "
+    if /i "!install!"=="tak" goto :setup
+    if /i "!install!"=="t" goto :setup
+    echo.
+    echo Anulowano. Aby uruchomic setup pozniej, uzyj: claude.bat --setup
+    pause
+    exit /b
+)
+
+REM Sprawdz czy Git Bash jest dostepny
+where bash >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo UWAGA: Git Bash nie jest dostepny w PATH!
+    echo Claude Code wymaga Git Bash do dzialania.
+    echo.
+    set /p install="Czy chcesz uruchomic instalator? (tak/nie): "
+    if /i "!install!"=="tak" goto :setup
+    if /i "!install!"=="t" goto :setup
+)
+
+REM Wszystko OK, pokaz menu launcher
+goto :launcher
+
+:setup
+cls
+echo ========================================
+echo Claude Code - INSTALATOR
+echo ========================================
+echo.
+echo Ten skrypt zainstaluje:
+echo [1] Node.js (jesli brak)
+echo [2] Git for Windows (jesli brak)
+echo [3] Claude Code CLI
+echo [4] Windows Terminal (opcjonalnie)
+echo.
+echo Instalacja wymaga uprawnien administratora dla niektorych krokow.
+echo.
+pause
+
+echo.
+echo ========================================
+echo Krok 1/4: Sprawdzanie Node.js
+echo ========================================
+where node >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK] Node.js jest zainstalowany
+    node --version
+) else (
+    echo [!] Node.js NIE jest zainstalowany
+    echo.
+    echo Pobieranie Node.js...
+    echo Otwieram strone pobierania. Pobierz i zainstaluj LTS version.
+    echo Po instalacji ZRESTARTUJ ten skrypt.
+    start https://nodejs.org/en/download/
+    pause
+    exit /b
+)
+
+echo.
+echo ========================================
+echo Krok 2/4: Sprawdzanie Git for Windows
+echo ========================================
+where git >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK] Git jest zainstalowany
+    git --version
+) else (
+    echo [!] Git NIE jest zainstalowany
+    echo.
+    echo Pobieranie Git for Windows...
+    echo Otwieram strone pobierania.
+    echo WAZNE: Podczas instalacji wybierz "Git from command line and 3rd-party software"
+    echo Po instalacji ZRESTARTUJ komputer.
+    start https://git-scm.com/download/win
+    pause
+    exit /b
+)
+
+echo.
+echo ========================================
+echo Krok 3/4: Sprawdzanie Git Bash w PATH
+echo ========================================
+where bash >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK] Git Bash jest dostepny
+    bash --version
+) else (
+    echo [!] Git Bash NIE jest w PATH
+    echo.
+    echo Dodaje Git Bash do PATH...
+    
+    REM Sprawdz typowe lokalizacje
+    set "git_bin="
+    if exist "C:\Program Files\Git\bin\bash.exe" set "git_bin=C:\Program Files\Git\bin"
+    if exist "C:\Program Files (x86)\Git\bin\bash.exe" set "git_bin=C:\Program Files (x86)\Git\bin"
+    
+    if defined git_bin (
+        echo Znaleziono Git Bash w: !git_bin!
+        echo.
+        echo Aby dodac do PATH, uruchom jako ADMINISTRATOR:
+        echo.
+        echo setx PATH "%%PATH%%;!git_bin!" /M
+        echo.
+        echo Lub dodaj recznie przez: Panel sterowania ^> System ^> Zaawansowane ^> Zmienne srodowiskowe
+        echo.
+        pause
+    ) else (
+        echo Nie znaleziono Git Bash. Upewnij sie ze Git jest poprawnie zainstalowany.
+        pause
+        exit /b
+    )
+)
+
+echo.
+echo ========================================
+echo Krok 4/4: Instalacja Claude Code
+echo ========================================
+where claude >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK] Claude Code jest zainstalowany
+    claude --version
+    echo.
+    set /p update="Czy chcesz zaktualizowac do najnowszej wersji? (tak/nie): "
+    if /i "!update!"=="tak" goto :install_claude
+    if /i "!update!"=="t" goto :install_claude
+) else (
+    echo [!] Claude Code NIE jest zainstalowany
+    goto :install_claude
+)
+goto :post_setup
+
+:install_claude
+echo.
+echo Instalowanie/Aktualizowanie Claude Code...
+echo.
+call npm install -g @anthropic-ai/claude-code
+if %errorlevel% neq 0 (
+    echo.
+    echo BLAD podczas instalacji!
+    echo Sprawdz czy masz uprawnienia (sprobuj uruchomic CMD jako administrator)
+    pause
+    exit /b
+)
+echo.
+echo [OK] Claude Code zainstalowany pomyslnie!
+
+:post_setup
+echo.
+echo ========================================
+echo Krok opcjonalny: Windows Terminal
+echo ========================================
+where wt.exe >nul 2>&1
+if %errorlevel% equ 0 (
+    echo [OK] Windows Terminal jest zainstalowany
+) else (
+    echo [!] Windows Terminal NIE jest zainstalowany
+    echo.
+    set /p wt="Czy chcesz zainstalowac Windows Terminal? (tak/nie): "
+    if /i "!wt!"=="tak" (
+        echo Otwieram Microsoft Store...
+        start ms-windows-store://pdp/?ProductId=9N0DX20HK701
+        echo.
+        echo Zainstaluj z Microsoft Store i wroc tutaj.
+        pause
+    )
+)
+
+echo.
+echo ========================================
+echo INSTALACJA ZAKONCZONA!
+echo ========================================
+echo.
+echo Co dalej:
+echo 1. Zamknij to okno
+echo 2. Otworz NOWY PowerShell/Terminal (aby zaladowac nowy PATH)
+echo 3. Uruchom ponownie claude.bat
+echo 4. Przy pierwszym uruchomieniu Claude zaloguj sie przez przegladarke
+echo.
+echo Jezeli bash nadal nie dziala, ZRESTARTUJ komputer.
+echo.
+pause
+exit /b
+
+:launcher
+cls
 echo ========================================
 echo Claude - AI Coding Assistant
 echo ========================================
 echo.
 echo Folder projektu: %~dp0
 echo.
-echo [1] Uruchom Claude (standardowo - wymaga potwierdzenia zmian)
-echo [2] Uruchom autonomicznie (UWAGA - bez potwierdzenia!)
+echo [1] Uruchom Claude (standardowo - z potwierdzeniami)
+echo [2] Uruchom Claude (autonomicznie - BEZ potwierdzen)
 echo [3] Uruchom z debugowaniem MCP
-echo [4] Sprawdź wersję Claude
-echo [5] Wyloguj się z Claude
-echo [6] Wyczyść cache npm
+echo [4] Sprawdz wersje i status
+echo [5] Wyloguj sie z Claude
+echo [6] Wyczysc cache npm
+echo [7] Uruchom ponownie INSTALATOR
+echo [0] Wyjscie
 echo.
-set /p choice="Wybierz opcje (1-6): "
+set /p choice="Wybierz opcje (0-7): "
 
 cd /d "%~dp0"
 
 if "%choice%"=="1" (
     echo.
-    echo Uruchamiam Claude - tryb standardowy...
+    echo Uruchamiam Claude...
     echo.
-    powershell -NoExit -Command "Write-Host 'Claude gotowy. Wpisz polecenie po angielsku...' -ForegroundColor Green; Write-Host ''; claude"
+    powershell -NoExit -Command "Write-Host 'Claude gotowy' -ForegroundColor Green; claude"
+    exit /b
 )
 
 if "%choice%"=="2" (
     echo.
-    echo ========================================
-    echo UWAGA: Tryb autonomiczny!
-    echo Claude będzie zmieniał pliki BEZ pytania!
-    echo ========================================
-    set /p confirm="Czy na pewno? (T/N): "
-    if /i "%confirm%"=="T" (
-        powershell -NoExit -Command "Write-Host 'Claude - tryb autonomiczny (brak potwierdzen!)' -ForegroundColor Red; Write-Host ''; claude --dangerously-skip-permissions"
-    ) else (
-        echo Anulowano.
-        pause
-    )
+    echo TRYB AUTONOMICZNY - pliki beda zmieniane automatycznie!
+    timeout /t 2 > nul
+    powershell -NoExit -Command "Write-Host 'Claude - tryb autonomiczny' -ForegroundColor Red; claude --dangerously-skip-permissions"
+    exit /b
 )
 
 if "%choice%"=="3" (
     echo.
-    echo Uruchamiam Claude z debugowaniem MCP...
-    echo.
-    powershell -NoExit -Command "Write-Host 'Claude - debug MCP' -ForegroundColor Yellow; Write-Host ''; claude --mcp-debug"
+    powershell -NoExit -Command "Write-Host 'Claude - debug MCP' -ForegroundColor Yellow; claude --mcp-debug"
+    exit /b
 )
 
 if "%choice%"=="4" (
     echo.
-    claude --version
+    echo === Status instalacji ===
+    echo.
+    echo Node.js:
+    where node >nul 2>&1 && node --version || echo [!] Nie zainstalowane
+    echo.
+    echo Git:
+    where git >nul 2>&1 && git --version || echo [!] Nie zainstalowane
+    echo.
+    echo Git Bash:
+    where bash >nul 2>&1 && bash --version || echo [!] Nie dostepne w PATH
+    echo.
+    echo Claude Code:
+    where claude >nul 2>&1 && claude --version || echo [!] Nie zainstalowane
+    echo.
+    echo Windows Terminal:
+    where wt.exe >nul 2>&1 && echo [OK] Zainstalowane || echo [!] Nie zainstalowane
     echo.
     pause
+    goto :launcher
 )
 
 if "%choice%"=="5" (
     echo.
-    echo Wylogowywanie z Claude...
+    echo Wylogowywanie...
     claude --logout
     echo.
     pause
+    goto :launcher
 )
 
 if "%choice%"=="6" (
     echo.
-    echo Czyszczenie cache npm...
+    echo Czyszczenie cache...
     npm cache clean --force
+    echo [OK] Cache wyczyszczony
     echo.
-    echo Cache wyczyszczony!
     pause
+    goto :launcher
 )
 
-if "%choice%"=="" (
-    echo.
-    echo Nie wybrano opcji. Zamykam...
-    timeout /t 2 > nul
+if "%choice%"=="7" (
+    goto :setup
 )
+
+if "%choice%"=="0" (
+    exit /b
+)
+
+echo.
+echo Nieprawidlowa opcja!
+timeout /t 2 > nul
+goto :launcher
 ----- END -----
 
 ===== FILE: claude_pyrojects.config (138 bytes)
@@ -1690,7 +1932,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
 }
 ----- END -----
 
-===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (27329 bytes)
+===== FILE: GrafikoMat.Core\Scheduling\Engines\BacktrackingSolver.cs (27341 bytes)
 ----- BEGIN -----
 using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Scheduling.Engines.Algorithms;
@@ -1795,7 +2037,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             {
                 for (int s = 0; s < states; s++)
                 {
-                    table[d, s] = ((ulong)random.Next() << 32) | (ulong)random.Next();
+                    table[d, s] = ((ulong)(uint)random.Next() << 32) | (ulong)(uint)random.Next();
                 }
             }
             return table;
@@ -5716,7 +5958,7 @@ EndGlobal
 </Application>
 ----- END -----
 
-===== FILE: GrafikoMat\App.xaml.cs (9429 bytes)
+===== FILE: GrafikoMat\App.xaml.cs (9438 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
@@ -5735,7 +5977,7 @@ namespace GrafikoMat
 {
     public partial class App : Application
     {
-        public static MainWindow MainRoot { get; private set; }
+        public static MainWindow MainRoot { get; private set; } = null!;
 
         // Win32 API do wykrywania DPI
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -6119,7 +6361,7 @@ namespace GrafikoMat.Common
 
 ----- END -----
 
-===== FILE: GrafikoMat\Common\Converters.cs (9493 bytes)
+===== FILE: GrafikoMat\Common\Converters.cs (9511 bytes)
 ----- BEGIN -----
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -6269,8 +6511,8 @@ namespace GrafikoMat.Common
 
     public class BooleanToBrushConverter : IValueConverter
     {
-        public Brush TrueBrush { get; set; }
-        public Brush FalseBrush { get; set; }
+        public Brush TrueBrush { get; set; } = null!;
+        public Brush FalseBrush { get; set; } = null!;
 
         public object Convert(object value, Type targetType, object parameter, string language)
         {
@@ -6890,7 +7132,7 @@ namespace GrafikoMat.Common
 
 ----- END -----
 
-===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (10822 bytes)
+===== FILE: GrafikoMat\Controls\ActionContainer.xaml.cs (10830 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI;
@@ -6911,10 +7153,10 @@ namespace GrafikoMat.Controls
     {
         private readonly Guid _viewId = Guid.NewGuid();
 
-        public static readonly DependencyProperty ContentProperty =
+        public static new readonly DependencyProperty ContentProperty =
             DependencyProperty.Register(nameof(Content), typeof(object), typeof(ActionContainer), new PropertyMetadata(null));
 
-        public object Content
+        public new object Content
         {
             get => GetValue(ContentProperty);
             set => SetValue(ContentProperty, value);
@@ -7720,7 +7962,7 @@ namespace GrafikoMat.Converters
 </Project>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml (12263 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml (12863 bytes)
 ----- BEGIN -----
 <Window
     x:Class="GrafikoMat.MainWindow"
@@ -7825,6 +8067,17 @@ namespace GrafikoMat.Converters
                                 <Setter Property="CornerRadius" Value="8"/>
                             </Style>
                         </MenuFlyout.MenuFlyoutPresenterStyle>
+                        <MenuFlyoutItem Text="Pomoc" Click="OnHelp">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE897;"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem Text="O programie" Click="OnAbout">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE946;"/>
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutSeparator/>
                         <MenuFlyoutItem Text="Wyloguj" Click="OnLogout">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xF3B1;"/>
@@ -7950,7 +8203,7 @@ namespace GrafikoMat.Converters
 </Window>
 ----- END -----
 
-===== FILE: GrafikoMat\MainWindow.xaml.cs (76429 bytes)
+===== FILE: GrafikoMat\MainWindow.xaml.cs (79816 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -9562,6 +9815,96 @@ namespace GrafikoMat
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving window state: {ex.Message}");
+            }
+        }
+
+        private void OnHelp(object? sender, RoutedEventArgs e)
+        {
+            if (_isClosing) return;
+            _ = ShowInfo("Pomoc", "Funkcja pomocy będzie wkrótce dostępna.");
+        }
+
+        private async void OnAbout(object? sender, RoutedEventArgs e)
+        {
+            if (_isClosing) return;
+
+            var stackPanel = new StackPanel { Spacing = 8 };
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "GrafikoMat Dyżurowy",
+                FontSize = 18,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Generator grafików dyżurów lekarskich",
+                FontSize = 14,
+                Opacity = 0.8
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Wersja: 1.0\n© 2025 Adam Lemanowicz",
+                FontSize = 12,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+
+            var licensePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            licensePanel.Children.Add(new TextBlock { Text = "Licencja:", FontSize = 12 });
+            var licenseLink = new HyperlinkButton
+            {
+                Content = "MIT License",
+                NavigateUri = new Uri("https://opensource.org/licenses/MIT"),
+                Padding = new Thickness(0),
+                FontSize = 12
+            };
+            licensePanel.Children.Add(licenseLink);
+            stackPanel.Children.Add(licensePanel);
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Autor koncepcji i architektury:\nAdam Lemanowicz",
+                FontSize = 12,
+                Margin = new Thickness(0, 12, 0, 0)
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Kod generowany przez modele AI:\n• Claude Sonnet 4.5 (Anthropic)\n• ChatGPT o1 (OpenAI)\n• Gemini 2.5 Pro (Google)",
+                FontSize = 12,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+
+            stackPanel.Children.Add(new TextBlock
+            {
+                Text = "Program powstał w oparciu o współpracę człowieka z AI,\ngdzie autor definiuje wymagania i weryfikuje rezultaty,\na modele językowe implementują funkcjonalności.",
+                FontSize = 11,
+                Opacity = 0.7,
+                Margin = new Thickness(0, 12, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "O programie";
+            dialog.Content = stackPanel;
+            dialog.CloseButtonText = "OK";
+            dialog.DefaultButton = ContentDialogButton.Close;
+
+            // Upewnij się, że dialog ma właściwy XamlRoot dla animacji
+            if (RootGrid?.XamlRoot != null)
+            {
+                dialog.XamlRoot = RootGrid.XamlRoot;
+            }
+
+            try
+            {
+                await dialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error showing About dialog: {ex.Message}");
             }
         }
 
@@ -11287,7 +11630,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (25347 bytes)
+===== FILE: GrafikoMat\ViewModels\DeclarationsViewModel.cs (27069 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using GrafikoMat.Common;
@@ -11299,8 +11642,8 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
-using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -11326,6 +11669,8 @@ namespace GrafikoMat.ViewModels
         private bool _use12hShiftsByDefault;
         private MonthLayout _monthLayout;
         private bool _isDisposed;
+        private bool _isDirty = false;
+        private bool _isLoading = false; // Flaga zapobiegająca oznaczaniu jako dirty podczas ładowania
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -11367,10 +11712,10 @@ namespace GrafikoMat.ViewModels
             set => SetProperty(ref _currentUnitIndex, value);
         }
 
-        public ICommand SaveCommand { get; }
-        public ICommand ClearSelectionCommand { get; }
-        public ICommand SelectNextDoctorCommand { get; }
-        public ICommand SelectPrevDoctorCommand { get; }
+        public RelayCommand SaveCommand { get; }
+        public RelayCommand ClearSelectionCommand { get; }
+        public RelayCommand SelectNextDoctorCommand { get; }
+        public RelayCommand SelectPrevDoctorCommand { get; }
 
         public DeclarationsViewModel(
             int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
@@ -11407,10 +11752,13 @@ namespace GrafikoMat.ViewModels
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
 
-            SaveCommand = new RelayCommand(DoSave);
+            SaveCommand = new RelayCommand(DoSave, () => _isDirty);
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+
+            // Subskrybuj zmiany w DayCells (symbol changes będą oznaczać dirty)
+            SubscribeToCellChanges();
 
             // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
             OnPropertyChanged(nameof(HasNoDoctors));
@@ -11464,8 +11812,45 @@ namespace GrafikoMat.ViewModels
             System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell END - added {DayCells.Count} cells");
         }
 
+        private void SubscribeToCellChanges()
+        {
+            foreach (var cell in DayCells)
+            {
+                cell.PropertyChanged += OnCellPropertyChanged;
+            }
+        }
+
+        private void UnsubscribeFromCellChanges()
+        {
+            foreach (var cell in DayCells)
+            {
+                cell.PropertyChanged -= OnCellPropertyChanged;
+            }
+        }
+
+        private void OnCellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (_isLoading || _isDisposed) return;
+
+            // Tylko zmiany w symbolach oznaczają dirty
+            if (e.PropertyName == nameof(DayCell.SymbolFull) ||
+                e.PropertyName == nameof(DayCell.SymbolDay) ||
+                e.PropertyName == nameof(DayCell.SymbolNight))
+            {
+                MarkAsDirty();
+            }
+        }
+
+        private void MarkAsDirty()
+        {
+            if (_isLoading) return;
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
+        }
+
         private void LoadDeclarationsForSelectedDoctor()
         {
+            _isLoading = true; // Wyłącz dirty tracking podczas ładowania
             ClearSelection();
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
@@ -11523,6 +11908,7 @@ namespace GrafikoMat.ViewModels
             }
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor END");
+            _isLoading = false; // Włącz dirty tracking po zakończeniu ładowania
         }
 
         public void CommitChangesToSharedState()
@@ -11563,6 +11949,8 @@ namespace GrafikoMat.ViewModels
         {
             CommitChangesToSharedState();
             _onSaveCallback?.Invoke();
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
         }
 
         public void SelectSingleSlot(int index, SlotPart part)
@@ -11910,6 +12298,9 @@ namespace GrafikoMat.ViewModels
 
             // Commit ostatnie zmiany przed dispose
             CommitChangesToSharedState();
+
+            // Odsubskrybuj event handlery
+            UnsubscribeFromCellChanges();
 
             // Wyczyść kolekcje
             Doctors.Clear();
@@ -12268,7 +12659,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (16997 bytes)
+===== FILE: GrafikoMat\ViewModels\EngineSettingsViewModel.cs (17559 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12290,6 +12681,7 @@ namespace GrafikoMat.ViewModels
         private readonly IUxActionOrchestrator _orchestrator;
         private AppSettings _appSettings;
         private Guid _viewId;
+        private bool _isDirty = false;
         public ObservableCollection<EngineOption> EngineOptions { get; } = new();
 
         private EngineOption? _selectedEngine;
@@ -12302,6 +12694,7 @@ namespace GrafikoMat.ViewModels
                 {
                     foreach (var option in EngineOptions) { option.IsSelected = (option == value); }
                     OnPropertyChanged(nameof(HasConfigurableParameters));
+                    MarkAsDirty();
                 }
             }
         }
@@ -12313,53 +12706,53 @@ namespace GrafikoMat.ViewModels
 
         // === TIMEOUT ===
         private int _timeoutMinutesValue;
-        public int TimeoutMinutesValue { get => _timeoutMinutesValue; set => SetProperty(ref _timeoutMinutesValue, value); }
+        public int TimeoutMinutesValue { get => _timeoutMinutesValue; set { if (SetProperty(ref _timeoutMinutesValue, value)) MarkAsDirty(); } }
         public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
         public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
         public int TimeoutMinutesStep => SolverDefaults.TimeoutMinutes.Step;
 
         // === SIMULATED ANNEALING ===
         private double _coolingRateValue;
-        public double CoolingRateValue { get => _coolingRateValue; set => SetProperty(ref _coolingRateValue, value); }
+        public double CoolingRateValue { get => _coolingRateValue; set { if (SetProperty(ref _coolingRateValue, value)) MarkAsDirty(); } }
         public double CoolingRateMin => SolverDefaults.CoolingRate.Min;
         public double CoolingRateMax => SolverDefaults.CoolingRate.Max;
         public double CoolingRateStep => SolverDefaults.CoolingRate.Step;
 
         // === GENETIC ===
         private int _geneticPopulationSizeValue;
-        public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set => SetProperty(ref _geneticPopulationSizeValue, value); }
+        public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set { if (SetProperty(ref _geneticPopulationSizeValue, value)) MarkAsDirty(); } }
         public int GeneticPopulationSizeMin => SolverDefaults.GeneticPopulationSize.Min;
         public int GeneticPopulationSizeMax => SolverDefaults.GeneticPopulationSize.Max;
         public int GeneticPopulationSizeStep => SolverDefaults.GeneticPopulationSize.Step;
 
         private int _geneticGenerationsValue;
-        public int GeneticGenerationsValue { get => _geneticGenerationsValue; set => SetProperty(ref _geneticGenerationsValue, value); }
+        public int GeneticGenerationsValue { get => _geneticGenerationsValue; set { if (SetProperty(ref _geneticGenerationsValue, value)) MarkAsDirty(); } }
         public int GeneticGenerationsMin => SolverDefaults.GeneticGenerations.Min;
         public int GeneticGenerationsMax => SolverDefaults.GeneticGenerations.Max;
         public int GeneticGenerationsStep => SolverDefaults.GeneticGenerations.Step;
 
         // === ANT COLONY ===
         private int _antColonyAntsValue;
-        public int AntColonyAntsValue { get => _antColonyAntsValue; set => SetProperty(ref _antColonyAntsValue, value); }
+        public int AntColonyAntsValue { get => _antColonyAntsValue; set { if (SetProperty(ref _antColonyAntsValue, value)) MarkAsDirty(); } }
         public int AntColonyAntsMin => SolverDefaults.AntColonyAnts.Min;
         public int AntColonyAntsMax => SolverDefaults.AntColonyAnts.Max;
         public int AntColonyAntsStep => SolverDefaults.AntColonyAnts.Step;
 
         private int _antColonyGenerationsValue;
-        public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set => SetProperty(ref _antColonyGenerationsValue, value); }
+        public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set { if (SetProperty(ref _antColonyGenerationsValue, value)) MarkAsDirty(); } }
         public int AntColonyGenerationsMin => SolverDefaults.AntColonyGenerations.Min;
         public int AntColonyGenerationsMax => SolverDefaults.AntColonyGenerations.Max;
         public int AntColonyGenerationsStep => SolverDefaults.AntColonyGenerations.Step;
 
         // === TABU SEARCH ===
         private int _tabuListSizeValue;
-        public int TabuListSizeValue { get => _tabuListSizeValue; set => SetProperty(ref _tabuListSizeValue, value); }
+        public int TabuListSizeValue { get => _tabuListSizeValue; set { if (SetProperty(ref _tabuListSizeValue, value)) MarkAsDirty(); } }
         public int TabuListSizeMin => SolverDefaults.TabuListSize.Min;
         public int TabuListSizeMax => SolverDefaults.TabuListSize.Max;
         public int TabuListSizeStep => SolverDefaults.TabuListSize.Step;
 
         private int _tabuMaxIterationsValue;
-        public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set => SetProperty(ref _tabuMaxIterationsValue, value); }
+        public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set { if (SetProperty(ref _tabuMaxIterationsValue, value)) MarkAsDirty(); } }
         public int TabuMaxIterationsMin => SolverDefaults.TabuMaxIterations.Min;
         public int TabuMaxIterationsMax => SolverDefaults.TabuMaxIterations.Max;
         public int TabuMaxIterationsStep => SolverDefaults.TabuMaxIterations.Step;
@@ -12375,7 +12768,7 @@ namespace GrafikoMat.ViewModels
             _settingsService = settingsService;
             _appSettings = appSettings;
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             ResetSimulatedAnnealingCommand = new RelayCommand(() =>
                 CoolingRateValue = SolverDefaults.CoolingRate.Default);
@@ -12400,6 +12793,12 @@ namespace GrafikoMat.ViewModels
 
             LoadEngineData();
             LoadInitialSelection();
+        }
+
+        private void MarkAsDirty()
+        {
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
@@ -12452,6 +12851,8 @@ namespace GrafikoMat.ViewModels
             );
 
             _appSettings = newSettings;
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
             WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
 
@@ -12503,15 +12904,15 @@ namespace GrafikoMat.ViewModels
                 "Algorytm symulowanego wyżarzania",
                 "Metaheurystyka",
                 "Stochastyczny",
-                "Nie",
-                "Wynik dobrej jakości, silnie zależny od parametrów wyżarzania.",
+                "Tak",
+                "Wynik dobrej jakości, silnie zależny od tempa schładzania.",
                 "Średni"));
 
             // Tabu Search
             EngineOptions.Add(new EngineOption(
                 SolverType.TabuSearch,
                 "TabuSearchSolver (algorytm przeszukiwania z zabronieniami)",
-                "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
+                "To jak eksploracja skomplikowanego labiryntu z mapą odwiedzonych miejsc. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wybiera najbardziej obiecujące, nawet jeśli chwilowo pogarsza to wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów, jak zamykanie przebytych korytarzy. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w lokalnym optimum, zmuszając go do systematycznej eksploracji nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Algorytm wykorzystuje wielowątkową równoległą ewaluację sąsiadów, dzięki czemu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
                 "Algorytm przeszukiwania z zabronieniami",
                 "Metaheurystyka",
                 "Stochastyczny",
@@ -12535,7 +12936,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\GeneralSettingsViewModel.cs (15064 bytes)
+===== FILE: GrafikoMat\ViewModels\GeneralSettingsViewModel.cs (15625 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12559,6 +12960,7 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
         private bool _isInitializing = true;
+        private bool _isDirty = false;
 
         // === MOTYW ===
         private AppTheme _selectedTheme;
@@ -12571,6 +12973,7 @@ namespace GrafikoMat.ViewModels
                 {
                     // Zastosuj zmianę wizualnie natychmiast (bez zapisu - zapis jest przyciskiem)
                     ApplyThemeChangeVisually(value);
+                    MarkAsDirty();
                 }
             }
         }
@@ -12607,7 +13010,7 @@ namespace GrafikoMat.ViewModels
         public int TimeoutMinutesValue
         {
             get => _timeoutMinutesValue;
-            set => SetProperty(ref _timeoutMinutesValue, value);
+            set { if (SetProperty(ref _timeoutMinutesValue, value)) MarkAsDirty(); }
         }
         public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
         public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
@@ -12624,6 +13027,7 @@ namespace GrafikoMat.ViewModels
                 {
                     OnPropertyChanged(nameof(IsCustomThreadCount));
                     OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                    MarkAsDirty();
                 }
             }
         }
@@ -12643,6 +13047,7 @@ namespace GrafikoMat.ViewModels
                 if (SetProperty(ref _customThreadCountValue, value))
                 {
                     OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                    MarkAsDirty();
                 }
             }
         }
@@ -12685,14 +13090,14 @@ namespace GrafikoMat.ViewModels
         public string SupabaseUrl
         {
             get => _supabaseUrl;
-            set => SetProperty(ref _supabaseUrl, value);
+            set { if (SetProperty(ref _supabaseUrl, value)) MarkAsDirty(); }
         }
 
         private string _supabaseAnonKey = string.Empty;
         public string SupabaseAnonKey
         {
             get => _supabaseAnonKey;
-            set => SetProperty(ref _supabaseAnonKey, value);
+            set { if (SetProperty(ref _supabaseAnonKey, value)) MarkAsDirty(); }
         }
 
         private string _connectionTestStatus = string.Empty;
@@ -12714,7 +13119,7 @@ namespace GrafikoMat.ViewModels
         public TimeoutBehavior TimeoutBehavior
         {
             get => _timeoutBehavior;
-            set => SetProperty(ref _timeoutBehavior, value);
+            set { if (SetProperty(ref _timeoutBehavior, value)) MarkAsDirty(); }
         }
 
         public bool IsShowResultAndInform
@@ -12748,7 +13153,7 @@ namespace GrafikoMat.ViewModels
         public AppLogLevel AppLogLevel
         {
             get => _appLogLevel;
-            set => SetProperty(ref _appLogLevel, value);
+            set { if (SetProperty(ref _appLogLevel, value)) MarkAsDirty(); }
         }
 
         // === LOGI SILNIKÓW (TO-DO) ===
@@ -12756,7 +13161,7 @@ namespace GrafikoMat.ViewModels
         public SolverLogLevel SolverLogLevel
         {
             get => _solverLogLevel;
-            set => SetProperty(ref _solverLogLevel, value);
+            set { if (SetProperty(ref _solverLogLevel, value)) MarkAsDirty(); }
         }
 
         public IAsyncRelayCommand SaveCommand { get; }
@@ -12786,7 +13191,7 @@ namespace GrafikoMat.ViewModels
             _supabaseUrl = appSettings.SupabaseUrl ?? string.Empty;
             _supabaseAnonKey = appSettings.SupabaseAnonKey ?? string.Empty;
 
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
             ResetTimeoutCommand = new RelayCommand(ResetTimeout);
             ResetThreadCountCommand = new RelayCommand(ResetThreadCount);
             TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
@@ -12796,6 +13201,13 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
+        private void MarkAsDirty()
+        {
+            if (_isInitializing) return;
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
+        }
 
         private void ResetTimeout()
         {
@@ -12856,8 +13268,8 @@ namespace GrafikoMat.ViewModels
                                 throw new Exception("Nie można połączyć się z bazą danych. Sprawdź poprawność danych dostępowych.");
                             }
                         },
-                        verificationAsync: null,
-                        successMessage: null,
+                        verificationAsync: null!,
+                        successMessage: null!,
                         errorMessageTitle: "Błąd połączenia z bazą"
                     );
                 }
@@ -12914,6 +13326,8 @@ namespace GrafikoMat.ViewModels
                 );
 
                 _appSettings = newSettings;
+                _isDirty = false;
+                SaveCommand.NotifyCanExecuteChanged();
                 WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
 
                 // Zastosuj zmianę motywu natychmiast
@@ -12938,7 +13352,7 @@ namespace GrafikoMat.ViewModels
 }
 ----- END -----
 
-===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (25880 bytes)
+===== FILE: GrafikoMat\ViewModels\MainViewModel.cs (25884 bytes)
 ----- BEGIN -----
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -12967,7 +13381,7 @@ namespace GrafikoMat.ViewModels
     {
         private ScheduleSolution? _lastGeneratedSolution = null;
 
-        protected bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
+        protected new bool SetProperty<T>(ref T backingStore, T value, [CallerMemberName] string propertyName = "")
         {
             if (EqualityComparer<T>.Default.Equals(backingStore, value))
             {
@@ -14324,7 +14738,7 @@ namespace GrafikoMat.ViewModels
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\ChangePasswordView.xaml.cs (894 bytes)
+===== FILE: GrafikoMat\Views\ChangePasswordView.xaml.cs (974 bytes)
 ----- BEGIN -----
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
@@ -14338,7 +14752,9 @@ namespace GrafikoMat.Views
         public ChangePasswordViewModel ViewModel { get; }
 
         public event Action? PasswordChangeSuccess;
+        #pragma warning disable CS0067
         public event Action? PasswordChangeCancelled;
+        #pragma warning restore CS0067
 
         public ChangePasswordView(SupabaseService supabaseService)
         {
@@ -16140,7 +16556,7 @@ namespace GrafikoMat.Views
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\AppearanceSettingsView.xaml (1176 bytes)
+===== FILE: GrafikoMat\Views\Settings\AppearanceSettingsView.xaml (1184 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.AppearanceSettingsView"
@@ -16150,7 +16566,7 @@ namespace GrafikoMat.Views
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     mc:Ignorable="d">
 
-    <StackPanel Spacing="16" Padding="20">
+    <StackPanel Spacing="16" Padding="16,16,8,16">
         <TextBlock Text="Motyw Aplikacji" FontSize="20" FontWeight="SemiBold"/>
         <TextBlock Text="Wybierz wygląd interfejsu. Zmiana zostanie zastosowana natychmiastowo i zapamiętana."
                    TextWrapping="Wrap" Opacity="0.8"/>
@@ -16461,7 +16877,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (31626 bytes)
+===== FILE: GrafikoMat\Views\Settings\EngineSettingsView.xaml (31662 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.EngineSettingsView"
@@ -16480,7 +16896,7 @@ namespace GrafikoMat.Views.Settings
         <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
     </UserControl.Resources>
 
-    <Grid Padding="20,20,20,0">
+    <Grid Padding="16,16,4,0">
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup x:Name="DetailsStateGroup">
                 <VisualState x:Name="DetailsCollapsed">
@@ -16529,9 +16945,9 @@ namespace GrafikoMat.Views.Settings
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Silnik Obliczeniowy" FontSize="20" FontWeight="SemiBold"/>
+        <TextBlock Grid.Row="0" Text="Silnik Obliczeniowy" FontSize="20" FontWeight="SemiBold" Margin="0,0,12,0"/>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0">
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,0" Padding="0,0,12,0">
             <StackPanel Spacing="16">
 
                 <TextBlock Text="Wybierz algorytm, który będzie używany do generowania grafików."
@@ -16950,7 +17366,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\GeneralSettingsView.xaml (23116 bytes)
+===== FILE: GrafikoMat\Views\Settings\GeneralSettingsView.xaml (23091 bytes)
 ----- BEGIN -----
 
 <UserControl
@@ -16970,8 +17386,8 @@ namespace GrafikoMat.Views.Settings
 		<common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 	</UserControl.Resources>
 
-	<ScrollViewer VerticalScrollBarVisibility="Auto">
-		<StackPanel Padding="20" Spacing="32">
+	<ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,16,8,16">
+		<StackPanel Spacing="32" Margin="0,0,8,0">
 
 			<TextBlock Text="Ustawienia Ogólne"
                        FontSize="20"
@@ -16986,7 +17402,7 @@ namespace GrafikoMat.Views.Settings
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Wygląd aplikacji"
                                    FontSize="16"
@@ -17018,7 +17434,7 @@ namespace GrafikoMat.Views.Settings
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Limit czasu obliczeń"
                                    FontSize="16"
@@ -17127,7 +17543,7 @@ namespace GrafikoMat.Views.Settings
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Wielowątkowość"
                                    FontSize="16"
@@ -17265,7 +17681,7 @@ namespace GrafikoMat.Views.Settings
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Połączenie z bazą danych"
                                    FontSize="16"
@@ -17324,7 +17740,7 @@ namespace GrafikoMat.Views.Settings
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Logowanie i diagnostyka"
                                    FontSize="16"
@@ -17454,7 +17870,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (10527 bytes)
+===== FILE: GrafikoMat\Views\Settings\PrioritiesSettingsView.xaml (12337 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.PrioritiesSettingsView"
@@ -17492,37 +17908,48 @@ namespace GrafikoMat.Views.Settings
         </Style>
     </UserControl.Resources>
 
-    <Grid Padding="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,16,8,16">
+        <StackPanel Spacing="8">
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <RepositionThemeTransition/>
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+            <TextBlock Text="Kolejność Priorytetów" FontSize="20" FontWeight="SemiBold" Margin="0,0,8,0"/>
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Opacity="0.8">
+                Wybierz i uporządkuj kryteria, według których silnik będzie optymalizował grafik.
+                Wyższe na liście oznacza ważniejsze.
+            </TextBlock>
 
-        <TextBlock Grid.Row="0" Text="Kolejność Priorytetów" FontSize="20" FontWeight="SemiBold"/>
-        <TextBlock Grid.Row="1" Margin="0,12,0,0" TextWrapping="Wrap" Opacity="0.8">
-            Wybierz i uporządkuj kryteria, według których silnik będzie optymalizował grafik. 
-            Wyższe na liście oznacza ważniejsze.
-        </TextBlock>
+            <TextBlock Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
-        <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
-
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" MaxHeight="400">
-            <ListView x:Name="ActivePrioritiesListView" 
+            <ListView x:Name="ActivePrioritiesListView"
                       ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
                       CanReorderItems="True"
                       AllowDrop="True"
-                      SelectionMode="None">
+                      SelectionMode="None"
+                      Margin="0,0,0,8">
 
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0,0,0,8"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Top"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel>
+                            <ItemsStackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition/>
+                                    <RepositionThemeTransition/>
+                                </TransitionCollection>
+                            </ItemsStackPanel.ChildrenTransitions>
+                        </ItemsStackPanel>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
 
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:PriorityOptionViewModel">
@@ -17531,6 +17958,11 @@ namespace GrafikoMat.Views.Settings
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 MinWidth="400">
+                            <Border.Transitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition/>
+                                </TransitionCollection>
+                            </Border.Transitions>
                             <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -17594,20 +18026,33 @@ namespace GrafikoMat.Views.Settings
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </ScrollViewer>
 
-        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
+            <TextBlock Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
-        <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" MaxHeight="300">
             <ListView ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
-                      SelectionMode="None">
+                      SelectionMode="None"
+                      Margin="0,0,0,8">
 
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0,0,0,8"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Top"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel>
+                            <ItemsStackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition/>
+                                    <RepositionThemeTransition/>
+                                </TransitionCollection>
+                            </ItemsStackPanel.ChildrenTransitions>
+                        </ItemsStackPanel>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
 
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:PriorityOptionViewModel">
@@ -17617,6 +18062,11 @@ namespace GrafikoMat.Views.Settings
                                 CornerRadius="4"
                                 Opacity="0.5"
                                 MinWidth="400">
+                            <Border.Transitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition/>
+                                </TransitionCollection>
+                            </Border.Transitions>
                             <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -17637,8 +18087,8 @@ namespace GrafikoMat.Views.Settings
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </ScrollViewer>
-    </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>
 ----- END -----
 
@@ -17682,7 +18132,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (18056 bytes)
+===== FILE: GrafikoMat\Views\Settings\UnitsSettingsView.xaml (18064 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.Settings.UnitsSettingsView"
@@ -17730,7 +18180,7 @@ namespace GrafikoMat.Views.Settings
     </UserControl.Resources>
 
     <controls:ActionContainer x:Name="ActionContainer">
-        <Grid x:Name="MainContentGrid" Padding="20" Visibility="Collapsed">
+        <Grid x:Name="MainContentGrid" Padding="16,16,8,16" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -18472,7 +18922,7 @@ namespace GrafikoMat.Views.Settings
 }
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml (3100 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml (3652 bytes)
 ----- BEGIN -----
 <UserControl
     x:Class="GrafikoMat.Views.SettingsView"
@@ -18504,12 +18954,22 @@ namespace GrafikoMat.Views.Settings
                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                   BorderThickness="1"
                   CornerRadius="8">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="MinHeight" Value="72"/>
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:SettingsMenuItem">
-                    <StackPanel Padding="12,10">
-                        <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
+                    <Grid MinHeight="56" Padding="12,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="{x:Bind Title}" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
@@ -18519,7 +18979,7 @@ namespace GrafikoMat.Views.Settings
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-            <Grid Padding="24">
+            <Grid Padding="8">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                             Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToCollapsedConverter}, Mode=OneWay}">
                     <FontIcon Glyph="&#xE713;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>
@@ -18538,7 +18998,7 @@ namespace GrafikoMat.Views.Settings
 </UserControl>
 ----- END -----
 
-===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (6175 bytes)
+===== FILE: GrafikoMat\Views\SettingsView.xaml.cs (7812 bytes)
 ----- BEGIN -----
 using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
@@ -18547,9 +19007,11 @@ using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace GrafikoMat.Views
 {
@@ -18562,7 +19024,9 @@ namespace GrafikoMat.Views
         private SettingsService? _settingsService;
         private SupabaseService? _supabaseService;
         private AppSettings? _appSettings;
+        #pragma warning disable CS0067
         public event Action? ReloadRequired;
+        #pragma warning restore CS0067
         public event Action<List<UiAction>>? ActionButtonsChanged;
 
         public SettingsView()
@@ -18607,6 +19071,26 @@ namespace GrafikoMat.Views
             {
                 SettingsDetailContent.Content = null;
                 return;
+            }
+
+            // Fade out poprzedniego widoku
+            if (SettingsDetailContent.Content != null)
+            {
+                var fadeOut = new DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(150),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+
+                var storyboard = new Storyboard();
+                storyboard.Children.Add(fadeOut);
+                Storyboard.SetTarget(fadeOut, SettingsDetailContent);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+
+                storyboard.Begin();
+                await Task.Delay(150);
             }
 
             // Upewniamy się, że zawsze mamy najświeższe ustawienia
@@ -18673,7 +19157,27 @@ namespace GrafikoMat.Views
                     // USUNIĘTE: case "Połączenie z Bazą Danych" - przeniesione do Ustawień Ogólnych
             }
 
+            // Ustaw nowy widok
             SettingsDetailContent.Content = viewToLoad;
+
+            // Fade in nowego widoku
+            if (viewToLoad != null)
+            {
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0.0,
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+
+                var storyboard = new Storyboard();
+                storyboard.Children.Add(fadeIn);
+                Storyboard.SetTarget(fadeIn, SettingsDetailContent);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+
+                storyboard.Begin();
+            }
         }
     }
 }
