@@ -34,37 +34,48 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Padding="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,16,8,16">
+        <StackPanel Spacing="8">
+            <StackPanel.ChildrenTransitions>
+                <TransitionCollection>
+                    <RepositionThemeTransition/>
+                </TransitionCollection>
+            </StackPanel.ChildrenTransitions>
+            <TextBlock Text="Kolejność Priorytetów" FontSize="20" FontWeight="SemiBold" Margin="0,0,8,0"/>
+            <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" Opacity="0.8">
+                Wybierz i uporządkuj kryteria, według których silnik będzie optymalizował grafik.
+                Wyższe na liście oznacza ważniejsze.
+            </TextBlock>
 
-        <TextBlock Grid.Row="0" Text="Kolejność Priorytetów" FontSize="20" FontWeight="SemiBold"/>
-        <TextBlock Grid.Row="1" Margin="0,12,0,0" TextWrapping="Wrap" Opacity="0.8">
-            Wybierz i uporządkuj kryteria, według których silnik będzie optymalizował grafik. 
-            Wyższe na liście oznacza ważniejsze.
-        </TextBlock>
+            <TextBlock Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
-        <TextBlock Grid.Row="2" Text="Aktywne priorytety (kolejność ma znaczenie)" FontWeight="SemiBold" Margin="0,20,0,8"/>
-
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" MaxHeight="400">
-            <ListView x:Name="ActivePrioritiesListView" 
+            <ListView x:Name="ActivePrioritiesListView"
                       ItemsSource="{x:Bind ViewModel.ActivePriorities, Mode=OneWay}"
                       CanReorderItems="True"
                       AllowDrop="True"
-                      SelectionMode="None">
+                      SelectionMode="None"
+                      Margin="0,0,0,8">
 
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0,0,0,8"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Top"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel>
+                            <ItemsStackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition/>
+                                    <RepositionThemeTransition/>
+                                </TransitionCollection>
+                            </ItemsStackPanel.ChildrenTransitions>
+                        </ItemsStackPanel>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
 
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:PriorityOptionViewModel">
@@ -73,6 +84,11 @@
                                 BorderThickness="1"
                                 CornerRadius="4"
                                 MinWidth="400">
+                            <Border.Transitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition/>
+                                </TransitionCollection>
+                            </Border.Transitions>
                             <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -136,20 +152,33 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </ScrollViewer>
 
-        <TextBlock Grid.Row="4" Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,20,0,8"/>
+            <TextBlock Text="Nieaktywne priorytety" FontWeight="SemiBold" Margin="0,12,0,0"/>
 
-        <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" MaxHeight="300">
             <ListView ItemsSource="{x:Bind ViewModel.InactivePriorities, Mode=OneWay}"
-                      SelectionMode="None">
+                      SelectionMode="None"
+                      Margin="0,0,0,8">
 
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Padding" Value="0,0,0,8"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Top"/>
                     </Style>
                 </ListView.ItemContainerStyle>
+
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel>
+                            <ItemsStackPanel.ChildrenTransitions>
+                                <TransitionCollection>
+                                    <AddDeleteThemeTransition/>
+                                    <RepositionThemeTransition/>
+                                </TransitionCollection>
+                            </ItemsStackPanel.ChildrenTransitions>
+                        </ItemsStackPanel>
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
 
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:PriorityOptionViewModel">
@@ -159,6 +188,11 @@
                                 CornerRadius="4"
                                 Opacity="0.5"
                                 MinWidth="400">
+                            <Border.Transitions>
+                                <TransitionCollection>
+                                    <EntranceThemeTransition/>
+                                </TransitionCollection>
+                            </Border.Transitions>
                             <Grid MinHeight="64">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -179,6 +213,6 @@
                     </DataTemplate>
                 </ListView.ItemTemplate>
             </ListView>
-        </ScrollViewer>
-    </Grid>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

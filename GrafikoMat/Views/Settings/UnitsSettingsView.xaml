@@ -44,7 +44,7 @@
     </UserControl.Resources>
 
     <controls:ActionContainer x:Name="ActionContainer">
-        <Grid x:Name="MainContentGrid" Padding="20" Visibility="Collapsed">
+        <Grid x:Name="MainContentGrid" Padding="16,16,8,16" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>

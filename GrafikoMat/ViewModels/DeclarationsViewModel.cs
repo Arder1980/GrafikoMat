@@ -8,8 +8,8 @@ using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
-using System.Windows.Input;
 
 namespace GrafikoMat.ViewModels
 {
@@ -35,6 +35,8 @@ namespace GrafikoMat.ViewModels
         private bool _use12hShiftsByDefault;
         private MonthLayout _monthLayout;
         private bool _isDisposed;
+        private bool _isDirty = false;
+        private bool _isLoading = false; // Flaga zapobiegająca oznaczaniu jako dirty podczas ładowania
 
         public int Year { get; }
         public int MonthIndex { get; }
@@ -76,10 +78,10 @@ namespace GrafikoMat.ViewModels
             set => SetProperty(ref _currentUnitIndex, value);
         }
 
-        public ICommand SaveCommand { get; }
-        public ICommand ClearSelectionCommand { get; }
-        public ICommand SelectNextDoctorCommand { get; }
-        public ICommand SelectPrevDoctorCommand { get; }
+        public RelayCommand SaveCommand { get; }
+        public RelayCommand ClearSelectionCommand { get; }
+        public RelayCommand SelectNextDoctorCommand { get; }
+        public RelayCommand SelectPrevDoctorCommand { get; }
 
         public DeclarationsViewModel(
             int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
@@ -116,10 +118,13 @@ namespace GrafikoMat.ViewModels
             BuildCalendarShell();
             LoadDeclarationsForSelectedDoctor();
 
-            SaveCommand = new RelayCommand(DoSave);
+            SaveCommand = new RelayCommand(DoSave, () => _isDirty);
             ClearSelectionCommand = new RelayCommand(ClearSelection);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
+
+            // Subskrybuj zmiany w DayCells (symbol changes będą oznaczać dirty)
+            SubscribeToCellChanges();
 
             // ✅ DODANE - powiadomienie o HasNoDoctors i HasDoctors
             OnPropertyChanged(nameof(HasNoDoctors));
@@ -173,8 +178,45 @@ namespace GrafikoMat.ViewModels
             System.Diagnostics.Debug.WriteLine($"[BUILD] BuildCalendarShell END - added {DayCells.Count} cells");
         }
 
+        private void SubscribeToCellChanges()
+        {
+            foreach (var cell in DayCells)
+            {
+                cell.PropertyChanged += OnCellPropertyChanged;
+            }
+        }
+
+        private void UnsubscribeFromCellChanges()
+        {
+            foreach (var cell in DayCells)
+            {
+                cell.PropertyChanged -= OnCellPropertyChanged;
+            }
+        }
+
+        private void OnCellPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (_isLoading || _isDisposed) return;
+
+            // Tylko zmiany w symbolach oznaczają dirty
+            if (e.PropertyName == nameof(DayCell.SymbolFull) ||
+                e.PropertyName == nameof(DayCell.SymbolDay) ||
+                e.PropertyName == nameof(DayCell.SymbolNight))
+            {
+                MarkAsDirty();
+            }
+        }
+
+        private void MarkAsDirty()
+        {
+            if (_isLoading) return;
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
+        }
+
         private void LoadDeclarationsForSelectedDoctor()
         {
+            _isLoading = true; // Wyłącz dirty tracking podczas ładowania
             ClearSelection();
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor START");
@@ -232,6 +274,7 @@ namespace GrafikoMat.ViewModels
             }
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] LoadDeclarationsForSelectedDoctor END");
+            _isLoading = false; // Włącz dirty tracking po zakończeniu ładowania
         }
 
         public void CommitChangesToSharedState()
@@ -272,6 +315,8 @@ namespace GrafikoMat.ViewModels
         {
             CommitChangesToSharedState();
             _onSaveCallback?.Invoke();
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
         }
 
         public void SelectSingleSlot(int index, SlotPart part)
@@ -619,6 +664,9 @@ namespace GrafikoMat.ViewModels
 
             // Commit ostatnie zmiany przed dispose
             CommitChangesToSharedState();
+
+            // Odsubskrybuj event handlery
+            UnsubscribeFromCellChanges();
 
             // Wyczyść kolekcje
             Doctors.Clear();

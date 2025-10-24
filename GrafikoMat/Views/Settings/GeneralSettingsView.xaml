@@ -16,8 +16,8 @@
 		<common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 	</UserControl.Resources>
 
-	<ScrollViewer VerticalScrollBarVisibility="Auto">
-		<StackPanel Padding="20" Spacing="32">
+	<ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,16,8,16">
+		<StackPanel Spacing="32" Margin="0,0,8,0">
 
 			<TextBlock Text="Ustawienia Ogólne"
                        FontSize="20"
@@ -32,7 +32,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Wygląd aplikacji"
                                    FontSize="16"
@@ -64,7 +64,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Limit czasu obliczeń"
                                    FontSize="16"
@@ -173,7 +173,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Wielowątkowość"
                                    FontSize="16"
@@ -311,7 +311,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Połączenie z bazą danych"
                                    FontSize="16"
@@ -370,7 +370,7 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="0,0,0,1"
                         Padding="12,8"
-                        Margin="-20,0,-20,0">
+                        Margin="0">
 					<StackPanel Spacing="4">
 						<TextBlock Text="Logowanie i diagnostyka"
                                    FontSize="16"

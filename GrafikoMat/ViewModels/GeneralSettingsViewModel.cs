@@ -20,6 +20,7 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
         private bool _isInitializing = true;
+        private bool _isDirty = false;
 
         // === MOTYW ===
         private AppTheme _selectedTheme;
@@ -32,6 +33,7 @@ namespace GrafikoMat.ViewModels
                 {
                     // Zastosuj zmianę wizualnie natychmiast (bez zapisu - zapis jest przyciskiem)
                     ApplyThemeChangeVisually(value);
+                    MarkAsDirty();
                 }
             }
         }
@@ -68,7 +70,7 @@ namespace GrafikoMat.ViewModels
         public int TimeoutMinutesValue
         {
             get => _timeoutMinutesValue;
-            set => SetProperty(ref _timeoutMinutesValue, value);
+            set { if (SetProperty(ref _timeoutMinutesValue, value)) MarkAsDirty(); }
         }
         public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
         public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
@@ -85,6 +87,7 @@ namespace GrafikoMat.ViewModels
                 {
                     OnPropertyChanged(nameof(IsCustomThreadCount));
                     OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                    MarkAsDirty();
                 }
             }
         }
@@ -104,6 +107,7 @@ namespace GrafikoMat.ViewModels
                 if (SetProperty(ref _customThreadCountValue, value))
                 {
                     OnPropertyChanged(nameof(IsMaxThreadsWarningVisible));
+                    MarkAsDirty();
                 }
             }
         }
@@ -146,14 +150,14 @@ namespace GrafikoMat.ViewModels
         public string SupabaseUrl
         {
             get => _supabaseUrl;
-            set => SetProperty(ref _supabaseUrl, value);
+            set { if (SetProperty(ref _supabaseUrl, value)) MarkAsDirty(); }
         }
 
         private string _supabaseAnonKey = string.Empty;
         public string SupabaseAnonKey
         {
             get => _supabaseAnonKey;
-            set => SetProperty(ref _supabaseAnonKey, value);
+            set { if (SetProperty(ref _supabaseAnonKey, value)) MarkAsDirty(); }
         }
 
         private string _connectionTestStatus = string.Empty;
@@ -175,7 +179,7 @@ namespace GrafikoMat.ViewModels
         public TimeoutBehavior TimeoutBehavior
         {
             get => _timeoutBehavior;
-            set => SetProperty(ref _timeoutBehavior, value);
+            set { if (SetProperty(ref _timeoutBehavior, value)) MarkAsDirty(); }
         }
 
         public bool IsShowResultAndInform
@@ -209,7 +213,7 @@ namespace GrafikoMat.ViewModels
         public AppLogLevel AppLogLevel
         {
             get => _appLogLevel;
-            set => SetProperty(ref _appLogLevel, value);
+            set { if (SetProperty(ref _appLogLevel, value)) MarkAsDirty(); }
         }
 
         // === LOGI SILNIKÓW (TO-DO) ===
@@ -217,7 +221,7 @@ namespace GrafikoMat.ViewModels
         public SolverLogLevel SolverLogLevel
         {
             get => _solverLogLevel;
-            set => SetProperty(ref _solverLogLevel, value);
+            set { if (SetProperty(ref _solverLogLevel, value)) MarkAsDirty(); }
         }
 
         public IAsyncRelayCommand SaveCommand { get; }
@@ -247,7 +251,7 @@ namespace GrafikoMat.ViewModels
             _supabaseUrl = appSettings.SupabaseUrl ?? string.Empty;
             _supabaseAnonKey = appSettings.SupabaseAnonKey ?? string.Empty;
 
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
             ResetTimeoutCommand = new RelayCommand(ResetTimeout);
             ResetThreadCountCommand = new RelayCommand(ResetThreadCount);
             TestConnectionCommand = new AsyncRelayCommand(TestConnectionAsync);
@@ -257,6 +261,13 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
+        private void MarkAsDirty()
+        {
+            if (_isInitializing) return;
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
+        }
 
         private void ResetTimeout()
         {
@@ -375,6 +386,8 @@ namespace GrafikoMat.ViewModels
                 );
 
                 _appSettings = newSettings;
+                _isDirty = false;
+                SaveCommand.NotifyCanExecuteChanged();
                 WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
 
                 // Zastosuj zmianę motywu natychmiast

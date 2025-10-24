@@ -14,5 +14,9 @@ Gdy użytkownik prosi, byś utworzył nową funkcjonalność lub wprowadził zmi
 
 
 
-W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji, zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian. 
+W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji, zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian.
+
+
+
+Po każdej odpowiedzi podawaj ile tokenów okna kontekstowego pozostało do wykorzystania.
 

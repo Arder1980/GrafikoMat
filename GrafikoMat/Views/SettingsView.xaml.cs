@@ -5,9 +5,11 @@ using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace GrafikoMat.Views
 {
@@ -65,6 +67,26 @@ namespace GrafikoMat.Views
             {
                 SettingsDetailContent.Content = null;
                 return;
+            }
+
+            // Fade out poprzedniego widoku
+            if (SettingsDetailContent.Content != null)
+            {
+                var fadeOut = new DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = TimeSpan.FromMilliseconds(150),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                };
+
+                var storyboard = new Storyboard();
+                storyboard.Children.Add(fadeOut);
+                Storyboard.SetTarget(fadeOut, SettingsDetailContent);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+
+                storyboard.Begin();
+                await Task.Delay(150);
             }
 
             // Upewniamy się, że zawsze mamy najświeższe ustawienia
@@ -131,7 +153,27 @@ namespace GrafikoMat.Views
                     // USUNIĘTE: case "Połączenie z Bazą Danych" - przeniesione do Ustawień Ogólnych
             }
 
+            // Ustaw nowy widok
             SettingsDetailContent.Content = viewToLoad;
+
+            // Fade in nowego widoku
+            if (viewToLoad != null)
+            {
+                var fadeIn = new DoubleAnimation
+                {
+                    From = 0.0,
+                    To = 1.0,
+                    Duration = TimeSpan.FromMilliseconds(200),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+
+                var storyboard = new Storyboard();
+                storyboard.Children.Add(fadeIn);
+                Storyboard.SetTarget(fadeIn, SettingsDetailContent);
+                Storyboard.SetTargetProperty(fadeIn, "Opacity");
+
+                storyboard.Begin();
+            }
         }
     }
 }

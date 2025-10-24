@@ -28,12 +28,22 @@
                   BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                   BorderThickness="1"
                   CornerRadius="8">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Setter Property="MinHeight" Value="72"/>
+                </Style>
+            </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="local:SettingsMenuItem">
-                    <StackPanel Padding="12,10">
-                        <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold"/>
-                        <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
+                    <Grid MinHeight="56" Padding="12,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="{x:Bind Title}" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Row="1" Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
@@ -43,7 +53,7 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-            <Grid Padding="24">
+            <Grid Padding="8">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                             Visibility="{x:Bind SettingsMenu.SelectedItem, Converter={StaticResource NullToCollapsedConverter}, Mode=OneWay}">
                     <FontIcon Glyph="&#xE713;" FontSize="48" Opacity="0.5" HorizontalAlignment="Center"/>

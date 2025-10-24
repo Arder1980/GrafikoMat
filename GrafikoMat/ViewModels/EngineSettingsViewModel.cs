@@ -18,6 +18,7 @@ namespace GrafikoMat.ViewModels
         private readonly IUxActionOrchestrator _orchestrator;
         private AppSettings _appSettings;
         private Guid _viewId;
+        private bool _isDirty = false;
         public ObservableCollection<EngineOption> EngineOptions { get; } = new();
 
         private EngineOption? _selectedEngine;
@@ -30,6 +31,7 @@ namespace GrafikoMat.ViewModels
                 {
                     foreach (var option in EngineOptions) { option.IsSelected = (option == value); }
                     OnPropertyChanged(nameof(HasConfigurableParameters));
+                    MarkAsDirty();
                 }
             }
         }
@@ -41,53 +43,53 @@ namespace GrafikoMat.ViewModels
 
         // === TIMEOUT ===
         private int _timeoutMinutesValue;
-        public int TimeoutMinutesValue { get => _timeoutMinutesValue; set => SetProperty(ref _timeoutMinutesValue, value); }
+        public int TimeoutMinutesValue { get => _timeoutMinutesValue; set { if (SetProperty(ref _timeoutMinutesValue, value)) MarkAsDirty(); } }
         public int TimeoutMinutesMin => SolverDefaults.TimeoutMinutes.Min;
         public int TimeoutMinutesMax => SolverDefaults.TimeoutMinutes.Max;
         public int TimeoutMinutesStep => SolverDefaults.TimeoutMinutes.Step;
 
         // === SIMULATED ANNEALING ===
         private double _coolingRateValue;
-        public double CoolingRateValue { get => _coolingRateValue; set => SetProperty(ref _coolingRateValue, value); }
+        public double CoolingRateValue { get => _coolingRateValue; set { if (SetProperty(ref _coolingRateValue, value)) MarkAsDirty(); } }
         public double CoolingRateMin => SolverDefaults.CoolingRate.Min;
         public double CoolingRateMax => SolverDefaults.CoolingRate.Max;
         public double CoolingRateStep => SolverDefaults.CoolingRate.Step;
 
         // === GENETIC ===
         private int _geneticPopulationSizeValue;
-        public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set => SetProperty(ref _geneticPopulationSizeValue, value); }
+        public int GeneticPopulationSizeValue { get => _geneticPopulationSizeValue; set { if (SetProperty(ref _geneticPopulationSizeValue, value)) MarkAsDirty(); } }
         public int GeneticPopulationSizeMin => SolverDefaults.GeneticPopulationSize.Min;
         public int GeneticPopulationSizeMax => SolverDefaults.GeneticPopulationSize.Max;
         public int GeneticPopulationSizeStep => SolverDefaults.GeneticPopulationSize.Step;
 
         private int _geneticGenerationsValue;
-        public int GeneticGenerationsValue { get => _geneticGenerationsValue; set => SetProperty(ref _geneticGenerationsValue, value); }
+        public int GeneticGenerationsValue { get => _geneticGenerationsValue; set { if (SetProperty(ref _geneticGenerationsValue, value)) MarkAsDirty(); } }
         public int GeneticGenerationsMin => SolverDefaults.GeneticGenerations.Min;
         public int GeneticGenerationsMax => SolverDefaults.GeneticGenerations.Max;
         public int GeneticGenerationsStep => SolverDefaults.GeneticGenerations.Step;
 
         // === ANT COLONY ===
         private int _antColonyAntsValue;
-        public int AntColonyAntsValue { get => _antColonyAntsValue; set => SetProperty(ref _antColonyAntsValue, value); }
+        public int AntColonyAntsValue { get => _antColonyAntsValue; set { if (SetProperty(ref _antColonyAntsValue, value)) MarkAsDirty(); } }
         public int AntColonyAntsMin => SolverDefaults.AntColonyAnts.Min;
         public int AntColonyAntsMax => SolverDefaults.AntColonyAnts.Max;
         public int AntColonyAntsStep => SolverDefaults.AntColonyAnts.Step;
 
         private int _antColonyGenerationsValue;
-        public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set => SetProperty(ref _antColonyGenerationsValue, value); }
+        public int AntColonyGenerationsValue { get => _antColonyGenerationsValue; set { if (SetProperty(ref _antColonyGenerationsValue, value)) MarkAsDirty(); } }
         public int AntColonyGenerationsMin => SolverDefaults.AntColonyGenerations.Min;
         public int AntColonyGenerationsMax => SolverDefaults.AntColonyGenerations.Max;
         public int AntColonyGenerationsStep => SolverDefaults.AntColonyGenerations.Step;
 
         // === TABU SEARCH ===
         private int _tabuListSizeValue;
-        public int TabuListSizeValue { get => _tabuListSizeValue; set => SetProperty(ref _tabuListSizeValue, value); }
+        public int TabuListSizeValue { get => _tabuListSizeValue; set { if (SetProperty(ref _tabuListSizeValue, value)) MarkAsDirty(); } }
         public int TabuListSizeMin => SolverDefaults.TabuListSize.Min;
         public int TabuListSizeMax => SolverDefaults.TabuListSize.Max;
         public int TabuListSizeStep => SolverDefaults.TabuListSize.Step;
 
         private int _tabuMaxIterationsValue;
-        public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set => SetProperty(ref _tabuMaxIterationsValue, value); }
+        public int TabuMaxIterationsValue { get => _tabuMaxIterationsValue; set { if (SetProperty(ref _tabuMaxIterationsValue, value)) MarkAsDirty(); } }
         public int TabuMaxIterationsMin => SolverDefaults.TabuMaxIterations.Min;
         public int TabuMaxIterationsMax => SolverDefaults.TabuMaxIterations.Max;
         public int TabuMaxIterationsStep => SolverDefaults.TabuMaxIterations.Step;
@@ -103,7 +105,7 @@ namespace GrafikoMat.ViewModels
             _settingsService = settingsService;
             _appSettings = appSettings;
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
-            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync);
+            SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             ResetSimulatedAnnealingCommand = new RelayCommand(() =>
                 CoolingRateValue = SolverDefaults.CoolingRate.Default);
@@ -128,6 +130,12 @@ namespace GrafikoMat.ViewModels
 
             LoadEngineData();
             LoadInitialSelection();
+        }
+
+        private void MarkAsDirty()
+        {
+            _isDirty = true;
+            SaveCommand.NotifyCanExecuteChanged();
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
@@ -180,6 +188,8 @@ namespace GrafikoMat.ViewModels
             );
 
             _appSettings = newSettings;
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
             WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());
         }
 
