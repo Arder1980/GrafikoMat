@@ -241,15 +241,15 @@ namespace GrafikoMat.ViewModels
                 "Algorytm symulowanego wyżarzania",
                 "Metaheurystyka",
                 "Stochastyczny",
-                "Nie",
-                "Wynik dobrej jakości, silnie zależny od parametrów wyżarzania.",
+                "Tak",
+                "Wynik dobrej jakości, silnie zależny od tempa schładzania.",
                 "Średni"));
 
             // Tabu Search
             EngineOptions.Add(new EngineOption(
                 SolverType.TabuSearch,
                 "TabuSearchSolver (algorytm przeszukiwania z zabronieniami)",
-                "To jak gra w szachy z samym sobą, ale z notatnikiem. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wykonuje to, które przynosi największą natychmiastową korzyść, nawet jeśli chwilowo pogarsza to ogólny wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w płytkim, lokalnym optimum, zmuszając go do eksplorowania nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Dzięki temu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
+                "To jak eksploracja skomplikowanego labiryntu z mapą odwiedzonych miejsc. W każdym ruchu algorytm rozważa wszystkie możliwe 'posunięcia' (np. zamianę lekarza w danym dniu) i wybiera najbardziej obiecujące, nawet jeśli chwilowo pogarsza to wynik. Kluczowym elementem jest 'lista tabu' – krótka pamięć ostatnio wykonanych ruchów, jak zamykanie przebytych korytarzy. Jeśli algorytm właśnie zamienił lekarza A na B, to cofnięcie tej zamiany (B na A) staje się na pewien czas 'tabu' (zakazane). Ta prosta zasada zapobiega zapętleniu się algorytmu i utknięciu w lokalnym optimum, zmuszając go do systematycznej eksploracji nowych, nieodwiedzonych jeszcze rejonów przestrzeni rozwiązań. Algorytm wykorzystuje wielowątkową równoległą ewaluację sąsiadów, dzięki czemu jest bardzo skuteczny w znajdowaniu wysokiej jakości wyników.",
                 "Algorytm przeszukiwania z zabronieniami",
                 "Metaheurystyka",
                 "Stochastyczny",
