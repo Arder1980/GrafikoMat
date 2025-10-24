@@ -45,8 +45,8 @@ namespace GrafikoMat
 
         private AppWindow? _appWindow;
         public MainViewModel ViewModel { get; }
-        public ObservableCollection<UiAction> ActionsLeft { get; } = new();
-        public ObservableCollection<UiAction> ActionsRight { get; } = new();
+        public ObservableCollection<Models.UiAction> ActionsLeft { get; } = new();
+        public ObservableCollection<Models.UiAction> ActionsRight { get; } = new();
 
         private readonly DashboardView _dashboardView = new();
         private SettingsView? _settingsView;
@@ -849,31 +849,52 @@ namespace GrafikoMat
         {
             ActionsLeft.Clear();
             ActionsRight.Clear();
-            ActionsLeft.Add(new UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
-            ActionsLeft.Add(new UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
-            ActionsLeft.Add(new UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
+            ActionsLeft.Add(new Models.UiAction("Ustawienia", new RelayCommand(() => SwitchToSettings())));
+            ActionsLeft.Add(new Models.UiAction("Zarządzanie dyżurnymi", new RelayCommand(() => SwitchToManagement())));
+            ActionsLeft.Add(new Models.UiAction("Edytuj deklaracje dyżurowe", new RelayCommand(() => SwitchToDeclarations())));
 
-            ActionsRight.Add(new UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync), isPrimary: true));
-            ActionsRight.Add(new UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
+            ActionsRight.Add(new Models.UiAction("Generuj grafik", new AsyncRelayCommand(ViewModel.GenerateScheduleAsync), isPrimary: true));
+            ActionsRight.Add(new Models.UiAction("Eksportuj...", new RelayCommand(ExportPlaceholder)));
         }
 
         private void BuildActionsForDeclarations(DeclarationsView view)
         {
             ActionsLeft.Clear();
             ActionsRight.Clear();
-            ActionsLeft.Add(new UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
-            ActionsLeft.Add(new UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel?.ClearSelectionCommand.Execute(null))));
+            ActionsLeft.Add(new Models.UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            ActionsLeft.Add(new Models.UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel?.ClearSelectionCommand.Execute(null))));
 
-            ActionsRight.Add(new UiAction("Zapisz", new RelayCommand(() => view.ViewModel?.SaveCommand.Execute(null))));
-            ActionsRight.Add(new UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
+            ActionsRight.Add(new Models.UiAction("Zapisz", new RelayCommand(() => view.ViewModel?.SaveCommand.Execute(null))));
+            ActionsRight.Add(new Models.UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
         }
 
         private void BuildActionsForSettings()
         {
             ActionsLeft.Clear();
-            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(SwitchToDashboard), isPrimary: false));
+            ActionsLeft.Add(new Models.UiAction("Wstecz", new RelayCommand(SwitchToDashboard), isPrimary: false));
 
             // Wyczyść prawe akcje - będą ustawiane dynamicznie przez podwidoki
+            ActionsRight.Clear();
+        }
+
+        /// <summary>
+        /// Publiczna metoda umożliwiająca widokom rejestrację swoich akcji w panelu przycisków.
+        /// Używana przez widoki ustawień i inne podwidoki do dodawania przycisków typu "Zapisz".
+        /// </summary>
+        public void RegisterViewActions(params Models.UiAction[] actions)
+        {
+            ActionsRight.Clear();
+            foreach (var action in actions)
+            {
+                ActionsRight.Add(action);
+            }
+        }
+
+        /// <summary>
+        /// Czyści akcje zarejestrowane przez widoki (używane przy zmianie podwidoku lub wyjściu).
+        /// </summary>
+        public void ClearViewActions()
+        {
             ActionsRight.Clear();
         }
 
@@ -881,7 +902,7 @@ namespace GrafikoMat
         {
             ActionsLeft.Clear();
             ActionsRight.Clear();
-            ActionsLeft.Add(new UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+            ActionsLeft.Add(new Models.UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
         }
 
         private async void SwitchToDashboard()
@@ -1638,20 +1659,6 @@ namespace GrafikoMat
         }
     }
 
-    public class UiAction
-    {
-        public string Label { get; }
-        public ICommand Command { get; }
-        public bool IsPrimary { get; }
-
-        public UiAction(string label, ICommand command, bool isPrimary = false)
-        {
-            Label = label;
-            Command = command;
-            IsPrimary = isPrimary;
-        }
-    }
-
     public class UiActionTemplateSelector : DataTemplateSelector
     {
         public DataTemplate? NormalButtonTemplate { get; set; }
@@ -1659,7 +1666,7 @@ namespace GrafikoMat
 
         protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
         {
-            if (item is UiAction action)
+            if (item is Models.UiAction action)
             {
                 return action.IsPrimary ? (PrimaryButtonTemplate ?? NormalButtonTemplate!) : NormalButtonTemplate!;
             }

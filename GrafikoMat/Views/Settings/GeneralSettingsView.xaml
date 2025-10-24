@@ -457,13 +457,6 @@
 				</Border>
 			</StackPanel>
 
-			<!-- Przycisk Zapisz -->
-			<Button Content="Zapisz ustawienia"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Command="{x:Bind ViewModel.SaveCommand}"
-                    HorizontalAlignment="Right"
-                    Margin="0,12,0,0"/>
-
 		</StackPanel>
 	</ScrollViewer>
 </UserControl>

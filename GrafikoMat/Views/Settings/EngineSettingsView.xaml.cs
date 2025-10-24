@@ -1,14 +1,18 @@
 ﻿using GrafikoMat.Core.Scheduling.Models;
+using GrafikoMat.Models;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System;
+using System.Collections.Generic;
 
 namespace GrafikoMat.Views.Settings
 {
     public sealed partial class EngineSettingsView : UserControl
     {
         public EngineSettingsViewModel ViewModel { get; }
+        public event Action<List<UiAction>>? ActionsChanged;
 
         public EngineSettingsView(SettingsService settingsService, AppSettings appSettings)
         {
@@ -21,6 +25,13 @@ namespace GrafikoMat.Views.Settings
         {
             // Ustaw stan początkowy bez animacji
             UpdateVisualStates(useTransitions: false);
+
+            // Zarejestruj przycisk Zapisz w ActionButtonsPanel
+            var actions = new List<UiAction>
+            {
+                new UiAction("Zapisz ustawienia", ViewModel.SaveCommand, isPrimary: true)
+            };
+            ActionsChanged?.Invoke(actions);
         }
 
         private void EngineRadioButton_Checked(object sender, RoutedEventArgs e)

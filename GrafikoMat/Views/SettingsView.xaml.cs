@@ -1,5 +1,6 @@
 ﻿using GrafikoMat.Controls;
 using GrafikoMat.Core.Repositories;
+using GrafikoMat.Models;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
@@ -57,6 +58,9 @@ namespace GrafikoMat.Views
 
         private async void LoadSubView(string? selectedItemName)
         {
+            // Wyczyść akcje z poprzedniego widoku
+            ActionButtonsChanged?.Invoke(new List<UiAction>());
+
             if (_settingsService == null)
             {
                 SettingsDetailContent.Content = null;
@@ -73,6 +77,10 @@ namespace GrafikoMat.Views
                     if (_appSettings != null && _supabaseService != null)
                     {
                         var generalView = new GeneralSettingsView(_settingsService, _supabaseService, _appSettings);
+                        generalView.ActionsChanged += (actions) =>
+                        {
+                            ActionButtonsChanged?.Invoke(actions);
+                        };
                         var containerGeneral = new ActionContainer { Content = generalView };
                         generalView.ViewModel.SetViewId(containerGeneral.GetViewId());
                         viewToLoad = containerGeneral;
@@ -98,6 +106,10 @@ namespace GrafikoMat.Views
                     {
                         var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
+                        prioritiesView.ActionsChanged += (actions) =>
+                        {
+                            ActionButtonsChanged?.Invoke(actions);
+                        };
                         var containerPriorities = new ActionContainer { Content = prioritiesView };
                         prioritiesViewModel.SetViewId(containerPriorities.GetViewId());
                         viewToLoad = containerPriorities;
@@ -107,6 +119,10 @@ namespace GrafikoMat.Views
                     if (_appSettings != null)
                     {
                         var engineView = new EngineSettingsView(_settingsService, _appSettings);
+                        engineView.ActionsChanged += (actions) =>
+                        {
+                            ActionButtonsChanged?.Invoke(actions);
+                        };
                         var containerEngine = new ActionContainer { Content = engineView };
                         engineView.ViewModel.SetViewId(containerEngine.GetViewId());
                         viewToLoad = containerEngine;

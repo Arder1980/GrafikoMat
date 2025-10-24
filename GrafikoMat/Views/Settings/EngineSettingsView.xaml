@@ -62,7 +62,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="Silnik Obliczeniowy" FontSize="20" FontWeight="SemiBold"/>
@@ -410,12 +409,5 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
-
-        <Button Grid.Row="2"
-                Content="Zapisz ustawienia"
-                Style="{StaticResource AccentButtonStyle}"
-                Command="{x:Bind ViewModel.SaveCommand}"
-                HorizontalAlignment="Right"
-                Margin="0,20,0,0"/>
     </Grid>
 </UserControl>                

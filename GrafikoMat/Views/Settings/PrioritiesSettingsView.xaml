@@ -42,7 +42,6 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="Kolejność Priorytetów" FontSize="20" FontWeight="SemiBold"/>
@@ -181,12 +180,5 @@
                 </ListView.ItemTemplate>
             </ListView>
         </ScrollViewer>
-
-        <Button Grid.Row="6"
-                Content="Zapisz ustawienia"
-                Style="{StaticResource AccentButtonStyle}"
-                Command="{x:Bind ViewModel.SaveCommand}"
-                HorizontalAlignment="Right"
-                Margin="0,20,0,0"/>
     </Grid>
 </UserControl>
