@@ -140,6 +140,11 @@ namespace GrafikoMat.ViewModels
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
 
+        /// <summary>
+        /// Sprawdza czy są niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges => _isDirty;
+
         private void LoadInitialSelection()
         {
             SelectedEngine = EngineOptions.FirstOrDefault(o => o.Type == _appSettings.SelectedSolver)

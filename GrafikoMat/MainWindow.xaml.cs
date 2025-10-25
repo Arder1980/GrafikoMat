@@ -130,7 +130,7 @@ namespace GrafikoMat
         {
             _ = DispatcherQueue.EnqueueAsync(async () => {
                 await ViewModel.LoadUserAndUnitDataAsync();
-                ViewModel.LoadDataForActiveUnit();
+                await ViewModel.LoadDataForActiveUnitAsync();
             });
         }
 
@@ -267,7 +267,7 @@ namespace GrafikoMat
             }
 
             // Pobierz lekarzy dla NOWEJ jednostki
-            ViewModel.LoadDataForActiveUnit();
+            await ViewModel.LoadDataForActiveUnitAsync();
             var doctorsForUnit = ViewModel.DoctorRows.Select(dr => dr.Profile).ToList();
 
             if (!doctorsForUnit.Any())
@@ -788,7 +788,7 @@ namespace GrafikoMat
             if (_doctorRepository != null)
             {
                 await ViewModel.LoadUserAndUnitDataAsync();
-                ViewModel.LoadDataForActiveUnit();
+                await ViewModel.LoadDataForActiveUnitAsync();
             }
 
             ViewportCurrent.Content = _dashboardView;
@@ -864,10 +864,33 @@ namespace GrafikoMat
             ActionsLeft.Clear();
             ActionsRight.Clear();
             ActionsLeft.Add(new Models.UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
-            ActionsLeft.Add(new Models.UiAction("Wyczyść zaznaczenie", new RelayCommand(() => view.ViewModel?.ClearSelectionCommand.Execute(null))));
+            ActionsLeft.Add(new Models.UiAction("Wyczyść deklaracje", new RelayCommand(async () => await ConfirmAndClearDeclarationsAsync(view))));
 
             ActionsRight.Add(new Models.UiAction("Zapisz", new RelayCommand(() => view.ViewModel?.SaveCommand.Execute(null))));
             ActionsRight.Add(new Models.UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
+        }
+
+        private async Task ConfirmAndClearDeclarationsAsync(DeclarationsView view)
+        {
+            if (view?.ViewModel == null)
+                return;
+
+            var dialog = new ContentDialog
+            {
+                Title = "Potwierdzenie",
+                Content = $"Czy na pewno chcesz usunąć wszystkie deklaracje dla lekarza {view.ViewModel.SelectedDoctor?.FullName} z miesiąca {view.ViewModel.MonthHeader}?\n\nTa operacja nie może być cofnięta.",
+                PrimaryButtonText = "Usuń",
+                CloseButtonText = "Anuluj",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = this.Content.XamlRoot
+            };
+
+            var result = await dialog.ShowAsync();
+
+            if (result == ContentDialogResult.Primary)
+            {
+                await view.ViewModel.ClearDeclarationsCommand.ExecuteAsync(null);
+            }
         }
 
         private void BuildActionsForSettings()
@@ -905,11 +928,98 @@ namespace GrafikoMat
             ActionsLeft.Clear();
             ActionsRight.Clear();
             ActionsLeft.Add(new Models.UiAction("Wstecz", new RelayCommand(() => SwitchToDashboard())));
+
+            // Dodaj przycisk Zapisz dla ManagementView
+            if (_managementView != null)
+            {
+                ActionsRight.Add(new Models.UiAction("Zapisz", _managementView.ViewModel.SaveDoctorCommand, isPrimary: true));
+            }
         }
 
         private async void SwitchToDashboard()
         {
             if (_isClosing || _isAnimating) return;
+
+            // Sprawdź czy wychodzisz z ustawień z niezapisanymi zmianami
+            System.Diagnostics.Debug.WriteLine($"[SwitchToDashboard] ViewportCurrent.Content type: {ViewportCurrent.Content?.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"[SwitchToDashboard] _settingsView is null: {_settingsView == null}");
+            System.Diagnostics.Debug.WriteLine($"[SwitchToDashboard] Are equal: {ViewportCurrent.Content == _settingsView}");
+
+            if (ViewportCurrent.Content == _settingsView && _settingsView != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SwitchToDashboard] Inside settings check, HasUnsavedChanges: {_settingsView.HasUnsavedChanges()}");
+
+                if (_settingsView.HasUnsavedChanges())
+                {
+                    System.Diagnostics.Debug.WriteLine("[SwitchToDashboard] Showing dialog for unsaved changes");
+
+                    var dialog = App.CreateThemedDialog();
+                    dialog.Title = "Niezapisane zmiany";
+                    dialog.Content = "Masz niezapisane zmiany w ustawieniach. Co chcesz zrobić?";
+                    dialog.PrimaryButtonText = "Zapisz i wyjdź";
+                    dialog.SecondaryButtonText = "Odrzuć zmiany";
+                    dialog.CloseButtonText = "Anuluj";
+                    dialog.DefaultButton = ContentDialogButton.Primary;
+
+                    var result = await dialog.ShowAsync();
+
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        // Użytkownik chce zapisać
+                        await _settingsView.SaveCurrentSettingsAsync();
+                        // Po zapisaniu kontynuuj wyjście
+                    }
+                    else if (result == ContentDialogResult.Secondary)
+                    {
+                        // Użytkownik odrzuca zmiany - przywróć oryginalne ustawienia
+                        _settingsView.RestoreOriginalSettings();
+                        // Kontynuuj wyjście
+                    }
+                    else
+                    {
+                        // Użytkownik anulował - nie wychodź z ustawień
+                        return;
+                    }
+                }
+            }
+
+            // Sprawdź czy wychodzisz z zarządzania dyżurnymi z niezapisanymi zmianami
+            if (ViewportCurrent.Content == _managementView && _managementView != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SwitchToDashboard] Inside management check, HasUnsavedChanges: {_managementView.ViewModel.HasUnsavedChanges}");
+
+                if (_managementView.ViewModel.HasUnsavedChanges)
+                {
+                    System.Diagnostics.Debug.WriteLine("[SwitchToDashboard] Showing dialog for unsaved changes in management");
+
+                    var dialog = App.CreateThemedDialog();
+                    dialog.Title = "Niezapisane zmiany";
+                    dialog.Content = "Masz niezapisane zmiany w danych dyżurnego. Co chcesz zrobić?";
+                    dialog.PrimaryButtonText = "Zapisz i wyjdź";
+                    dialog.SecondaryButtonText = "Odrzuć zmiany";
+                    dialog.CloseButtonText = "Anuluj";
+                    dialog.DefaultButton = ContentDialogButton.Primary;
+
+                    var result = await dialog.ShowAsync();
+
+                    if (result == ContentDialogResult.Primary)
+                    {
+                        // Użytkownik chce zapisać
+                        await _managementView.ViewModel.SaveDoctorCommand.ExecuteAsync(null);
+                        // Po zapisaniu kontynuuj wyjście
+                    }
+                    else if (result == ContentDialogResult.Secondary)
+                    {
+                        // Użytkownik odrzuca zmiany - kontynuuj wyjście
+                        // (ManagementView nie ma specjalnej logiki przywracania)
+                    }
+                    else
+                    {
+                        // Użytkownik anulował - nie wychodź z zarządzania
+                        return;
+                    }
+                }
+            }
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
 

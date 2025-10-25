@@ -26,6 +26,7 @@ namespace GrafikoMat.ViewModels
         private readonly DispatcherQueue? _dispatcher;
         private readonly IUxActionOrchestrator _orchestrator;
         private Guid _viewId;
+        private bool _isDirty = false;
 
         private readonly List<DoctorProfile> _allDoctorsMasterList = new();
         public ObservableCollection<DoctorListItemViewModel> FilteredDoctors { get; } = new();
@@ -100,14 +101,52 @@ namespace GrafikoMat.ViewModels
             RestoreDoctorCommand = new AsyncRelayCommand(RestoreDoctorAsync, () => CanRestore);
         }
 
-        public void SetViewId(Guid viewId) => _viewId = viewId;
+        public void SetViewId(Guid viewId)
+        {
+            _viewId = viewId;
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] SetViewId called with: {viewId}");
+        }
+
+        /// <summary>
+        /// Sprawdza czy są niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges => _isDirty;
+
+        private void MarkAsDirty()
+        {
+            _isDirty = true;
+            SaveDoctorCommand.NotifyCanExecuteChanged();
+        }
+
+        private void ClearDirty()
+        {
+            _isDirty = false;
+        }
+
         public async Task InitializeAsync()
         {
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] InitializeAsync called with _viewId: {_viewId}");
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] _orchestrator is null: {_orchestrator == null}");
+
+            if (_orchestrator == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[ManagementViewModel] ERROR: _orchestrator is null! Cannot perform load.");
+                return;
+            }
+
             await _orchestrator.PerformLoadAsync(_viewId, LoadInitialDataAsync);
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] InitializeAsync completed");
         }
 
         private void Editor_PropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            // Oznacz jako dirty przy zmianie wartości w edytorze (ale pomiń właściwości systemowe)
+            if (e.PropertyName != nameof(EditorViewModel.IsValid) &&
+                e.PropertyName != nameof(EditorViewModel.ShowResetButton))
+            {
+                MarkAsDirty();
+            }
+
             if (e.PropertyName == nameof(EditorViewModel.IsValid)) SaveDoctorCommand.NotifyCanExecuteChanged();
             if (e.PropertyName == nameof(EditorViewModel.ShowResetButton)) ResetPasswordCommand.NotifyCanExecuteChanged();
         }
@@ -122,20 +161,29 @@ namespace GrafikoMat.ViewModels
 
         private async Task LoadInitialDataAsync()
         {
+            System.Diagnostics.Debug.WriteLine("[ManagementViewModel] LoadInitialDataAsync START");
             var previouslySelectedId = SelectedDoctor?.Id;
 
+            System.Diagnostics.Debug.WriteLine("[ManagementViewModel] Getting current doctor profile...");
             var currentUserProfile = await _doctorRepository.GetCurrentDoctorProfileAsync();
             if (currentUserProfile != null)
             {
                 _currentUserId = currentUserProfile.Id;
                 _currentUserLevel = currentUserProfile.AdminLevel;
+                System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] Current user: {currentUserProfile.FirstName} {currentUserProfile.LastName}, Level: {currentUserProfile.AdminLevel}");
             }
 
+            System.Diagnostics.Debug.WriteLine("[ManagementViewModel] Loading doctors...");
             var doctors = await _doctorRepository.GetAllAsync();
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] Loaded {doctors.Count} doctors");
+
+            System.Diagnostics.Debug.WriteLine("[ManagementViewModel] Loading units...");
             _allUnits = await _unitRepository.GetAllAsync();
+            System.Diagnostics.Debug.WriteLine($"[ManagementViewModel] Loaded {_allUnits.Count} units");
 
             _dispatcher?.TryEnqueue(() =>
             {
+                System.Diagnostics.Debug.WriteLine("[ManagementViewModel] Updating UI on dispatcher thread");
                 _allDoctorsMasterList.Clear();
                 _allDoctorsMasterList.AddRange(doctors);
                 FilterDoctors();
@@ -144,7 +192,10 @@ namespace GrafikoMat.ViewModels
                 {
                     SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == previouslySelectedId);
                 }
+                System.Diagnostics.Debug.WriteLine("[ManagementViewModel] UI update complete");
             });
+
+            System.Diagnostics.Debug.WriteLine("[ManagementViewModel] LoadInitialDataAsync END");
         }
 
         private void FilterDoctors()
@@ -274,6 +325,9 @@ namespace GrafikoMat.ViewModels
                 var idToSelect = isNew ? savedProfileId : profile.Id;
                 SelectedDoctor = FilteredDoctors.FirstOrDefault(d => d.Id == idToSelect);
             });
+
+            // Wyczyść flagę dirty po pomyślnym zapisie
+            ClearDirty();
         }
 
         private async void LoadEditorFor(DoctorProfile? doctorProfile)

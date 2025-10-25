@@ -143,13 +143,12 @@ namespace GrafikoMat.ViewModels
                 {
                     await LoadUserAndUnitDataAsync();
 
-                    // Przełącz na UI thread dla LoadDataForActiveUnit
+                    // Przełącz na UI thread dla LoadDataForActiveUnitAsync
                     if (App.MainRoot?.DispatcherQueue != null)
                     {
-                        await App.MainRoot.DispatcherQueue.EnqueueAsync(() =>
+                        await App.MainRoot.DispatcherQueue.EnqueueAsync(async () =>
                         {
-                            LoadDataForActiveUnit();
-                            return Task.CompletedTask;
+                            await LoadDataForActiveUnitAsync();
                         });
                     }
                 }
@@ -244,7 +243,7 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
             OnPropertyChanged(nameof(CurrentUnitIndex));
-            LoadDataForActiveUnit();
+            _ = LoadDataForActiveUnitAsync();
         }
 
         private void SwitchToPreviousUnit()
@@ -255,7 +254,7 @@ namespace GrafikoMat.ViewModels
             OnPropertyChanged(nameof(ActiveUnitHospitalName));
             OnPropertyChanged(nameof(ActiveUnitDepartmentName));
             OnPropertyChanged(nameof(CurrentUnitIndex));
-            LoadDataForActiveUnit();
+            _ = LoadDataForActiveUnitAsync();
         }
 
         public int GetUnitIndexById(Guid unitId)
@@ -270,7 +269,7 @@ namespace GrafikoMat.ViewModels
             return -1; // Nie znaleziono jednostki
         }
 
-        public void LoadDataForActiveUnit()
+        public async Task LoadDataForActiveUnitAsync()
         {
             DoctorRows.Clear();
             if (ActiveUnit == null)
@@ -290,8 +289,8 @@ namespace GrafikoMat.ViewModels
                 return;
             }
 
-            // ✅ DODANE - załaduj deklaracje z Supabase dla aktywnej jednostki
-            _ = LoadDeclarationsFromSupabaseAsync();
+            // ✅ DODANE - załaduj deklaracje z Supabase dla aktywnej jednostki (AWAIT!)
+            await LoadDeclarationsFromSupabaseAsync();
 
             var doctorsForUnit = _allDoctors.Where(d => doctorIdsForUnit.Contains(d.Id) && !d.IsArchived).OrderBy(d => d.LastName).ThenBy(d => d.FirstName).ToList();
             var duplicateFullNames = doctorsForUnit.GroupBy(d => d.FullName).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();

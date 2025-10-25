@@ -87,6 +87,7 @@ namespace GrafikoMat.ViewModels
         public RelayCommand SaveCommand { get; }
         public AsyncRelayCommand SaveAsyncCommand { get; }
         public RelayCommand ClearSelectionCommand { get; }
+        public AsyncRelayCommand ClearDeclarationsCommand { get; }
         public RelayCommand SelectNextDoctorCommand { get; }
         public RelayCommand SelectPrevDoctorCommand { get; }
 
@@ -130,6 +131,7 @@ namespace GrafikoMat.ViewModels
             SaveCommand = new RelayCommand(() => _ = DoSaveAsync(), () => _isDirty);
             SaveAsyncCommand = new AsyncRelayCommand(DoSaveAsync, () => _isDirty);
             ClearSelectionCommand = new RelayCommand(ClearSelection);
+            ClearDeclarationsCommand = new AsyncRelayCommand(ClearAllDeclarationsAsync);
             SelectNextDoctorCommand = new RelayCommand(SelectNextDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
             SelectPrevDoctorCommand = new RelayCommand(SelectPrevDoctor, () => CanSwitchDoctors && Doctors.Count > 1);
 
@@ -350,6 +352,61 @@ namespace GrafikoMat.ViewModels
             else
             {
                 System.Diagnostics.Debug.WriteLine($"[SAVE] Skipping Supabase save - repository or unit not available");
+            }
+
+            _onSaveCallback?.Invoke();
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
+            SaveAsyncCommand.NotifyCanExecuteChanged();
+        }
+
+        /// <summary>
+        /// Czyści wszystkie deklaracje dla aktualnie wybranego lekarza i usuwa je z Supabase.
+        /// </summary>
+        private async Task ClearAllDeclarationsAsync()
+        {
+            if (SelectedDoctor == null)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[CLEAR] Czyszczenie deklaracji dla {SelectedDoctor.FullName}");
+
+            // Wyczyść wszystkie symbole w komórkach
+            foreach (var cell in DayCells)
+            {
+                cell.ClearData();
+            }
+
+            // Zaktualizuj shared state
+            CommitChangesToSharedState();
+
+            // Usuń z Supabase jeśli repozytorium jest dostępne
+            if (_declarationRepository != null && _currentUnitId.HasValue)
+            {
+                try
+                {
+                    // Znajdź ID deklaracji dla tego lekarza
+                    var existingDeclaration = await _declarationRepository.GetDeclarationForDoctorAsync(
+                        _currentUnitId.Value,
+                        SelectedDoctor.Id,
+                        Year,
+                        MonthIndex + 1
+                    );
+
+                    if (existingDeclaration != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[CLEAR] Usuwanie deklaracji ID={existingDeclaration.Id} z Supabase");
+                        await _declarationRepository.DeleteDeclarationAsync(existingDeclaration.Id);
+                        System.Diagnostics.Debug.WriteLine($"[CLEAR] Deklaracja usunięta pomyślnie");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[CLEAR] Brak deklaracji w bazie do usunięcia");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CLEAR] ERROR podczas usuwania z Supabase: {ex.Message}");
+                }
             }
 
             _onSaveCallback?.Invoke();
@@ -645,8 +702,10 @@ namespace GrafikoMat.ViewModels
             UpdateSelectionVisuals();
         }
 
-        private void UpdateSelectionVisuals()
+        public void UpdateSelectionVisuals()
         {
+            if (_isDisposed) return;
+
             System.Diagnostics.Debug.WriteLine($"[SELECT] UpdateSelectionVisuals START, SelectedSlots.Count = {SelectedSlots.Count}");
 
             foreach (var cell in DayCells)
@@ -788,13 +847,63 @@ namespace GrafikoMat.ViewModels
         public bool IsSplit { get => _isSplit; set => SetProperty(ref _isSplit, value); }
 
         private string _symbolFull = "";
-        public string SymbolFull { get => _symbolFull; set => SetProperty(ref _symbolFull, value); }
+        public string SymbolFull
+        {
+            get => _symbolFull;
+            set
+            {
+                if (SetProperty(ref _symbolFull, value))
+                {
+                    OnPropertyChanged(nameof(DisplaySymbolFull));
+                }
+            }
+        }
 
         private string _symbolDay = "";
-        public string SymbolDay { get => _symbolDay; set => SetProperty(ref _symbolDay, value); }
+        public string SymbolDay
+        {
+            get => _symbolDay;
+            set
+            {
+                if (SetProperty(ref _symbolDay, value))
+                {
+                    OnPropertyChanged(nameof(DisplaySymbolDay));
+                }
+            }
+        }
 
         private string _symbolNight = "";
-        public string SymbolNight { get => _symbolNight; set => SetProperty(ref _symbolNight, value); }
+        public string SymbolNight
+        {
+            get => _symbolNight;
+            set
+            {
+                if (SetProperty(ref _symbolNight, value))
+                {
+                    OnPropertyChanged(nameof(DisplaySymbolNight));
+                }
+            }
+        }
+
+        // Computed properties dla pełnych nazw deklaracji
+        public string DisplaySymbolFull => ConvertCodeToDisplayName(_symbolFull);
+        public string DisplaySymbolDay => ConvertCodeToDisplayName(_symbolDay);
+        public string DisplaySymbolNight => ConvertCodeToDisplayName(_symbolNight);
+
+        private static string ConvertCodeToDisplayName(string code)
+        {
+            return code switch
+            {
+                "MOG" => "Mogę",
+                "CHC" => "Chcę",
+                "WAR" => "Warunkowo",
+                "REZ" => "Rezerwacja",
+                "DYZ" => "Inny dyżur",
+                "URL" => "Urlop",
+                "---" => "Nie mogę",
+                _ => code // Dla pustego stringa lub nieznanych kodów
+            };
+        }
 
         private bool _isFullSelected;
         public bool IsFullSelected { get => _isFullSelected; private set => SetProperty(ref _isFullSelected, value); }
@@ -860,6 +969,11 @@ namespace GrafikoMat.ViewModels
     // POPRAWKA: Rozszerzenie DeclarationsViewModel o Dispose
     public sealed partial class DeclarationsViewModel
     {
+        /// <summary>
+        /// Sprawdza czy są niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges => _isDirty;
+
         /// <summary>
         /// Zwalnia zasoby używane przez ViewModel.
         /// </summary>

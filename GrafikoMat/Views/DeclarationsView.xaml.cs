@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -26,7 +27,41 @@ namespace GrafikoMat.Views
         public event Action? SaveAndCloseRequested;
         public event Action? CloseRequested;
 
-        public void OnDeclCloseOnly() => CloseRequested?.Invoke();
+        public async void OnDeclCloseOnly()
+        {
+            // Sprawdź czy są niezapisane zmiany
+            if (ViewModel != null && ViewModel.HasUnsavedChanges)
+            {
+                var dialog = App.CreateThemedDialog();
+                dialog.Title = "Niezapisane zmiany";
+                dialog.Content = "Masz niezapisane zmiany w deklaracjach. Co chcesz zrobić?";
+                dialog.PrimaryButtonText = "Zapisz i zamknij";
+                dialog.SecondaryButtonText = "Odrzuć zmiany";
+                dialog.CloseButtonText = "Anuluj";
+                dialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary;
+
+                var result = await dialog.ShowAsync();
+
+                if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                {
+                    // Użytkownik chce zapisać
+                    await ViewModel.SaveAsyncCommand.ExecuteAsync(null);
+                    CloseRequested?.Invoke();
+                }
+                else if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Secondary)
+                {
+                    // Użytkownik odrzuca zmiany - zamknij bez zapisu
+                    CloseRequested?.Invoke();
+                }
+                // Jeśli Close (Anuluj) - nie rób nic
+            }
+            else
+            {
+                // Brak niezapisanych zmian - zamknij od razu
+                CloseRequested?.Invoke();
+            }
+        }
+
         public void OnDeclSaveAndCloseOnly() => SaveAndCloseRequested?.Invoke();
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
@@ -360,11 +395,11 @@ namespace GrafikoMat.Views
             contextMenu.Items.Add(addDeclarationHeader);
 
             // ============================================
-            // SEKCJA 2: Typy deklaracji - PRZESUNIĘTE W PRAWO
+            // SEKCJA 2: Typy deklaracji - PRZESUNIĘTE W PRAWO + podkreślenia dla skrótów
             // ============================================
             var mogeItem = new MenuFlyoutItem
             {
-                Text = "        Mogę (MOG)",
+                Text = "        Mogę (M)",
                 Tag = "MOG",
                 Style = indentedStyle
             };
@@ -373,7 +408,7 @@ namespace GrafikoMat.Views
 
             var chceItem = new MenuFlyoutItem
             {
-                Text = "        Chcę (CHC)",
+                Text = "        Chcę (C)",
                 Tag = "CHC",
                 Style = indentedStyle
             };
@@ -382,7 +417,7 @@ namespace GrafikoMat.Views
 
             var warunkowoItem = new MenuFlyoutItem
             {
-                Text = "        Mogę warunkowo (WAR)",
+                Text = "        Mogę warunkowo (W)",
                 Tag = "WAR",
                 Style = indentedStyle
             };
@@ -391,7 +426,7 @@ namespace GrafikoMat.Views
 
             var rezerwacjaItem = new MenuFlyoutItem
             {
-                Text = "        Rezerwacja (REZ)",
+                Text = "        Rezerwacja (R)",
                 Tag = "REZ",
                 Style = indentedStyle
             };
@@ -400,7 +435,7 @@ namespace GrafikoMat.Views
 
             var nieMogeItem = new MenuFlyoutItem
             {
-                Text = "        Nie mogę (---)",
+                Text = "        Nie mogę (N)",
                 Tag = "---",
                 Style = indentedStyle
             };
@@ -409,7 +444,7 @@ namespace GrafikoMat.Views
 
             var innyDyzurItem = new MenuFlyoutItem
             {
-                Text = "        Inny dyżur (DYZ)",
+                Text = "        Inny dyżur (D)",
                 Tag = "DYZ",
                 Style = indentedStyle
             };
@@ -418,7 +453,7 @@ namespace GrafikoMat.Views
 
             var urlopItem = new MenuFlyoutItem
             {
-                Text = "        Urlop (URL)",
+                Text = "        Urlop (U)",
                 Tag = "URL",
                 Style = indentedStyle
             };
@@ -542,12 +577,69 @@ namespace GrafikoMat.Views
         {
             if (e.Key == VirtualKey.Control) _ctrlDown = true;
             if (e.Key == VirtualKey.Shift) _shiftDown = true;
+
+            // ✅ Skróty klawiaturowe dla deklaracji
+            if (ViewModel != null && ViewModel.SelectedSlots.Any())
+            {
+                string? declarationCode = e.Key switch
+                {
+                    VirtualKey.M => "MOG",     // m - mogę
+                    VirtualKey.C => "CHC",     // c - chcę
+                    VirtualKey.W => "WAR",     // w - mogę warunkowo
+                    VirtualKey.R => "REZ",     // r - rezerwacja
+                    VirtualKey.D => "DYZ",     // d - inny dyżur
+                    VirtualKey.U => "URL",     // u - urlop
+                    VirtualKey.N => "---",     // n - nie mogę
+                    (VirtualKey)189 => "---", // - (klawisz minus, VK_OEM_MINUS)
+                    _ => null
+                };
+
+                if (declarationCode != null)
+                {
+                    ApplyDeclarationToSelectedSlots(declarationCode);
+                    e.Handled = true;
+                }
+            }
         }
 
         private void CalendarGridView_KeyUp(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == VirtualKey.Control) _ctrlDown = false;
             if (e.Key == VirtualKey.Shift) _shiftDown = false;
+        }
+
+        /// <summary>
+        /// Pomocnicza metoda do aplikowania deklaracji na zaznaczone sloty
+        /// </summary>
+        private void ApplyDeclarationToSelectedSlots(string declarationCode)
+        {
+            if (ViewModel == null)
+                return;
+
+            foreach (var selectedSlot in ViewModel.SelectedSlots)
+            {
+                if (selectedSlot.Index < 0 || selectedSlot.Index >= ViewModel.DayCells.Count)
+                    continue;
+
+                var cell = ViewModel.DayCells[selectedSlot.Index];
+                if (!cell.InMonth)
+                    continue;
+
+                switch (selectedSlot.Part)
+                {
+                    case SlotPart.Full:
+                        cell.SymbolFull = declarationCode;
+                        break;
+
+                    case SlotPart.Day:
+                        cell.SymbolDay = declarationCode;
+                        break;
+
+                    case SlotPart.Night:
+                        cell.SymbolNight = declarationCode;
+                        break;
+                }
+            }
         }
 
         private void OnThemeChanged(FrameworkElement sender, object args)
@@ -676,35 +768,7 @@ namespace GrafikoMat.Views
                 return;
 
             System.Diagnostics.Debug.WriteLine($"[MENU] Declaration clicked: {declarationCode}");
-
-            // Zastosuj kod deklaracji do wszystkich zaznaczonych slotów
-            foreach (var selectedSlot in ViewModel.SelectedSlots)
-            {
-                if (selectedSlot.Index < 0 || selectedSlot.Index >= ViewModel.DayCells.Count)
-                    continue;
-
-                var cell = ViewModel.DayCells[selectedSlot.Index];
-                if (!cell.InMonth)
-                    continue;
-
-                switch (selectedSlot.Part)
-                {
-                    case SlotPart.Full:
-                        cell.SymbolFull = declarationCode;
-                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Full slot for day {cell.Date.Day} to {declarationCode}");
-                        break;
-
-                    case SlotPart.Day:
-                        cell.SymbolDay = declarationCode;
-                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Day slot for day {cell.Date.Day} to {declarationCode}");
-                        break;
-
-                    case SlotPart.Night:
-                        cell.SymbolNight = declarationCode;
-                        System.Diagnostics.Debug.WriteLine($"[MENU] Set Night slot for day {cell.Date.Day} to {declarationCode}");
-                        break;
-                }
-            }
+            ApplyDeclarationToSelectedSlots(declarationCode);
         }
 
         /// <summary>
@@ -722,6 +786,9 @@ namespace GrafikoMat.Views
                 .Select(s => s.Index)
                 .Distinct()
                 .ToList();
+
+            // Zapamiętaj zaznaczenie przed zmianą trybu
+            var selectedIndices = new HashSet<int>(uniqueDayIndices);
 
             foreach (var dayIndex in uniqueDayIndices)
             {
@@ -760,8 +827,33 @@ namespace GrafikoMat.Views
                 }
             }
 
-            // Odśwież zaznaczenie
+            // Przywróć zaznaczenie - zaznacz pełne sloty dla zmienionych dni
             ViewModel.ClearSelection();
+            foreach (var dayIndex in selectedIndices)
+            {
+                if (dayIndex < 0 || dayIndex >= ViewModel.DayCells.Count)
+                    continue;
+
+                var cell = ViewModel.DayCells[dayIndex];
+                if (!cell.InMonth)
+                    continue;
+
+                // Zaznacz odpowiedni slot w zależności od nowego trybu
+                if (cell.IsSplit)
+                {
+                    // Tryb 12h - zaznacz oba sloty (dzień i noc)
+                    ViewModel.SelectedSlots.Add(new SelectedSlot(dayIndex, SlotPart.Day));
+                    ViewModel.SelectedSlots.Add(new SelectedSlot(dayIndex, SlotPart.Night));
+                }
+                else
+                {
+                    // Tryb 24h - zaznacz pełny slot
+                    ViewModel.SelectedSlots.Add(new SelectedSlot(dayIndex, SlotPart.Full));
+                }
+            }
+
+            // Odśwież wizualizację zaznaczenia
+            ViewModel.UpdateSelectionVisuals();
         }
 
         private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)

@@ -6,7 +6,7 @@ Pracujemy nad generatorem grafików dyżurów lekarskich w WinUI 3, z podpięcie
 
 
 
-Na początku każdej konwersacji sprawdź aktualny stan kodu programu (treść WSZYSTKICH plików), by mieć pełen kontekst. 
+Na początku każdej konwersacji sprawdź aktualny stan kodu programu (treść WSZYSTKICH plików), by mieć pełen kontekst.
 
 
 
@@ -14,7 +14,9 @@ Gdy użytkownik prosi, byś utworzył nową funkcjonalność lub wprowadził zmi
 
 
 
-W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji, zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian.
+Na koniec modyfikacji plików zawsze przeprowadzaj symulację kompilacji, by od razu poprawić wszystkie błędy oraz ostrzeżenia kompilatora. 
+
+W odpowiedziach nie umieszczaj dokładnych informacji na temat przebiegu modyfikacji; zamiast tego, na końcu zrób krótkie podsumowanie wprowadzonych zmian.
 
 
 

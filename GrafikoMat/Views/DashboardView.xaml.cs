@@ -184,7 +184,7 @@ namespace GrafikoMat.Views
                     }
                     else if (entry.mode == Models.DayMode.Full24)
                     {
-                        content = new TextBlock { Text = entry.full, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
+                        content = new TextBlock { Text = ConvertTo1LetterCode(entry.full), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
                     }
                     else // Split12
                     {
@@ -192,8 +192,8 @@ namespace GrafikoMat.Views
                         g.RowDefinitions.Add(new RowDefinition());
                         g.RowDefinitions.Add(new RowDefinition());
                         g.Children.Add(new Border { BorderBrush = new SolidColorBrush(Colors.Black), BorderThickness = new Thickness(0, 0, 0, 1), VerticalAlignment = VerticalAlignment.Center });
-                        var tb1 = new TextBlock { Text = entry.day, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
-                        var tb2 = new TextBlock { Text = entry.night, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
+                        var tb1 = new TextBlock { Text = ConvertTo1LetterCode(entry.day), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
+                        var tb2 = new TextBlock { Text = ConvertTo1LetterCode(entry.night), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                         Grid.SetRow(tb1, 0); Grid.SetRow(tb2, 1);
                         g.Children.Add(tb1); g.Children.Add(tb2);
                         content = g;
@@ -204,5 +204,26 @@ namespace GrafikoMat.Views
             }
         }
         private static string DowPlShort(DayOfWeek dow) => dow switch { DayOfWeek.Monday => "Pon", DayOfWeek.Tuesday => "Wto", DayOfWeek.Wednesday => "Śro", DayOfWeek.Thursday => "Czw", DayOfWeek.Friday => "Pt", DayOfWeek.Saturday => "Sob", DayOfWeek.Sunday => "Nie", _ => "" };
+
+        /// <summary>
+        /// Konwertuje 3-literowe kody deklaracji na skróty 1-literowe dla dashboard
+        /// </summary>
+        private static string? ConvertTo1LetterCode(string? code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return code;
+
+            return code switch
+            {
+                "MOG" => "M",
+                "CHC" => "C",
+                "WAR" => "W",
+                "REZ" => "R",
+                "DYZ" => "D",
+                "URL" => "U",
+                "---" => "-",
+                _ => code // Dla nieznanych kodów lub już 1-literowych
+            };
+        }
     }
 }

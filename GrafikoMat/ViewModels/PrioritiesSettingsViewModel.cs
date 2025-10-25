@@ -54,6 +54,11 @@ namespace GrafikoMat.ViewModels
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
 
+        /// <summary>
+        /// Sprawdza czy są niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges => _isDirty;
+
         // ZMIANA: Event handler reagujący na zmiany w kolekcji (np. drag & drop)
         private void ActivePriorities_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {

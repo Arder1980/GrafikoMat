@@ -79,7 +79,6 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Spacing="0">
@@ -174,8 +173,6 @@
                             </ItemsControl>
                         </ScrollViewer>
                     </Grid>
-
-                    <Button Grid.Row="2" Content="Zapisz zmiany" Command="{x:Bind ViewModel.SaveDoctorCommand}" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,24,0,0"/>
                 </Grid>
             </Grid>
         </appcontrols:ActionContainer>

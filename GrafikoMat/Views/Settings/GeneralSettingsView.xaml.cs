@@ -18,6 +18,7 @@ namespace GrafikoMat.Views.Settings
             this.InitializeComponent();
             ViewModel = new GeneralSettingsViewModel(settingsService, supabaseService, appSettings);
             this.Loaded += OnLoaded;
+            this.Unloaded += OnUnloaded;
         }
 
         private void OnLoaded(object sender, RoutedEventArgs e)
@@ -28,6 +29,12 @@ namespace GrafikoMat.Views.Settings
                 new UiAction("Zapisz ustawienia", ViewModel.SaveCommand, isPrimary: true)
             };
             ActionsChanged?.Invoke(actions);
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            // Przywróć oryginalny motyw jeśli były niezapisane zmiany
+            ViewModel.RestoreOriginalThemeIfDirty();
         }
     }
 }

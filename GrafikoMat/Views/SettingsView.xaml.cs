@@ -40,7 +40,8 @@ namespace GrafikoMat.Views
         new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
     };
 
-            SettingsMenu.SelectedIndex = -1;
+            // Domyślnie wybierz "Ustawienia Ogólne" przy wejściu
+            SettingsMenu.SelectedIndex = 0;
         }
         public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, SupabaseService supabaseService, AppSettings settings)
         {
@@ -48,6 +49,108 @@ namespace GrafikoMat.Views
             _settingsService = settingsService;
             _supabaseService = supabaseService;
             _appSettings = settings;
+        }
+
+        /// <summary>
+        /// Sprawdza czy którykolwiek z podwidoków ustawień ma niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges()
+        {
+            System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] SettingsDetailContent.Content type: {SettingsDetailContent.Content?.GetType().Name}");
+
+            // Sprawdź aktualnie wyświetlany widok
+            if (SettingsDetailContent.Content is Controls.ActionContainer container)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found ActionContainer, Content type: {container.Content?.GetType().Name}");
+
+                if (container.Content is Settings.GeneralSettingsView generalView)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found GeneralSettingsView, HasUnsavedChanges: {generalView.ViewModel.HasUnsavedChanges}");
+                    return generalView.ViewModel.HasUnsavedChanges;
+                }
+                else if (container.Content is Settings.PrioritiesSettingsView prioritiesView)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found PrioritiesSettingsView, HasUnsavedChanges: {prioritiesView.ViewModel.HasUnsavedChanges}");
+                    return prioritiesView.ViewModel.HasUnsavedChanges;
+                }
+                else if (container.Content is Settings.EngineSettingsView engineView)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found EngineSettingsView, HasUnsavedChanges: {engineView.ViewModel.HasUnsavedChanges}");
+                    return engineView.ViewModel.HasUnsavedChanges;
+                }
+            }
+            else if (SettingsDetailContent.Content is Settings.GeneralSettingsView generalView)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found GeneralSettingsView (no container), HasUnsavedChanges: {generalView.ViewModel.HasUnsavedChanges}");
+                return generalView.ViewModel.HasUnsavedChanges;
+            }
+            else if (SettingsDetailContent.Content is Settings.PrioritiesSettingsView prioritiesView)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found PrioritiesSettingsView (no container), HasUnsavedChanges: {prioritiesView.ViewModel.HasUnsavedChanges}");
+                return prioritiesView.ViewModel.HasUnsavedChanges;
+            }
+            else if (SettingsDetailContent.Content is Settings.EngineSettingsView engineView)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsView.HasUnsavedChanges] Found EngineSettingsView (no container), HasUnsavedChanges: {engineView.ViewModel.HasUnsavedChanges}");
+                return engineView.ViewModel.HasUnsavedChanges;
+            }
+
+            System.Diagnostics.Debug.WriteLine("[SettingsView.HasUnsavedChanges] No matching view found, returning false");
+            return false;
+        }
+
+        /// <summary>
+        /// Zapisuje aktualne ustawienia w podwidoku.
+        /// </summary>
+        public async Task SaveCurrentSettingsAsync()
+        {
+            if (SettingsDetailContent.Content is Controls.ActionContainer container)
+            {
+                if (container.Content is Settings.GeneralSettingsView generalView)
+                {
+                    await generalView.ViewModel.SaveCommand.ExecuteAsync(null);
+                }
+                else if (container.Content is Settings.PrioritiesSettingsView prioritiesView)
+                {
+                    await prioritiesView.ViewModel.SaveCommand.ExecuteAsync(null);
+                }
+                else if (container.Content is Settings.EngineSettingsView engineView)
+                {
+                    await engineView.ViewModel.SaveCommand.ExecuteAsync(null);
+                }
+            }
+            else if (SettingsDetailContent.Content is Settings.GeneralSettingsView generalView)
+            {
+                await generalView.ViewModel.SaveCommand.ExecuteAsync(null);
+            }
+            else if (SettingsDetailContent.Content is Settings.PrioritiesSettingsView prioritiesView)
+            {
+                await prioritiesView.ViewModel.SaveCommand.ExecuteAsync(null);
+            }
+            else if (SettingsDetailContent.Content is Settings.EngineSettingsView engineView)
+            {
+                await engineView.ViewModel.SaveCommand.ExecuteAsync(null);
+            }
+        }
+
+        /// <summary>
+        /// Przywraca oryginalne ustawienia w podwidoku (odrzuca zmiany).
+        /// </summary>
+        public void RestoreOriginalSettings()
+        {
+            if (SettingsDetailContent.Content is Controls.ActionContainer container)
+            {
+                if (container.Content is Settings.GeneralSettingsView generalView)
+                {
+                    generalView.ViewModel.RestoreOriginalThemeIfDirty();
+                }
+                // Dla innych widoków nie ma specjalnej logiki przywracania (tylko GeneralSettings ma motyw)
+            }
+            else if (SettingsDetailContent.Content is Settings.GeneralSettingsView generalView)
+            {
+                generalView.ViewModel.RestoreOriginalThemeIfDirty();
+            }
+            // Dla PrioritiesSettings i EngineSettings nie ma specjalnej logiki przywracania
         }
 
         private void SettingsMenu_SelectionChanged(object sender, SelectionChangedEventArgs e)

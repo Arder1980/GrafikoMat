@@ -21,6 +21,7 @@ namespace GrafikoMat.ViewModels
         private Guid _viewId;
         private bool _isInitializing = true;
         private bool _isDirty = false;
+        private AppTheme _originalTheme; // Zapamiętujemy oryginalny motyw
 
         // === MOTYW ===
         private AppTheme _selectedTheme;
@@ -238,6 +239,7 @@ namespace GrafikoMat.ViewModels
 
             // Załaduj aktualne wartości
             _selectedTheme = appSettings.Theme;
+            _originalTheme = appSettings.Theme; // Zapamiętaj oryginalny motyw
             _timeoutMinutesValue = appSettings.TimeoutMinutes;
             _timeoutBehavior = appSettings.TimeoutBehavior;
             _appLogLevel = appSettings.AppLogLevel;
@@ -261,6 +263,24 @@ namespace GrafikoMat.ViewModels
         }
 
         public void SetViewId(Guid viewId) => _viewId = viewId;
+
+        /// <summary>
+        /// Sprawdza czy są niezapisane zmiany.
+        /// </summary>
+        public bool HasUnsavedChanges => _isDirty;
+
+        /// <summary>
+        /// Przywraca oryginalny motyw jeśli były niezapisane zmiany.
+        /// Wywołaj to przy opuszczaniu widoku ustawień (Unloaded).
+        /// </summary>
+        public void RestoreOriginalThemeIfDirty()
+        {
+            if (_isDirty && _selectedTheme != _originalTheme)
+            {
+                // Przywróć oryginalny motyw wizualnie
+                ApplyThemeChangeVisually(_originalTheme);
+            }
+        }
 
         private void MarkAsDirty()
         {
@@ -386,6 +406,7 @@ namespace GrafikoMat.ViewModels
                 );
 
                 _appSettings = newSettings;
+                _originalTheme = SelectedTheme; // Zaktualizuj oryginalny motyw po zapisie
                 _isDirty = false;
                 SaveCommand.NotifyCanExecuteChanged();
                 WeakReferenceMessenger.Default.Send(new SettingsHaveChangedMessage());

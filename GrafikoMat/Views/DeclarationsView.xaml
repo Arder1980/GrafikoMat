@@ -18,10 +18,12 @@
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33000000"/>
                     <SolidColorBrush x:Key="CalendarCellHeaderSeparatorBrush" Color="#1A000000"/>
+                    <x:Double x:Key="DayNightGlyphOpacity">0.25</x:Double>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="CalendarCellBorderBrush" Color="#33FFFFFF"/>
                     <SolidColorBrush x:Key="CalendarCellHeaderSeparatorBrush" Color="#1AFFFFFF"/>
+                    <x:Double x:Key="DayNightGlyphOpacity">0.06</x:Double>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -55,8 +57,10 @@
             <Style TargetType="TextBlock" x:Key="SymbolTextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="HorizontalAlignment" Value="Center"/>
-                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="FontSize" Value="20"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="TextWrapping" Value="NoWrap"/>
+                <Setter Property="TextAlignment" Value="Center"/>
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>
@@ -216,15 +220,15 @@
                                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
                                                             Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                     <Viewbox MaxHeight="24" MaxWidth="24">
-                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                     </Viewbox>
                                                     <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
                                                     <Viewbox MaxHeight="22" MaxWidth="22">
-                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                        <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                     </Viewbox>
                                                 </StackPanel>
 
-                                                <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolFull, Mode=OneWay}"
+                                                <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolFull, Mode=OneWay}"
                                                           Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
                                             </Grid>
 
@@ -236,16 +240,16 @@
                                                 </Grid.RowDefinitions>
                                                 <Viewbox Grid.Row="0" MaxHeight="24" MaxWidth="24" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                          Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                 </Viewbox>
                                                 <Viewbox Grid.Row="1" MaxHeight="22" MaxWidth="22" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                          Visibility="{x:Bind InMonth, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="0.25" IsHitTestVisible="False"/>
+                                                    <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                 </Viewbox>
                                                 <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-                                                <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolDay, Mode=OneWay}"
+                                                <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolDay, Mode=OneWay}"
                                                           Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-                                                <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind SymbolNight, Mode=OneWay}"
+                                                <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolNight, Mode=OneWay}"
                                                           Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
                                             </Grid>
                                         </Grid>
