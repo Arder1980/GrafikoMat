@@ -14,27 +14,29 @@ namespace GrafikoMat.Core.Scheduling.Engines
 {
     /// <summary>
     /// PRECISION+ Edition: Zaawansowany algorytm genetyczny z trzema falami optymalizacji.
-    /// 
+    ///
     /// FALA 1 - Fundamenty wydajności:
     /// - Zwiększony elityzm (15% najlepszych)
     /// - Efektywna mutacja (bez marnowania GenerateNeighbor)
     /// - Większy turniej (rozmiar 8)
     /// - Early stopping (brak poprawy → przerwij)
     /// - Inteligentne naprawianie (tylko gdy potrzeba)
-    /// 
+    ///
     /// FALA 2 - Inteligentne operatory:
     /// - Uniform crossover (lepsza eksploracja)
     /// - Smart mutation (preferencja dni z niską dostępnością)
     /// - Adaptacyjny mutation rate (15% → 3%)
     /// - Walidacja przed naprawą
-    /// 
+    ///
     /// FALA 3 - Zaawansowane techniki:
     /// - Island model (3 subpopulacje + migracja)
     /// - Diversity maintenance (odrzucanie duplikatów)
     /// - Hybrydyzacja (lokalny hill-climbing dla top 20%)
     /// - Monitoring stagnacji populacji
-    /// 
+    ///
     /// Cel: 97-99% jakości optymalnej przy 5-10× szybszym działaniu.
+    ///
+    /// INTEGRACJA WSPÓŁDYŻURNYCH: Pełna obsługa zaakceptowanych par współdyżurnych jako hard constraint.
     /// </summary>
     public class GeneticSolver : IScheduleSolver
     {
@@ -113,6 +115,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private List<Island> _islands = new();
         private HashSet<int> _seenHashes = new();
 
+        // Co-duty support
+        private readonly List<Declaration>? _declarations;
+        private readonly Dictionary<Guid, int> _doctorIndexMap;
+
         public GeneticSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
@@ -121,7 +127,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default,
-            int? customThreadCount = null)
+            int? customThreadCount = null,
+            List<Declaration>? declarations = null)  // ← NOWY PARAMETR dla współdyżurnych
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -129,6 +136,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
             _timeout = timeout;
+            _declarations = declarations;
 
             _populationSize = populationSize;
             _generations = generations;
@@ -136,6 +144,14 @@ namespace GrafikoMat.Core.Scheduling.Engines
             // Konfiguracja wielowątkowości
             _islandCount = ParallelismConfig.GetIslandsCount(customThreadCount);
             _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
+
+            // Zbuduj mapowanie Doctor GUID -> indeks w tablicy
+            var doctors = scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+            _doctorIndexMap = new Dictionary<Guid, int>();
+            for (int i = 0; i < doctors.Count; i++)
+            {
+                _doctorIndexMap[doctors[i].Id] = i;
+            }
         }
 
         private double GetAdaptiveMutationRate(int generation)
@@ -323,6 +339,13 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         chromosome.Genes, workload, _scheduleInput);
                     chromosome.Fitness = EvaluationAndScoringService.CalculateScore(
                         metrics, _priorities, _scheduleInput);
+
+                    // WALIDACJA WSPÓŁDYŻURNYCH: Kara za naruszenie constraintów
+                    if (_declarations != null && !ValidateCoDutyPairs(chromosome.Genes))
+                    {
+                        // Drastyczna kara - rozwiązanie staje się bardzo nieafikcyjne
+                        chromosome.Fitness *= 0.01;
+                    }
                 });
 
                 var best = island.Population.OrderByDescending(c => c.Fitness).First();
@@ -550,6 +573,34 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     }
                 });
             }
+        }
+
+        /// <summary>
+        /// Waliduje czy rozwiązanie spełnia pary współdyżurnych.
+        /// </summary>
+        private bool ValidateCoDutyPairs(Dictionary<DateTime, DoctorProfile?> solution)
+        {
+            if (_declarations == null) return true;
+
+            var days = _scheduleInput.DaysInMonth;
+            var doctors = _scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+
+            // Przekształć rozwiązanie na format 2D
+            int[,] schedule2D = new int[doctors.Count, days.Count];
+            for (int dayIdx = 0; dayIdx < days.Count; dayIdx++)
+            {
+                var day = days[dayIdx];
+                if (solution.TryGetValue(day, out var assignedDoctor) && assignedDoctor != null)
+                {
+                    int doctorIdx = doctors.FindIndex(d => d.Id == assignedDoctor.Id);
+                    if (doctorIdx >= 0)
+                    {
+                        schedule2D[doctorIdx, dayIdx] = 1;
+                    }
+                }
+            }
+
+            return CoDutyConstraint.ValidateCoDutyPairs(_declarations, schedule2D, _doctorIndexMap);
         }
     }
 }

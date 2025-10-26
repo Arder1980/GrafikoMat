@@ -14,19 +14,21 @@ namespace GrafikoMat.Core.Scheduling.Engines
 {
     /// <summary>
     /// Implementacja algorytmu kolonii mrówek (ACO) z timeoutem.
-    /// 
+    ///
     /// WERSJA: PRECISION+ (Adaptive Beta + optymalizacje dla jakości 97-99%)
-    /// 
+    ///
     /// Kluczowe ulepszenia:
     /// - Adaptive Beta: 5.0 → 2.0 (początkowo słucha heurystyki, potem feromonów)
     /// - Elite Strategy: top 5 rozwiązań wzmacnia feromony (rank-based weights)
     /// - Early Stopping: zatrzymuje się po 25 generacjach bez poprawy >0.1%
     /// - Naprawiona formuła feromonowa: sensowna akumulacja śladów
     /// - Zredukowane parowanie: 0.15 zamiast 0.5 (lepsza pamięć algorytmu)
-    /// 
+    ///
     /// Docelowa wydajność:
     /// - 75-80% redukcja czasu obliczeń vs wersja bazowa
     /// - Jakość rozwiązań: 97-99% optimum
+    ///
+    /// INTEGRACJA WSPÓŁDYŻURNYCH: Pełna obsługa zaakceptowanych par współdyżurnych jako hard constraint.
     /// </summary>
     public class AntColonySolver : IScheduleSolver
     {
@@ -54,6 +56,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private int _currentGeneration;
         private int _noImprovementCount;
 
+        // Co-duty support
+        private readonly List<Declaration>? _declarations;
+        private readonly Dictionary<Guid, int> _doctorIndexMap;
+
         public AntColonySolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
@@ -62,7 +68,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default,
-            int? customThreadCount = null)
+            int? customThreadCount = null,
+            List<Declaration>? declarations = null)  // ← NOWY PARAMETR dla współdyżurnych
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -70,6 +77,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
             _timeout = timeout;
+            _declarations = declarations;
 
             _numAnts = numAnts;
             _maxGenerations = maxGenerations;
@@ -78,6 +86,14 @@ namespace GrafikoMat.Core.Scheduling.Engines
 
             // Konfiguracja wielowątkowości
             _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
+
+            // Zbuduj mapowanie Doctor GUID -> indeks w tablicy
+            var doctors = scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+            _doctorIndexMap = new Dictionary<Guid, int>();
+            for (int i = 0; i < doctors.Count; i++)
+            {
+                _doctorIndexMap[doctors[i].Id] = i;
+            }
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -124,6 +140,15 @@ namespace GrafikoMat.Core.Scheduling.Engines
                             x.Metrics,
                             _priorities,
                             _scheduleInput)
+                    })
+                    .Select(x => new
+                    {
+                        x.Solution,
+                        x.Metrics,
+                        // WALIDACJA WSPÓŁDYŻURNYCH: Kara za naruszenie constraintów
+                        Fitness = (_declarations != null && !ValidateCoDutyPairs(x.Solution))
+                            ? x.Fitness * 0.01
+                            : x.Fitness
                     })
                     .OrderByDescending(x => x.Fitness)
                     .Take(ELITE_COUNT)
@@ -311,6 +336,34 @@ namespace GrafikoMat.Core.Scheduling.Engines
                     _pheromoneMatrix[entry.Key][entry.Value.Abbreviation] += pheromoneDeposit;
                 }
             }
+        }
+
+        /// <summary>
+        /// Waliduje czy rozwiązanie spełnia pary współdyżurnych.
+        /// </summary>
+        private bool ValidateCoDutyPairs(Dictionary<DateTime, DoctorProfile?> solution)
+        {
+            if (_declarations == null) return true;
+
+            var days = _scheduleInput.DaysInMonth;
+            var doctors = _scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+
+            // Przekształć rozwiązanie na format 2D
+            int[,] schedule2D = new int[doctors.Count, days.Count];
+            for (int dayIdx = 0; dayIdx < days.Count; dayIdx++)
+            {
+                var day = days[dayIdx];
+                if (solution.TryGetValue(day, out var assignedDoctor) && assignedDoctor != null)
+                {
+                    int doctorIdx = doctors.FindIndex(d => d.Id == assignedDoctor.Id);
+                    if (doctorIdx >= 0)
+                    {
+                        schedule2D[doctorIdx, dayIdx] = 1;
+                    }
+                }
+            }
+
+            return CoDutyConstraint.ValidateCoDutyPairs(_declarations, schedule2D, _doctorIndexMap);
         }
     }
 }

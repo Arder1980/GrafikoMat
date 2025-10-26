@@ -545,6 +545,24 @@ namespace GrafikoMat.ViewModels
                 TabuMaxIterations = settings.TabuMaxIterations
             };
 
+            // Pobierz deklaracje dla współdyżurnych (jeśli istnieje repozytorium)
+            List<Declaration>? declarations = null;
+            if (_declarationRepository != null && ActiveUnit != null)
+            {
+                try
+                {
+                    declarations = await _declarationRepository.GetDeclarationsForUnitMonthAsync(
+                        ActiveUnit.Id,
+                        SelectedYear,
+                        SelectedMonthIndex + 1);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[GENERATE] Błąd pobierania deklaracji: {ex.Message}");
+                    // Nie blokujemy generowania - po prostu nie będzie współdyżurnych
+                }
+            }
+
             // Wykryj czy solver jest deterministyczny (nie ma sensownego progressu 0-100%)
             bool isDeterministicSolver = SolverMessages.IsDeterministicSolver(settings.SelectedSolver);
 
@@ -573,7 +591,7 @@ namespace GrafikoMat.ViewModels
                         // Pobierz odpowiedni komunikat dla tego solvera i postępu
                         string statusText = SolverMessages.GetStatusMessage(settings.SelectedSolver, p);
                         progress.Report((p, statusText));
-                    }), token: cancellationToken);
+                    }), token: cancellationToken, declarations: declarations);
 
                     // POPRAWKA: FindOptimalSolution() już obsługuje CancellationToken wewnętrznie
                     // Task.Run nie jest potrzebny - solver sam zarządza wątkami

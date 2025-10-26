@@ -34,6 +34,11 @@ namespace GrafikoMat.ViewModels
     {
         private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
+
+        /// <summary>
+        /// Event wywoływany po zapisaniu deklaracji do bazy.
+        /// </summary>
+        public event EventHandler? DeclarationsSaved;
         private bool _use12hShiftsByDefault;
         private MonthLayout _monthLayout;
         private bool _isDisposed;
@@ -226,7 +231,7 @@ namespace GrafikoMat.ViewModels
             SaveCommand.NotifyCanExecuteChanged();
         }
 
-        private void LoadDeclarationsForSelectedDoctor()
+        public void LoadDeclarationsForSelectedDoctor()
         {
             _isLoading = true; // Wyłącz dirty tracking podczas ładowania
             ClearSelection();
@@ -277,6 +282,45 @@ namespace GrafikoMat.ViewModels
                         cell.SymbolFull = d.Full ?? "";
                         cell.SymbolDay = d.Day ?? "";
                         cell.SymbolNight = d.Night ?? "";
+
+                        // WSPÓŁDYŻURNI: Wypełnij informacje o partnerze
+                        if (d.CoDutyPartnerId.HasValue)
+                        {
+                            var partner = Doctors.FirstOrDefault(doc => doc.Profile.Id == d.CoDutyPartnerId.Value);
+                            string partnerDisplayName = partner != null
+                                ? $"+ {partner.Profile.LastName} {partner.Profile.FirstName}"
+                                : "+ ?";
+                            string statusGlyph = d.CoDutyStatus == "accepted" ? "👥" : "⏳";
+
+                            // Użyj CoDutySlotPart aby określić który slot ustawić
+                            string slotPart = d.CoDutySlotPart ?? "full";
+
+                            if (slotPart == "full" || d.Mode == DayMode.Full24)
+                            {
+                                cell.CoDutyPartnerFull = partnerDisplayName;
+                                cell.CoDutyStatusGlyphFull = statusGlyph;
+                            }
+                            else if (slotPart == "day")
+                            {
+                                cell.CoDutyPartnerDay = partnerDisplayName;
+                                cell.CoDutyStatusGlyphDay = statusGlyph;
+                            }
+                            else if (slotPart == "night")
+                            {
+                                cell.CoDutyPartnerNight = partnerDisplayName;
+                                cell.CoDutyStatusGlyphNight = statusGlyph;
+                            }
+                        }
+                        else
+                        {
+                            // Wyczyść pola współdyżurnych
+                            cell.CoDutyPartnerFull = "";
+                            cell.CoDutyStatusGlyphFull = "";
+                            cell.CoDutyPartnerDay = "";
+                            cell.CoDutyStatusGlyphDay = "";
+                            cell.CoDutyPartnerNight = "";
+                            cell.CoDutyStatusGlyphNight = "";
+                        }
                     }
                 }
             }
@@ -294,33 +338,56 @@ namespace GrafikoMat.ViewModels
             if (SelectedDoctor == null) return;
             var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
-            var result = new DoctorMonthDeclaration
-            {
-                Doctor = SelectedDoctor.FullName,
-                Year = Year,
-                MonthIndex = MonthIndex,
-                Days = Enumerable.Range(0, daysInMonth).Select(_ => new DayDeclaration()).ToArray()
-            };
 
+            // Pobierz istniejącą deklarację lub utwórz nową
+            if (!_sharedDeclarations.TryGetValue(key, out var existingDeclaration))
+            {
+                existingDeclaration = new DoctorMonthDeclaration
+                {
+                    Doctor = SelectedDoctor.FullName,
+                    Year = Year,
+                    MonthIndex = MonthIndex,
+                    Days = Enumerable.Range(0, daysInMonth).Select(_ => new DayDeclaration()).ToArray()
+                };
+            }
+
+            // Aktualizuj tylko symbole dyżurów (zachowaj pola co-duty)
             foreach (var cell in DayCells.Where(c => c.InMonth))
             {
                 int dayIdx = cell.Date.Day - 1;
-                if (dayIdx < 0 || dayIdx >= result.Days.Length) continue;
+                if (dayIdx < 0 || dayIdx >= existingDeclaration.Days.Length) continue;
+
+                // Zachowaj pola co-duty z istniejącej deklaracji
+                var existingCoDutyPartnerId = existingDeclaration.Days[dayIdx].CoDutyPartnerId;
+                var existingCoDutyStatus = existingDeclaration.Days[dayIdx].CoDutyStatus;
+                var existingCoDutyInitiatorId = existingDeclaration.Days[dayIdx].CoDutyInitiatorId;
+                var existingCoDutySlotPart = existingDeclaration.Days[dayIdx].CoDutySlotPart;
 
                 if (!cell.IsSplit)
                 {
-                    result.Days[dayIdx].Mode = DayMode.Full24;
-                    result.Days[dayIdx].Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
+                    existingDeclaration.Days[dayIdx].Mode = DayMode.Full24;
+                    existingDeclaration.Days[dayIdx].Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
                 }
                 else
                 {
-                    result.Days[dayIdx].Mode = DayMode.Split12;
-                    result.Days[dayIdx].Day = string.IsNullOrWhiteSpace(cell.SymbolDay) ? null : cell.SymbolDay;
-                    result.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
+                    existingDeclaration.Days[dayIdx].Mode = DayMode.Split12;
+                    existingDeclaration.Days[dayIdx].Day = string.IsNullOrWhiteSpace(cell.SymbolDay) ? null : cell.SymbolDay;
+                    existingDeclaration.Days[dayIdx].Night = string.IsNullOrWhiteSpace(cell.SymbolNight) ? null : cell.SymbolNight;
+                }
+
+                // Przywróć pola co-duty
+                existingDeclaration.Days[dayIdx].CoDutyPartnerId = existingCoDutyPartnerId;
+                existingDeclaration.Days[dayIdx].CoDutyStatus = existingCoDutyStatus;
+                existingDeclaration.Days[dayIdx].CoDutyInitiatorId = existingCoDutyInitiatorId;
+                existingDeclaration.Days[dayIdx].CoDutySlotPart = existingCoDutySlotPart;
+
+                if (existingCoDutyPartnerId.HasValue)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[COMMIT] Dzień {dayIdx + 1}: Przywrócono CoDuty - partnerId={existingCoDutyPartnerId}, status={existingCoDutyStatus}, slotPart={existingCoDutySlotPart}");
                 }
             }
 
-            _sharedDeclarations[key] = result;
+            _sharedDeclarations[key] = existingDeclaration;
         }
 
         private async Task DoSaveAsync()
@@ -358,6 +425,9 @@ namespace GrafikoMat.ViewModels
             _isDirty = false;
             SaveCommand.NotifyCanExecuteChanged();
             SaveAsyncCommand.NotifyCanExecuteChanged();
+
+            // Wywołaj event po zapisie - DeclarationsView użyje tego do wysłania powiadomień
+            DeclarationsSaved?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -477,7 +547,12 @@ namespace GrafikoMat.ViewModels
                                     Mode = dayDto.Mode == "Split12" ? DayMode.Split12 : DayMode.Full24,
                                     Full = dayDto.Full,
                                     Day = dayDto.DaySlot,
-                                    Night = dayDto.Night
+                                    Night = dayDto.Night,
+                                    // Współdyżurni
+                                    CoDutyPartnerId = dayDto.CoDutyPartnerId,
+                                    CoDutyStatus = dayDto.CoDutyStatus,
+                                    CoDutyInitiatorId = dayDto.CoDutyInitiatorId,
+                                    CoDutySlotPart = dayDto.CoDutySlotPart
                                 };
                                 System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Dzień {dayDto.Day}: mode={dayDto.Mode}, full={dayDto.Full}, day={dayDto.DaySlot}, night={dayDto.Night}");
                             }
@@ -525,6 +600,10 @@ namespace GrafikoMat.ViewModels
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
             var days = new List<DayDeclarationDto>();
 
+            // Pobierz lokalną deklarację z _sharedDeclarations (zawiera pola co-duty)
+            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            _sharedDeclarations.TryGetValue(key, out var localDeclaration);
+
             // Konwertuj dane z DayCells do formatu JSON
             foreach (var cell in DayCells.Where(c => c.InMonth))
             {
@@ -544,6 +623,24 @@ namespace GrafikoMat.ViewModels
                 else
                 {
                     dayDto.Full = string.IsNullOrWhiteSpace(cell.SymbolFull) ? null : cell.SymbolFull;
+                }
+
+                // Skopiuj pola współdyżurnego z lokalnej deklaracji
+                if (localDeclaration != null)
+                {
+                    int dayIndex = dayNumber - 1;
+                    if (dayIndex >= 0 && dayIndex < localDeclaration.Days.Length)
+                    {
+                        dayDto.CoDutyPartnerId = localDeclaration.Days[dayIndex].CoDutyPartnerId;
+                        dayDto.CoDutyStatus = localDeclaration.Days[dayIndex].CoDutyStatus;
+                        dayDto.CoDutyInitiatorId = localDeclaration.Days[dayIndex].CoDutyInitiatorId;
+                        dayDto.CoDutySlotPart = localDeclaration.Days[dayIndex].CoDutySlotPart;
+
+                        if (dayDto.CoDutyPartnerId.HasValue)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SAVE] Dzień {dayNumber}: CoDuty - partnerId={dayDto.CoDutyPartnerId}, status={dayDto.CoDutyStatus}, slotPart={dayDto.CoDutySlotPart}");
+                        }
+                    }
                 }
 
                 days.Add(dayDto);
@@ -579,6 +676,45 @@ namespace GrafikoMat.ViewModels
 
             await _declarationRepository.SaveDeclarationAsync(declaration);
             System.Diagnostics.Debug.WriteLine($"[SAVE] Deklaracja zapisana pomyślnie");
+        }
+
+        /// <summary>
+        /// Zwraca listę dni gdzie użytkownik jest inicjatorem współdyżuru z statusem "pending".
+        /// Format: (day, partnerId, slotPart)
+        /// </summary>
+        public List<(int Day, Guid PartnerId, string SlotPart)> GetPendingCoDutyNotificationsToSend()
+        {
+            var result = new List<(int Day, Guid PartnerId, string SlotPart)>();
+
+            if (SelectedDoctor == null)
+                return result;
+
+            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            if (!_sharedDeclarations.TryGetValue(key, out var declaration))
+                return result;
+
+            for (int i = 0; i < declaration.Days.Length; i++)
+            {
+                var day = declaration.Days[i];
+
+                // Sprawdź czy jestem inicjatorem i status to "pending"
+                if (day.CoDutyInitiatorId == SelectedDoctor.Id &&
+                    day.CoDutyStatus == "pending" &&
+                    day.CoDutyPartnerId.HasValue)
+                {
+                    int dayNumber = i + 1;
+
+                    // Użyj zapisanego CoDutySlotPart lub domyślnie "full"
+                    string slotPart = day.CoDutySlotPart ?? "full";
+
+                    result.Add((dayNumber, day.CoDutyPartnerId.Value, slotPart));
+
+                    System.Diagnostics.Debug.WriteLine($"[GetPendingNotifications] Dzień {dayNumber}: partner={day.CoDutyPartnerId.Value}, slotPart={slotPart}");
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[GetPendingNotifications] Znaleziono {result.Count} powiadomień do wysłania");
+            return result;
         }
 
         public void SelectSingleSlot(int index, SlotPart part)
@@ -920,6 +1056,28 @@ namespace GrafikoMat.ViewModels
         private Thickness _nightSelectionBorderThickness = new Thickness(0);
         public Thickness NightSelectionBorderThickness { get => _nightSelectionBorderThickness; private set => SetProperty(ref _nightSelectionBorderThickness, value); }
 
+        // ============================================================================
+        // Pola dla współdyżurnych
+        // ============================================================================
+
+        private string _coDutyPartnerFull = "";
+        public string CoDutyPartnerFull { get => _coDutyPartnerFull; set => SetProperty(ref _coDutyPartnerFull, value); }
+
+        private string _coDutyPartnerDay = "";
+        public string CoDutyPartnerDay { get => _coDutyPartnerDay; set => SetProperty(ref _coDutyPartnerDay, value); }
+
+        private string _coDutyPartnerNight = "";
+        public string CoDutyPartnerNight { get => _coDutyPartnerNight; set => SetProperty(ref _coDutyPartnerNight, value); }
+
+        private string _coDutyStatusGlyphFull = "";
+        public string CoDutyStatusGlyphFull { get => _coDutyStatusGlyphFull; set => SetProperty(ref _coDutyStatusGlyphFull, value); }
+
+        private string _coDutyStatusGlyphDay = "";
+        public string CoDutyStatusGlyphDay { get => _coDutyStatusGlyphDay; set => SetProperty(ref _coDutyStatusGlyphDay, value); }
+
+        private string _coDutyStatusGlyphNight = "";
+        public string CoDutyStatusGlyphNight { get => _coDutyStatusGlyphNight; set => SetProperty(ref _coDutyStatusGlyphNight, value); }
+
         public void UpdateSelection(HashSet<SlotPart> selectedParts)
         {
             IsFullSelected = selectedParts.Contains(SlotPart.Full);
@@ -973,6 +1131,31 @@ namespace GrafikoMat.ViewModels
         /// Sprawdza czy są niezapisane zmiany.
         /// </summary>
         public bool HasUnsavedChanges => _isDirty;
+
+        /// <summary>
+        /// Aktualizuje pola współdyżurnego dla konkretnego dnia w lokalnych deklaracjach.
+        /// </summary>
+        public void UpdateCoDutyFields(string doctorFullName, int day, Guid? partnerId, string? status, Guid? initiatorId, string? slotPart)
+        {
+            var key = Key(doctorFullName, Year, MonthIndex);
+            if (!_sharedDeclarations.TryGetValue(key, out var declaration))
+            {
+                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Nie znaleziono deklaracji dla {doctorFullName}");
+                return;
+            }
+
+            int dayIndex = day - 1;
+            if (dayIndex >= 0 && dayIndex < declaration.Days.Length)
+            {
+                declaration.Days[dayIndex].CoDutyPartnerId = partnerId;
+                declaration.Days[dayIndex].CoDutyStatus = status;
+                declaration.Days[dayIndex].CoDutyInitiatorId = initiatorId;
+                declaration.Days[dayIndex].CoDutySlotPart = slotPart;
+
+                _isDirty = true;
+                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Zaktualizowano dzień {day} dla {doctorFullName}: partner={partnerId}, status={status}, slotPart={slotPart}");
+            }
+        }
 
         /// <summary>
         /// Zwalnia zasoby używane przez ViewModel.

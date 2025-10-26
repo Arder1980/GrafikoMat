@@ -102,5 +102,47 @@ namespace GrafikoMat.Repositories
                 .Where(d => d.Id == declarationId)
                 .Delete();
         }
+
+        public async Task DeleteDayDeclarationAsync(Guid doctorId, Guid unitId, int year, int month, int day, string slotPart)
+        {
+            if (_supabase == null)
+                throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
+
+            // Pobierz deklarację lekarza dla tego miesiąca
+            var declaration = await GetDeclarationForDoctorAsync(unitId, doctorId, year, month);
+            if (declaration?.DeclarationDataJson?.Days == null)
+                return;
+
+            // Znajdź i usuń deklarację dla tego konkretnego dnia i slotu
+            var dayDecl = declaration.DeclarationDataJson.Days.FirstOrDefault(d => d.Day == day);
+            if (dayDecl == null)
+                return;
+
+            // Wyczyść odpowiedni slot
+            switch (slotPart.ToLowerInvariant())
+            {
+                case "full":
+                    dayDecl.Full = null;
+                    dayDecl.CoDutyPartnerId = null;
+                    dayDecl.CoDutyStatus = null;
+                    dayDecl.CoDutyInitiatorId = null;
+                    break;
+                case "day":
+                    dayDecl.DaySlot = null;
+                    dayDecl.CoDutyPartnerId = null;
+                    dayDecl.CoDutyStatus = null;
+                    dayDecl.CoDutyInitiatorId = null;
+                    break;
+                case "night":
+                    dayDecl.Night = null;
+                    dayDecl.CoDutyPartnerId = null;
+                    dayDecl.CoDutyStatus = null;
+                    dayDecl.CoDutyInitiatorId = null;
+                    break;
+            }
+
+            // Zapisz zaktualizowaną deklarację
+            await SaveDeclarationAsync(declaration);
+        }
     }
 }

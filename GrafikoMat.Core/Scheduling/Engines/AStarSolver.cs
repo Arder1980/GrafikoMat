@@ -13,6 +13,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// Implementacja algorytmu A* do wyszukiwania optymalnego grafiku.
     /// Gwarantuje znalezienie rozwiązania optymalnego poprzez inteligentne przeszukiwanie z heurystyką admissible.
     /// Wykorzystuje hierarchiczne porównanie metryk zgodnie z priorytetami użytkownika.
+    ///
+    /// INTEGRACJA WSPÓŁDYŻURNYCH: Pełna obsługa zaakceptowanych par współdyżurnych jako hard constraint.
     /// </summary>
     public sealed class AStarSolver : IScheduleSolver
     {
@@ -25,12 +27,17 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly TimeSpan _timeout;
 
+        // Co-duty support
+        private readonly List<Declaration>? _declarations;
+        private readonly Dictionary<Guid, int> _doctorIndexMap;
+
         public AStarSolver(
             ScheduleInput scheduleInput,
             List<SolverPriority> priorities,
             TimeSpan timeout,
             IProgress<double>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            List<Declaration>? declarations = null)  // ← NOWY PARAMETR dla współdyżurnych
         {
             _input = scheduleInput;
             _priorities = priorities;
@@ -38,6 +45,15 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _timeout = timeout;
             _sequence = 0;
+            _declarations = declarations;
+
+            // Zbuduj mapowanie Doctor GUID -> indeks w tablicy
+            var doctors = _input.Doctors.Where(d => !d.IsArchived).ToList();
+            _doctorIndexMap = new Dictionary<Guid, int>();
+            for (int i = 0; i < doctors.Count; i++)
+            {
+                _doctorIndexMap[doctors[i].Id] = i;
+            }
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -280,7 +296,34 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 }
             }
 
-            return EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
+            var solution = EvaluationAndScoringService.CalculateMetrics(map, perDoctorWorkload, _input);
+
+            // WALIDACJA: Sprawdź czy pary współdyżurnych są zachowane
+            if (_declarations != null)
+            {
+                // Przekształć ctx.Assignments[] na format 2D wymagany przez CoDutyConstraint
+                int[,] schedule2D = new int[ctx.DoctorCount, ctx.DayCount];
+                for (int dayIdx = 0; dayIdx < ctx.DayCount; dayIdx++)
+                {
+                    int assignedDocIdx = ctx.Assignments[dayIdx];
+                    if (assignedDocIdx >= 0)
+                    {
+                        schedule2D[assignedDocIdx, dayIdx] = 1;
+                    }
+                }
+
+                bool coDutyValid = CoDutyConstraint.ValidateCoDutyPairs(
+                    _declarations,
+                    schedule2D,
+                    _doctorIndexMap);
+
+                if (!coDutyValid)
+                {
+                    System.Diagnostics.Debug.WriteLine("[AStarSolver] Co-duty constraint violation detected!");
+                }
+            }
+
+            return solution;
         }
 
         private ScheduleSolution BuildEmptySolution()

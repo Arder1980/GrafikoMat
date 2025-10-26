@@ -57,7 +57,7 @@
             <Style TargetType="TextBlock" x:Key="SymbolTextBlock">
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="HorizontalAlignment" Value="Center"/>
-                <Setter Property="FontSize" Value="20"/>
+                <Setter Property="FontSize" Value="14"/>
                 <Setter Property="FontWeight" Value="SemiBold"/>
                 <Setter Property="TextWrapping" Value="NoWrap"/>
                 <Setter Property="TextAlignment" Value="Center"/>
@@ -222,14 +222,20 @@
                                                     <Viewbox MaxHeight="24" MaxWidth="24">
                                                         <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE706;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                     </Viewbox>
-                                                    <TextBlock Text="+" FontSize="26" Opacity="0.25" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
+                                                    <TextBlock Text="+" FontSize="26" Opacity="{ThemeResource DayNightGlyphOpacity}" VerticalAlignment="Center" Margin="0,-10,0,0" IsHitTestVisible="False" FontWeight="Normal"/>
                                                     <Viewbox MaxHeight="22" MaxWidth="22">
                                                         <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                     </Viewbox>
                                                 </StackPanel>
 
-                                                <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolFull, Mode=OneWay}"
-                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="2" MaxWidth="180">
+                                                    <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolFull, Mode=OneWay}"/>
+                                                    <TextBlock HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="None">
+                                                        <Run Text="{x:Bind CoDutyPartnerFull, Mode=OneWay}" FontSize="9"/>
+                                                        <Run Text=" " FontSize="9"/>
+                                                        <Run Text="{x:Bind CoDutyStatusGlyphFull, Mode=OneWay}" FontSize="11"/>
+                                                    </TextBlock>
+                                                </StackPanel>
                                             </Grid>
 
                                             <!-- SLOTY 12h -->
@@ -247,10 +253,26 @@
                                                     <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE708;" Opacity="{ThemeResource DayNightGlyphOpacity}" IsHitTestVisible="False"/>
                                                 </Viewbox>
                                                 <Border Grid.Row="0" VerticalAlignment="Bottom" Height="1" Background="{ThemeResource CalendarCellHeaderSeparatorBrush}"/>
-                                                <TextBlock Grid.Row="0" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolDay, Mode=OneWay}"
-                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
-                                                <TextBlock Grid.Row="1" Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolNight, Mode=OneWay}"
-                                                          Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
+
+                                                <!-- DAY SLOT -->
+                                                <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1" MaxWidth="180">
+                                                    <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolDay, Mode=OneWay}"/>
+                                                    <TextBlock HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="None">
+                                                        <Run Text="{x:Bind CoDutyPartnerDay, Mode=OneWay}" FontSize="7"/>
+                                                        <Run Text=" " FontSize="7"/>
+                                                        <Run Text="{x:Bind CoDutyStatusGlyphDay, Mode=OneWay}" FontSize="9"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+
+                                                <!-- NIGHT SLOT -->
+                                                <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1" MaxWidth="180">
+                                                    <TextBlock Style="{StaticResource SymbolTextBlock}" Text="{x:Bind DisplaySymbolNight, Mode=OneWay}"/>
+                                                    <TextBlock HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="NoWrap" TextTrimming="None">
+                                                        <Run Text="{x:Bind CoDutyPartnerNight, Mode=OneWay}" FontSize="7"/>
+                                                        <Run Text=" " FontSize="7"/>
+                                                        <Run Text="{x:Bind CoDutyStatusGlyphNight, Mode=OneWay}" FontSize="9"/>
+                                                    </TextBlock>
+                                                </StackPanel>
                                             </Grid>
                                         </Grid>
 

@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Media;
 using Windows.Foundation;
 using Windows.System;
@@ -66,6 +67,113 @@ namespace GrafikoMat.Views
 
         public DeclarationsViewModel ViewModel => this.DataContext as DeclarationsViewModel;
 
+        private void SubscribeToViewModelEvents()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.DeclarationsSaved += OnDeclarationsSaved;
+            }
+        }
+
+        private void UnsubscribeFromViewModelEvents()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.DeclarationsSaved -= OnDeclarationsSaved;
+            }
+        }
+
+        private async void OnDeclarationsSaved(object? sender, EventArgs e)
+        {
+            // Po zapisie - wysyłamy powiadomienia dla dni z pending co-duty
+            bool success = await SendPendingCoDutyNotificationsAsync();
+
+            // Pokaż komunikat sukcesu lub błędu
+            var dialog = App.CreateThemedDialog();
+            if (success)
+            {
+                dialog.Title = "Zapisano";
+                dialog.Content = "Deklaracje zostały zapisane pomyślnie.";
+                dialog.PrimaryButtonText = "OK";
+            }
+            else
+            {
+                dialog.Title = "Błąd zapisu";
+                dialog.Content = "Deklaracje zostały zapisane, ale wystąpił błąd podczas wysyłania powiadomień o współdyżurach.";
+                dialog.PrimaryButtonText = "OK";
+            }
+
+            dialog.XamlRoot = this.XamlRoot;
+            await dialog.ShowAsync();
+        }
+
+        /// <summary>
+        /// Wysyła powiadomienia o prośbach współdyżurnych dla wszystkich dni z pending co-duty.
+        /// Wywoływane TYLKO po zapisie deklaracji.
+        /// </summary>
+        /// <returns>True jeśli wszystkie powiadomienia zostały wysłane pomyślnie, false w przypadku błędu</returns>
+        private async Task<bool> SendPendingCoDutyNotificationsAsync()
+        {
+            if (ViewModel == null || CoDutyNotificationRepository == null || !ActiveUnitId.HasValue)
+            {
+                System.Diagnostics.Debug.WriteLine("[SendNotifications] Brak ViewModel, repozutorium lub ActiveUnitId");
+                return true; // Brak powiadomień do wysłania - sukces
+            }
+
+            if (ViewModel.SelectedDoctor == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[SendNotifications] Brak wybranego lekarza");
+                return true; // Brak powiadomień do wysłania - sukces
+            }
+
+            try
+            {
+                // Pobierz listę dni z pending co-duty gdzie jestem inicjatorem
+                var pendingNotifications = ViewModel.GetPendingCoDutyNotificationsToSend();
+
+                System.Diagnostics.Debug.WriteLine($"[SendNotifications] Znaleziono {pendingNotifications.Count} powiadomień do wysłania");
+
+                foreach (var (day, partnerId, slotPart) in pendingNotifications)
+                {
+                    var notification = new GrafikoMat.Core.Data.CoDutyNotification
+                    {
+                        FromDoctorId = ViewModel.SelectedDoctor.Id,
+                        ToDoctorId = partnerId,
+                        UnitId = ActiveUnitId.Value,
+                        Year = ViewModel.Year,
+                        Month = ViewModel.MonthIndex + 1,
+                        Day = day,
+                        SlotPart = slotPart,
+                        Status = "pending",
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await CoDutyNotificationRepository.CreateNotificationAsync(notification);
+                    System.Diagnostics.Debug.WriteLine($"[SendNotifications] ✓ Utworzono powiadomienie dla dnia {day}, partner {partnerId}, slot {slotPart}");
+                }
+
+                if (pendingNotifications.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SendNotifications] ✓ Wysłano {pendingNotifications.Count} powiadomień");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SendNotifications] ✗ BŁĄD: {ex.Message}");
+                return false;
+            }
+        }
+
+        // Repozytoria dla współdyżurnych (ustawiane z zewnątrz)
+        public GrafikoMat.Core.Repositories.ICoDutyNotificationRepository? CoDutyNotificationRepository { get; set; }
+        public GrafikoMat.Core.Repositories.IDeclarationRepository? DeclarationRepository { get; set; }
+        public GrafikoMat.Core.Repositories.IDoctorRepository? DoctorRepository { get; set; }
+
+        // ID aktywnej jednostki (ustawiane z zewnątrz przez MainWindow)
+        public Guid? ActiveUnitId { get; set; }
+
         private bool _isDragging = false;
         private int _dragStartIndex = -1;
         private SlotPart _dragStartSlotPart;
@@ -113,10 +221,15 @@ namespace GrafikoMat.Views
 
         public void AttachViewModel(DeclarationsViewModel vm)
         {
+            // Odsubskrybuj od starego ViewModelu
+            UnsubscribeFromViewModelEvents();
+
             this.DataContext = vm;
             if (vm != null)
             {
                 vm.PropertyChanged += Vm_PropertyChanged;
+                // Subskrybuj do eventów nowego ViewModelu
+                SubscribeToViewModelEvents();
             }
             UpdateAllCellBrushes();
             UpdateCalendarOpacity();
@@ -501,8 +614,9 @@ namespace GrafikoMat.Views
                         var doctorItem = new MenuFlyoutItem
                         {
                             Text = doctor.DisplayName,
-                            IsEnabled = false  // 🔧 PLACEHOLDER - na razie bez akcji
+                            Tag = doctor.Profile.Id
                         };
+                        doctorItem.Click += OnAddCoDutyPartnerClick;
                         addCoWorkerSubItem.Items.Add(doctorItem);
                     }
                 }
@@ -522,7 +636,54 @@ namespace GrafikoMat.Views
             contextMenu.Items.Add(new MenuFlyoutSeparator());
 
             // ============================================
-            // SEKCJA 4: Przełącznik trybu
+            // SEKCJA 4: Wyczyść deklarację i Usuń współdyżurnego
+            // ============================================
+
+            // Sprawdź czy którykolwiek zaznaczony slot ma współdyżurnego
+            bool hasCoDutyInSelection = ViewModel.SelectedSlots
+                .Any(slot =>
+                {
+                    if (slot.Index < 0 || slot.Index >= ViewModel.DayCells.Count)
+                        return false;
+                    var cell = ViewModel.DayCells[slot.Index];
+                    return slot.Part switch
+                    {
+                        SlotPart.Full => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerFull),
+                        SlotPart.Day => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerDay),
+                        SlotPart.Night => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerNight),
+                        _ => false
+                    };
+                });
+
+            // "Usuń współdyżurnego" - widoczne TYLKO gdy jest współdyżurny
+            if (hasCoDutyInSelection)
+            {
+                var removeCoDutyItem = new MenuFlyoutItem
+                {
+                    Text = "Usuń współdyżurnego"
+                };
+                removeCoDutyItem.Click += OnRemoveCoDutyPartnerClick;
+                contextMenu.Items.Add(removeCoDutyItem);
+            }
+
+            // "Wyczyść deklarację" - widoczne gdy jest JAKAKOLWIEK zawartość
+            if (hasDeclarationInSelection || hasCoDutyInSelection)
+            {
+                var clearDeclarationItem = new MenuFlyoutItem
+                {
+                    Text = "Wyczyść deklarację"
+                };
+                clearDeclarationItem.Click += OnClearDeclarationClick;
+                contextMenu.Items.Add(clearDeclarationItem);
+            }
+
+            if (hasDeclarationInSelection || hasCoDutyInSelection)
+            {
+                contextMenu.Items.Add(new MenuFlyoutSeparator());
+            }
+
+            // ============================================
+            // SEKCJA 5: Przełącznik trybu
             // ============================================
             var toggleModeItem = new MenuFlyoutItem
             {
@@ -573,12 +734,20 @@ namespace GrafikoMat.Views
             e.Handled = true;
         }
 
-        private void CalendarGridView_KeyDown(object sender, KeyRoutedEventArgs e)
+        private async void CalendarGridView_KeyDown(object sender, KeyRoutedEventArgs e)
         {
             if (e.Key == VirtualKey.Control) _ctrlDown = true;
             if (e.Key == VirtualKey.Shift) _shiftDown = true;
 
-            // ✅ Skróty klawiaturowe dla deklaracji
+            // DEL - wyczyść wszystko z dialogiem
+            if (e.Key == VirtualKey.Delete && ViewModel != null && ViewModel.SelectedSlots.Any())
+            {
+                await ClearAllFromSelectedSlotsAsync();
+                e.Handled = true;
+                return;
+            }
+
+            // Skróty klawiaturowe dla deklaracji
             if (ViewModel != null && ViewModel.SelectedSlots.Any())
             {
                 string? declarationCode = e.Key switch
@@ -596,7 +765,7 @@ namespace GrafikoMat.Views
 
                 if (declarationCode != null)
                 {
-                    ApplyDeclarationToSelectedSlots(declarationCode);
+                    await ApplyDeclarationToSelectedSlotsAsync(declarationCode);
                     e.Handled = true;
                 }
             }
@@ -609,14 +778,111 @@ namespace GrafikoMat.Views
         }
 
         /// <summary>
-        /// Pomocnicza metoda do aplikowania deklaracji na zaznaczone sloty
+        /// DEL - wyczyść wszystko (symbol + współdyżurny) z dialogiem potwierdzenia
         /// </summary>
-        private void ApplyDeclarationToSelectedSlots(string declarationCode)
+        private async Task ClearAllFromSelectedSlotsAsync()
         {
-            if (ViewModel == null)
+            if (ViewModel == null || ViewModel.SelectedDoctor == null)
                 return;
 
-            foreach (var selectedSlot in ViewModel.SelectedSlots)
+            var selectedSlots = ViewModel.SelectedSlots.ToList();
+            if (!selectedSlots.Any())
+                return;
+
+            // Dialog potwierdzenia
+            var confirmDialog = App.CreateThemedDialog();
+            confirmDialog.Title = "Wyczyść sloty";
+            confirmDialog.Content = selectedSlots.Count == 1
+                ? "Czy na pewno wyczyścić ten slot?"
+                : $"Czy na pewno wyczyścić {selectedSlots.Count} slotów?";
+            confirmDialog.PrimaryButtonText = "Wyczyść";
+            confirmDialog.CloseButtonText = "Anuluj";
+            confirmDialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close;
+            confirmDialog.XamlRoot = this.XamlRoot;
+
+            var result = await confirmDialog.ShowAsync();
+            if (result != Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                return;
+
+            // Wyczyść wszystko
+            foreach (var slot in selectedSlots)
+            {
+                var cell = ViewModel.DayCells.FirstOrDefault(c => c.Index == slot.Index);
+                if (cell == null || !cell.InMonth)
+                    continue;
+
+                switch (slot.Part)
+                {
+                    case SlotPart.Full:
+                        cell.SymbolFull = "";
+                        cell.CoDutyPartnerFull = "";
+                        cell.CoDutyStatusGlyphFull = "";
+                        break;
+                    case SlotPart.Day:
+                        cell.SymbolDay = "";
+                        cell.CoDutyPartnerDay = "";
+                        cell.CoDutyStatusGlyphDay = "";
+                        break;
+                    case SlotPart.Night:
+                        cell.SymbolNight = "";
+                        cell.CoDutyPartnerNight = "";
+                        cell.CoDutyStatusGlyphNight = "";
+                        break;
+                }
+
+                // Wyczyść w _sharedDeclarations
+                ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.FullName, cell.Date.Day, null, null, null, null);
+            }
+        }
+
+        /// <summary>
+        /// Aplikuje deklarację na zaznaczone sloty.
+        /// Dla MOG/CHC/WAR/REZ zachowuje współdyżurnego.
+        /// Dla ---/DYZ/URL pokazuje dialog i usuwa współdyżurnego po akceptacji.
+        /// </summary>
+        private async Task ApplyDeclarationToSelectedSlotsAsync(string declarationCode)
+        {
+            if (ViewModel == null || ViewModel.SelectedDoctor == null)
+                return;
+
+            var selectedSlots = ViewModel.SelectedSlots.ToList();
+
+            // Sprawdź czy którykolwiek slot ma współdyżurnego
+            bool hasCoDutyInAnySlot = selectedSlots.Any(slot =>
+            {
+                if (slot.Index < 0 || slot.Index >= ViewModel.DayCells.Count)
+                    return false;
+                var cell = ViewModel.DayCells[slot.Index];
+                return slot.Part switch
+                {
+                    SlotPart.Full => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerFull),
+                    SlotPart.Day => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerDay),
+                    SlotPart.Night => !string.IsNullOrWhiteSpace(cell.CoDutyPartnerNight),
+                    _ => false
+                };
+            });
+
+            // Symbole które wymagają usunięcia współdyżurnego
+            bool requiresCoDutyRemoval = declarationCode is "---" or "DYZ" or "URL";
+
+            // Jeśli jest współdyżurny i nowy symbol wymaga usunięcia - pokaż dialog
+            if (hasCoDutyInAnySlot && requiresCoDutyRemoval)
+            {
+                var confirmDialog = App.CreateThemedDialog();
+                confirmDialog.Title = "Zmiana deklaracji";
+                confirmDialog.Content = "Zmiana deklaracji na \"" + declarationCode + "\" usunie współdyżurnego. Kontynuować?";
+                confirmDialog.PrimaryButtonText = "Tak, zmień";
+                confirmDialog.CloseButtonText = "Anuluj";
+                confirmDialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close;
+                confirmDialog.XamlRoot = this.XamlRoot;
+
+                var result = await confirmDialog.ShowAsync();
+                if (result != Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                    return; // User anulował
+            }
+
+            // Aplikuj deklarację
+            foreach (var selectedSlot in selectedSlots)
             {
                 if (selectedSlot.Index < 0 || selectedSlot.Index >= ViewModel.DayCells.Count)
                     continue;
@@ -625,19 +891,41 @@ namespace GrafikoMat.Views
                 if (!cell.InMonth)
                     continue;
 
+                // Ustaw symbol
                 switch (selectedSlot.Part)
                 {
                     case SlotPart.Full:
                         cell.SymbolFull = declarationCode;
+                        if (requiresCoDutyRemoval)
+                        {
+                            cell.CoDutyPartnerFull = "";
+                            cell.CoDutyStatusGlyphFull = "";
+                        }
                         break;
 
                     case SlotPart.Day:
                         cell.SymbolDay = declarationCode;
+                        if (requiresCoDutyRemoval)
+                        {
+                            cell.CoDutyPartnerDay = "";
+                            cell.CoDutyStatusGlyphDay = "";
+                        }
                         break;
 
                     case SlotPart.Night:
                         cell.SymbolNight = declarationCode;
+                        if (requiresCoDutyRemoval)
+                        {
+                            cell.CoDutyPartnerNight = "";
+                            cell.CoDutyStatusGlyphNight = "";
+                        }
                         break;
+                }
+
+                // Jeśli wymagane usunięcie współdyżurnego - wyczyść w _sharedDeclarations
+                if (requiresCoDutyRemoval)
+                {
+                    ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.FullName, cell.Date.Day, null, null, null, null);
                 }
             }
         }
@@ -762,13 +1050,13 @@ namespace GrafikoMat.Views
         /// <summary>
         /// Obsługa kliknięcia w element menu deklaracji (MOG, CHC, WAR, itp.)
         /// </summary>
-        private void OnDeclarationMenuItemClick(object sender, RoutedEventArgs e)
+        private async void OnDeclarationMenuItemClick(object sender, RoutedEventArgs e)
         {
             if (ViewModel == null || sender is not MenuFlyoutItem menuItem || menuItem.Tag is not string declarationCode)
                 return;
 
             System.Diagnostics.Debug.WriteLine($"[MENU] Declaration clicked: {declarationCode}");
-            ApplyDeclarationToSelectedSlots(declarationCode);
+            await ApplyDeclarationToSelectedSlotsAsync(declarationCode);
         }
 
         /// <summary>
@@ -863,6 +1151,9 @@ namespace GrafikoMat.Views
                 ViewModel.PropertyChanged -= Vm_PropertyChanged;
             }
 
+            // Odsubskrybuj od eventów ViewModelu
+            UnsubscribeFromViewModelEvents();
+
             this.Unloaded -= OnDeclarationsViewUnloaded;
             this.ActualThemeChanged -= OnThemeChanged;
 
@@ -878,6 +1169,437 @@ namespace GrafikoMat.Views
                 CalendarGridView.KeyDown -= CalendarGridView_KeyDown;
                 CalendarGridView.KeyUp -= CalendarGridView_KeyUp;
             }
+        }
+
+        // ============================================================================
+        // Obsługa współdyżurnych
+        // ============================================================================
+
+        private async void OnAddCoDutyPartnerClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem menuItem || menuItem.Tag is not Guid partnerId)
+                return;
+
+            if (ViewModel == null || CoDutyNotificationRepository == null || DoctorRepository == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[DeclarationsView] Brak wymaganych zależności dla współdyżurnych");
+                return;
+            }
+
+            var currentDoctor = ViewModel.SelectedDoctor;
+            if (currentDoctor == null)
+                return;
+
+            var selectedSlots = ViewModel.SelectedSlots.ToList();
+            if (!selectedSlots.Any())
+                return;
+
+            try
+            {
+                // Pobierz dane partnera
+                var allDoctors = await DoctorRepository.GetAllAsync();
+                var partner = allDoctors.FirstOrDefault(d => d.Id == partnerId);
+                if (partner == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Nie znaleziono partnera: {partnerId}");
+                    return;
+                }
+
+                // Pobierz ID jednostki z ActiveUnitId (ustawione przez MainWindow)
+                if (!ActiveUnitId.HasValue)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DeclarationsView] BŁĄD: Brak ActiveUnitId - nie można utworzyć powiadomienia");
+                    var errorDialog = App.CreateThemedDialog();
+                    errorDialog.Title = "Błąd";
+                    errorDialog.Content = "Nie można wysłać prośby - brak informacji o jednostce.";
+                    errorDialog.CloseButtonText = "OK";
+                    errorDialog.XamlRoot = this.XamlRoot;
+                    await errorDialog.ShowAsync();
+                    return;
+                }
+
+                var unitId = ActiveUnitId.Value;
+
+                // Dla każdego zaznaczonego slotu
+                foreach (var slot in selectedSlots)
+                {
+                    var dayCell = ViewModel.DayCells.FirstOrDefault(c => c.Index == slot.Index);
+                    if (dayCell == null || !dayCell.InMonth)
+                        continue;
+
+                    string slotPart = slot.Part switch
+                    {
+                        SlotPart.Full => "full",
+                        SlotPart.Day => "day",
+                        SlotPart.Night => "night",
+                        _ => "full"
+                    };
+
+                    // Aktualizuj TYLKO LOKALNIE deklaracje obu lekarzy (w pamięci)
+                    // Powiadomienie zostanie wysłane dopiero po kliknięciu "Zapisz"
+                    UpdateLocalCoDutyDeclarations(
+                        currentDoctor.Id,
+                        partnerId,
+                        dayCell.Date.Day,
+                        slotPart,
+                        currentDoctor.Id); // Inicjator = currentDoctor
+
+                    System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Zaznaczono lokalnie współdyżur: {currentDoctor.FullName} + {partner.FullName} na dzień {dayCell.Date.Day} ({slotPart})");
+                }
+
+                // Odśwież TYLKO pola współdyżurnych w UI (bez przeładowywania całego widoku)
+                RefreshCoDutyUIFromSharedDeclarations(currentDoctor.Id);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Błąd dodawania współdyżurnego: {ex.Message}");
+
+                var errorDialog = App.CreateThemedDialog();
+                errorDialog.Title = "Błąd";
+                errorDialog.Content = $"Nie udało się wysłać prośby: {ex.Message}";
+                errorDialog.CloseButtonText = "OK";
+                errorDialog.XamlRoot = this.XamlRoot;
+                await errorDialog.ShowAsync();
+            }
+        }
+
+        /// <summary>
+        /// Aktualizuje LOKALNIE (w ViewModel) deklaracje obu lekarzy - ustawia partnera, status i inicjatora.
+        /// Nie zapisuje do bazy - to nastąpi po kliknięciu "Zapisz".
+        /// </summary>
+        private void UpdateLocalCoDutyDeclarations(
+            Guid fromDoctorId,
+            Guid toDoctorId,
+            int day,
+            string slotPart,
+            Guid initiatorId)
+        {
+            if (ViewModel == null)
+                return;
+
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Aktualizuję lokalnie deklaracje dla dnia {day} ({slotPart})");
+
+                // Znajdź lekarzy w ViewModel
+                var fromDoctor = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == fromDoctorId);
+                var toDoctor = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == toDoctorId);
+
+                if (fromDoctor == null || toDoctor == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Nie znaleziono lekarzy w ViewModel");
+                    return;
+                }
+
+                // Aktualizuj lokalną deklarację inicjatora
+                UpdateDoctorLocalDeclaration(fromDoctor.Profile.FullName, day, slotPart, toDoctorId, initiatorId);
+
+                // Aktualizuj lokalną deklarację partnera
+                UpdateDoctorLocalDeclaration(toDoctor.Profile.FullName, day, slotPart, fromDoctorId, initiatorId);
+
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal] ✓ Zaktualizowano lokalnie deklaracje");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal] ✗ BŁĄD: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Aktualizuje lokalną deklarację pojedynczego lekarza w _sharedDeclarations.
+        /// </summary>
+        private void UpdateDoctorLocalDeclaration(
+            string doctorFullName,
+            int day,
+            string slotPart,
+            Guid partnerId,
+            Guid initiatorId)
+        {
+            if (ViewModel == null)
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Aktualizacja dla {doctorFullName}, dzień {day}, slotPart={slotPart}");
+
+            // Aktualizuj pola co-duty w lokalnej deklaracji
+            ViewModel.UpdateCoDutyFields(doctorFullName, day, partnerId, "pending", initiatorId, slotPart);
+        }
+
+        /// <summary>
+        /// Odświeża UI współdyżurnych dla zaznaczonych slotów (bez czyszczenia symboli dyżurów).
+        /// </summary>
+        private void RefreshCoDutyUI(List<SelectedSlot> selectedSlots, string partnerAbbreviation)
+        {
+            if (ViewModel == null)
+                return;
+
+            foreach (var slot in selectedSlots)
+            {
+                var dayCell = ViewModel.DayCells.FirstOrDefault(c => c.Index == slot.Index);
+                if (dayCell == null || !dayCell.InMonth)
+                    continue;
+
+                // Ustaw informacje o współdyżurnym w UI
+                string statusGlyph = "⏳"; // pending
+
+                if (dayCell.IsSplit)
+                {
+                    // Tryb Split12 - aktualizuj tylko odpowiedni slot
+                    if (slot.Part == SlotPart.Day)
+                    {
+                        dayCell.CoDutyPartnerDay = partnerAbbreviation;
+                        dayCell.CoDutyStatusGlyphDay = statusGlyph;
+                        System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyUI] Ustawiono Day slot: {partnerAbbreviation}");
+                    }
+                    else if (slot.Part == SlotPart.Night)
+                    {
+                        dayCell.CoDutyPartnerNight = partnerAbbreviation;
+                        dayCell.CoDutyStatusGlyphNight = statusGlyph;
+                        System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyUI] Ustawiono Night slot: {partnerAbbreviation}");
+                    }
+                }
+                else
+                {
+                    // Tryb Full24 - aktualizuj Full slot
+                    dayCell.CoDutyPartnerFull = partnerAbbreviation;
+                    dayCell.CoDutyStatusGlyphFull = statusGlyph;
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyUI] Ustawiono Full slot: {partnerAbbreviation}");
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyUI] Odświeżono UI dla dnia {dayCell.Date.Day}, slot={slot.Part}, IsSplit={dayCell.IsSplit}");
+            }
+        }
+
+        /// <summary>
+        /// Odświeża pola współdyżurnych w UI na podstawie danych z _sharedDeclarations.
+        /// Nie dotyka symboli dyżurów (SymbolFull, SymbolDay, SymbolNight) - aktualizuje TYLKO informacje o partnerach.
+        /// </summary>
+        private void RefreshCoDutyUIFromSharedDeclarations(Guid doctorId)
+        {
+            if (ViewModel == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] ViewModel is null");
+                return;
+            }
+
+            var doctor = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == doctorId);
+            if (doctor == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Doctor not found: {doctorId}");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Refreshing co-duty UI for {doctor.Profile.FullName}");
+
+            // Pobierz deklarację z shared state
+            var key = $"{doctor.Profile.FullName}|{ViewModel.Year:D4}-{ViewModel.MonthIndex:D2}";
+
+            // Użyj reflection aby dostać się do _sharedDeclarations (prywatne pole w ViewModel)
+            var sharedDeclarationsField = ViewModel.GetType().GetField("_sharedDeclarations",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+            if (sharedDeclarationsField == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Cannot access _sharedDeclarations field");
+                return;
+            }
+
+            var sharedDeclarations = sharedDeclarationsField.GetValue(ViewModel) as Dictionary<string, GrafikoMat.Models.DoctorMonthDeclaration>;
+            if (sharedDeclarations == null || !sharedDeclarations.TryGetValue(key, out var declaration))
+            {
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] No declaration found for key: {key}");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Found declaration with {declaration.Days.Length} days");
+
+            // Najpierw wyczyść WSZYSTKIE pola co-duty we wszystkich komórkach
+            foreach (var cell in ViewModel.DayCells.Where(c => c.InMonth))
+            {
+                cell.CoDutyPartnerFull = "";
+                cell.CoDutyStatusGlyphFull = "";
+                cell.CoDutyPartnerDay = "";
+                cell.CoDutyStatusGlyphDay = "";
+                cell.CoDutyPartnerNight = "";
+                cell.CoDutyStatusGlyphNight = "";
+            }
+
+            // Dla każdego dnia który ma współdyżurnego
+            for (int dayIndex = 0; dayIndex < declaration.Days.Length; dayIndex++)
+            {
+                var dayDeclaration = declaration.Days[dayIndex];
+
+                if (!dayDeclaration.CoDutyPartnerId.HasValue)
+                    continue;
+
+                // Znajdź odpowiadającą komórkę UI
+                int dayNumber = dayIndex + 1;
+                var dayCell = ViewModel.DayCells.FirstOrDefault(c => c.InMonth && c.Date.Day == dayNumber);
+
+                if (dayCell == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Day cell not found for day {dayNumber}");
+                    continue;
+                }
+
+                // Pobierz dane partnera
+                var partner = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == dayDeclaration.CoDutyPartnerId.Value);
+                if (partner == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Partner not found: {dayDeclaration.CoDutyPartnerId.Value}");
+                    continue;
+                }
+
+                // Format: "+ Nazwisko Imię"
+                string partnerDisplayName = $"+ {partner.Profile.LastName} {partner.Profile.FirstName}";
+                string statusGlyph = dayDeclaration.CoDutyStatus == "accepted" ? "👥" : "⏳";
+
+                // Określ który slot aktualizować na podstawie CoDutySlotPart
+                string slotPart = dayDeclaration.CoDutySlotPart ?? "full";
+
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Day {dayNumber}: partner={partnerDisplayName}, slotPart={slotPart}, status={dayDeclaration.CoDutyStatus}, partnerId={dayDeclaration.CoDutyPartnerId}");
+
+                // Aktualizuj TYLKO pola co-duty, nie dotykaj symboli
+                if (slotPart == "full")
+                {
+                    dayCell.CoDutyPartnerFull = partnerDisplayName;
+                    dayCell.CoDutyStatusGlyphFull = statusGlyph;
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Updated Full slot for day {dayNumber}: '{partnerDisplayName}' {statusGlyph}");
+                }
+                else if (slotPart == "day")
+                {
+                    dayCell.CoDutyPartnerDay = partnerDisplayName;
+                    dayCell.CoDutyStatusGlyphDay = statusGlyph;
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Updated Day slot for day {dayNumber}: '{partnerDisplayName}' {statusGlyph}");
+                }
+                else if (slotPart == "night")
+                {
+                    dayCell.CoDutyPartnerNight = partnerDisplayName;
+                    dayCell.CoDutyStatusGlyphNight = statusGlyph;
+                    System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Updated Night slot for day {dayNumber}: '{partnerDisplayName}' {statusGlyph}");
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Refresh completed");
+        }
+
+        /// <summary>
+        /// Usuwa TYLKO współdyżurnego z zaznaczonych slotów (symbol dyżuru zostaje).
+        /// Aktualizacja UI + _sharedDeclarations natychmiastowa, zapis do bazy po "Zapisz".
+        /// </summary>
+        private void OnRemoveCoDutyPartnerClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel == null)
+                return;
+
+            var currentDoctor = ViewModel.SelectedDoctor;
+            if (currentDoctor == null)
+                return;
+
+            var selectedSlots = ViewModel.SelectedSlots.ToList();
+            if (!selectedSlots.Any())
+                return;
+
+            System.Diagnostics.Debug.WriteLine($"[RemoveCoDuty] Usuwanie współdyżurnego z {selectedSlots.Count} slotów");
+
+            foreach (var slot in selectedSlots)
+            {
+                var dayCell = ViewModel.DayCells.FirstOrDefault(c => c.Index == slot.Index);
+                if (dayCell == null || !dayCell.InMonth)
+                    continue;
+
+                // Wyczyść współdyżurnego w UI
+                switch (slot.Part)
+                {
+                    case SlotPart.Full:
+                        dayCell.CoDutyPartnerFull = "";
+                        dayCell.CoDutyStatusGlyphFull = "";
+                        break;
+                    case SlotPart.Day:
+                        dayCell.CoDutyPartnerDay = "";
+                        dayCell.CoDutyStatusGlyphDay = "";
+                        break;
+                    case SlotPart.Night:
+                        dayCell.CoDutyPartnerNight = "";
+                        dayCell.CoDutyStatusGlyphNight = "";
+                        break;
+                }
+
+                // Wyczyść w _sharedDeclarations
+                ViewModel.UpdateCoDutyFields(currentDoctor.FullName, dayCell.Date.Day, null, null, null, null);
+
+                System.Diagnostics.Debug.WriteLine($"[RemoveCoDuty] Usunięto współdyżurnego z dnia {dayCell.Date.Day}, slot {slot.Part}");
+            }
+        }
+
+        /// <summary>
+        /// Czyści WSZYSTKO (symbol dyżuru + współdyżurny) z zaznaczonych slotów.
+        /// Dla wielu slotów pokazuje dialog potwierdzenia.
+        /// Aktualizacja UI + _sharedDeclarations natychmiastowa, zapis do bazy po "Zapisz".
+        /// </summary>
+        private async void OnClearDeclarationClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel == null)
+                return;
+
+            var currentDoctor = ViewModel.SelectedDoctor;
+            if (currentDoctor == null)
+                return;
+
+            var selectedSlots = ViewModel.SelectedSlots.ToList();
+            if (!selectedSlots.Any())
+                return;
+
+            // Dialog potwierdzenia dla wielu slotów
+            if (selectedSlots.Count > 1)
+            {
+                var confirmDialog = App.CreateThemedDialog();
+                confirmDialog.Title = "Wyczyść deklaracje";
+                confirmDialog.Content = $"Czy na pewno wyczyścić deklaracje z {selectedSlots.Count} slotów?";
+                confirmDialog.PrimaryButtonText = "Wyczyść";
+                confirmDialog.CloseButtonText = "Anuluj";
+                confirmDialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close;
+                confirmDialog.XamlRoot = this.XamlRoot;
+
+                var result = await confirmDialog.ShowAsync();
+                if (result != Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                    return; // User anulował
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[ClearDeclaration] Czyszczenie {selectedSlots.Count} slotów");
+
+            foreach (var slot in selectedSlots)
+            {
+                var dayCell = ViewModel.DayCells.FirstOrDefault(c => c.Index == slot.Index);
+                if (dayCell == null || !dayCell.InMonth)
+                    continue;
+
+                // Wyczyść symbol dyżuru + współdyżurnego w UI
+                switch (slot.Part)
+                {
+                    case SlotPart.Full:
+                        dayCell.SymbolFull = "";
+                        dayCell.CoDutyPartnerFull = "";
+                        dayCell.CoDutyStatusGlyphFull = "";
+                        break;
+                    case SlotPart.Day:
+                        dayCell.SymbolDay = "";
+                        dayCell.CoDutyPartnerDay = "";
+                        dayCell.CoDutyStatusGlyphDay = "";
+                        break;
+                    case SlotPart.Night:
+                        dayCell.SymbolNight = "";
+                        dayCell.CoDutyPartnerNight = "";
+                        dayCell.CoDutyStatusGlyphNight = "";
+                        break;
+                }
+
+                // Wyczyść w _sharedDeclarations (współdyżurny)
+                ViewModel.UpdateCoDutyFields(currentDoctor.FullName, dayCell.Date.Day, null, null, null, null);
+
+                System.Diagnostics.Debug.WriteLine($"[ClearDeclaration] Wyczyszczono dzień {dayCell.Date.Day}, slot {slot.Part}");
+            }
+
+            // Symbol dyżuru zostanie zapisany przez mechanizm dirty tracking w ViewModel
         }
     }
 }

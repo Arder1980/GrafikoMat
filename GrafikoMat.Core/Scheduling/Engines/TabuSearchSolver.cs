@@ -19,6 +19,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
     /// 3. Parallel evaluation sąsiadów (automatycznie dopasowana do liczby wątków procesora)
     /// 4. Early stopping (60 iteracji bez poprawy)
     /// 5. Szybsza dywersyfikacja (co 25 iteracji)
+    ///
+    /// INTEGRACJA WSPÓŁDYŻURNYCH: Pełna obsługa zaakceptowanych par współdyżurnych jako hard constraint.
     /// </summary>
     public class TabuSearchSolver : IScheduleSolver
     {
@@ -32,6 +34,10 @@ namespace GrafikoMat.Core.Scheduling.Engines
         private readonly CancellationToken _cancellationToken;
         private readonly SolverUtility _utility;
         private readonly ParallelOptions _parallelOptions;
+
+        // Co-duty support
+        private readonly List<Declaration>? _declarations;
+        private readonly Dictionary<Guid, int> _doctorIndexMap;
 
         private const int EARLY_STOP_THRESHOLD = 60;
         private const int DIVERSIFICATION_INTERVAL = 25;
@@ -48,7 +54,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             TimeSpan timeout,
             IProgress<double>? progress = null,
             CancellationToken cancellationToken = default,
-            int? customThreadCount = null)
+            int? customThreadCount = null,
+            List<Declaration>? declarations = null)  // ← NOWY PARAMETR dla współdyżurnych
         {
             _scheduleInput = scheduleInput;
             _priorities = priorities;
@@ -56,12 +63,21 @@ namespace GrafikoMat.Core.Scheduling.Engines
             _cancellationToken = cancellationToken;
             _utility = new SolverUtility(scheduleInput);
             _timeout = timeout;
+            _declarations = declarations;
 
             _tabuListSize = tabuListSize;
             _maxIterations = maxIterations;
 
             // Konfiguracja wielowątkowości
             _parallelOptions = ParallelismConfig.CreateOptions(customThreadCount);
+
+            // Zbuduj mapowanie Doctor GUID -> indeks w tablicy
+            var doctors = scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+            _doctorIndexMap = new Dictionary<Guid, int>();
+            for (int i = 0; i < doctors.Count; i++)
+            {
+                _doctorIndexMap[doctors[i].Id] = i;
+            }
         }
 
         public ScheduleSolution FindOptimalSolution()
@@ -204,6 +220,12 @@ namespace GrafikoMat.Core.Scheduling.Engines
                         _priorities,
                         _scheduleInput);
 
+                    // WALIDACJA WSPÓŁDYŻURNYCH: Kara za naruszenie constraintów
+                    if (_declarations != null && !ValidateCoDutyPairs(neighbor))
+                    {
+                        neighborFitness *= 0.01;
+                    }
+
                     lock (lockObject)
                     {
                         if (neighborFitness > bestFitness)
@@ -255,6 +277,34 @@ namespace GrafikoMat.Core.Scheduling.Engines
             }
 
             return diversified;
+        }
+
+        /// <summary>
+        /// Waliduje czy rozwiązanie spełnia pary współdyżurnych.
+        /// </summary>
+        private bool ValidateCoDutyPairs(Dictionary<DateTime, DoctorProfile?> solution)
+        {
+            if (_declarations == null) return true;
+
+            var days = _scheduleInput.DaysInMonth;
+            var doctors = _scheduleInput.Doctors.Where(d => !d.IsArchived).ToList();
+
+            // Przekształć rozwiązanie na format 2D
+            int[,] schedule2D = new int[doctors.Count, days.Count];
+            for (int dayIdx = 0; dayIdx < days.Count; dayIdx++)
+            {
+                var day = days[dayIdx];
+                if (solution.TryGetValue(day, out var assignedDoctor) && assignedDoctor != null)
+                {
+                    int doctorIdx = doctors.FindIndex(d => d.Id == assignedDoctor.Id);
+                    if (doctorIdx >= 0)
+                    {
+                        schedule2D[doctorIdx, dayIdx] = 1;
+                    }
+                }
+            }
+
+            return CoDutyConstraint.ValidateCoDutyPairs(_declarations, schedule2D, _doctorIndexMap);
         }
     }
 }

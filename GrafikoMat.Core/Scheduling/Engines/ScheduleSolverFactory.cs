@@ -1,4 +1,5 @@
-﻿using GrafikoMat.Core.Scheduling.Models;
+﻿using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Scheduling.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +14,8 @@ namespace GrafikoMat.Core.Scheduling.Engines
             SolverParameters parameters,
             List<SolverPriority> activePriorities,
             IProgress<double>? progress = null,
-            CancellationToken token = default)
+            CancellationToken token = default,
+            List<Declaration>? declarations = null)  // ← NOWY PARAMETR dla współdyżurnych
         {
             // Walidacja parametrów wejściowych
             ValidateInput(input, activePriorities);
@@ -24,25 +26,25 @@ namespace GrafikoMat.Core.Scheduling.Engines
             switch (parameters.SolverType)
             {
                 case SolverType.Backtracking:
-                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
+                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token, declarations);
 
                 case SolverType.SimulatedAnnealing:
-                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token, customThreadCount);
+                    return new SimulatedAnnealingSolver(input, activePriorities, parameters.CoolingRate, timeout, progress, token, customThreadCount, declarations);
 
                 case SolverType.Genetic:
-                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token, customThreadCount);
+                    return new GeneticSolver(input, activePriorities, parameters.GeneticPopulationSize, parameters.GeneticGenerations, timeout, progress, token, customThreadCount, declarations);
 
                 case SolverType.TabuSearch:
-                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token, customThreadCount);
+                    return new TabuSearchSolver(input, activePriorities, parameters.TabuListSize, parameters.TabuMaxIterations, timeout, progress, token, customThreadCount, declarations);
 
                 case SolverType.AntColony:
-                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token, customThreadCount);
+                    return new AntColonySolver(input, activePriorities, parameters.AntColonyAnts, parameters.AntColonyGenerations, timeout, progress, token, customThreadCount, declarations);
 
                 case SolverType.AStar:
-                    return new AStarSolver(input, activePriorities, timeout, progress, token);
+                    return new AStarSolver(input, activePriorities, timeout, progress, token, declarations);
 
                 default:
-                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token);
+                    return new BacktrackingSolver(input, activePriorities, timeout, progress, token, declarations);
             }
         }
 

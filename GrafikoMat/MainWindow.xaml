@@ -51,14 +51,15 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
             <!-- Nazwa programu po lewej -->
-            <TextBlock Grid.Column="0" 
-                       Text="GrafikoMat Dyżurowy" 
-                       VerticalAlignment="Center" 
-                       FontWeight="SemiBold" 
-                       FontSize="13" 
+            <TextBlock Grid.Column="0"
+                       Text="GrafikoMat Dyżurowy"
+                       VerticalAlignment="Center"
+                       FontWeight="SemiBold"
+                       FontSize="13"
                        Margin="16,0,0,0"
                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
 
@@ -66,19 +67,68 @@
             <Border x:Name="DragBar" Grid.Column="1" Background="Transparent"/>
 
             <!-- Dane użytkownika wyśrodkowane w pionie -->
-            <StackPanel Grid.Column="2" 
-            Orientation="Horizontal" 
+            <StackPanel Grid.Column="2"
+            Orientation="Horizontal"
             VerticalAlignment="Center"
             Margin="12,0">
-                <TextBlock Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}" 
-               VerticalAlignment="Center" 
-               FontSize="12" 
+                <TextBlock Text="{x:Bind ViewModel.CurrentUserName, Mode=OneWay}"
+               VerticalAlignment="Center"
+               FontSize="12"
                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
             </StackPanel>
 
+            <!-- Przycisk powiadomień -->
+            <Button x:Name="NotificationButton"
+                    Grid.Column="3"
+                    Width="46"
+                    Height="30"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="0"
+                    Padding="0"
+                    VerticalAlignment="Stretch"
+                    HorizontalAlignment="Stretch"
+                    Click="NotificationButton_Click">
+                <Grid>
+                    <FontIcon Glyph="&#xEA8F;" FontSize="14" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
+                    <InfoBadge x:Name="NotificationBadge"
+                               Value="0"
+                               Visibility="Collapsed"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Top"
+                               Margin="0,2,8,0"/>
+                </Grid>
+                <FlyoutBase.AttachedFlyout>
+                    <Flyout x:Name="NotificationFlyout" Placement="BottomEdgeAlignedLeft">
+                        <Grid Width="450" MaxHeight="500">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0"
+                                       Text="Prośby o współdyżur"
+                                       Style="{ThemeResource SubtitleTextBlockStyle}"
+                                       Margin="0,0,0,12"/>
+
+                            <ScrollViewer Grid.Row="1" MaxHeight="400" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="NotificationsContainer" Spacing="8">
+                                    <TextBlock x:Name="NoNotificationsText"
+                                               Text="Brak nowych powiadomień"
+                                               Visibility="Visible"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,20"
+                                               Opacity="0.7"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Flyout>
+                </FlyoutBase.AttachedFlyout>
+            </Button>
+
             <!-- Hamburger button po prawej (przed przyciskami okna) -->
-            <Button x:Name="TitleBarMenuButton" 
-        Grid.Column="3"
+            <Button x:Name="TitleBarMenuButton"
+        Grid.Column="4"
         Width="46" 
         Height="30" 
         Background="Transparent" 

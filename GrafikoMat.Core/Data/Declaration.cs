@@ -81,5 +81,29 @@ namespace GrafikoMat.Core.Data
         /// </summary>
         [JsonPropertyName("night")]
         public string? Night { get; set; }
+
+        /// <summary>
+        /// ID partnera współdyżurnego (jeśli dotyczy)
+        /// </summary>
+        [JsonPropertyName("coDutyPartnerId")]
+        public Guid? CoDutyPartnerId { get; set; }
+
+        /// <summary>
+        /// Status współdyżuru: "pending", "accepted", "rejected" lub null
+        /// </summary>
+        [JsonPropertyName("coDutyStatus")]
+        public string? CoDutyStatus { get; set; }
+
+        /// <summary>
+        /// ID lekarza który zainicjował współdyżur (jeśli dotyczy)
+        /// </summary>
+        [JsonPropertyName("coDutyInitiatorId")]
+        public Guid? CoDutyInitiatorId { get; set; }
+
+        /// <summary>
+        /// Który slot ma współdyżurnego: "full", "day", "night"
+        /// </summary>
+        [JsonPropertyName("coDutySlotPart")]
+        public string? CoDutySlotPart { get; set; }
     }
 }

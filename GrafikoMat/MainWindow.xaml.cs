@@ -15,6 +15,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using System;
@@ -75,6 +76,9 @@ namespace GrafikoMat
         private IUnitRepository? _unitRepository;
         private IAssignmentRepository? _assignmentRepository;
         private IDeclarationRepository? _declarationRepository;
+        private ICoDutyNotificationRepository? _coDutyNotificationRepository;
+        private CoDutyNotificationService? _coDutyNotificationService;
+        private Guid? _currentUserId;  // ID zalogowanego użytkownika
 
         public MainWindow()
         {
@@ -541,6 +545,10 @@ namespace GrafikoMat
             InitialLoadingOverlay.Visibility = Visibility.Collapsed;
             StartupOverlayContent.Content = null;
             await RunEntranceAnimationAsync();
+
+            // Sprawdź powiadomienia o współdyżurach
+            await UpdateNotificationBadgeAsync();
+            await ShowStartupNotificationsAsync();
         }
 
         private void ShowInitialConnectionSetup()
@@ -635,12 +643,27 @@ namespace GrafikoMat
                     _unitRepository = new SupabaseUnitRepository(_supabaseService.Client);
                     _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
                     _declarationRepository = new SupabaseDeclarationRepository(_supabaseService);
+                    _coDutyNotificationRepository = new SupabaseCoDutyNotificationRepository(_supabaseService);
+
+                    // Inicjalizuj serwis powiadomień
+                    if (_coDutyNotificationRepository != null && _declarationRepository != null && _doctorRepository != null && _unitRepository != null)
+                    {
+                        _coDutyNotificationService = new CoDutyNotificationService(
+                            _coDutyNotificationRepository,
+                            _declarationRepository,
+                            _doctorRepository,
+                            _unitRepository);
+
+                        _coDutyNotificationService.NotificationCountChanged += OnNotificationCountChanged;
+                    }
                 }
                 else
                 {
                     _doctorRepository = null;
                     _unitRepository = null;
                     _assignmentRepository = null;
+                    _coDutyNotificationRepository = null;
+                    _coDutyNotificationService = null;
                 }
             }
             else
@@ -1080,6 +1103,12 @@ namespace GrafikoMat
             _ = declarationsVm.LoadDeclarationsFromSupabaseAsync();
 
             var declarationsView = new DeclarationsView();
+
+            // Ustaw repozytoria dla funkcjonalności współdyżurnych
+            declarationsView.CoDutyNotificationRepository = _coDutyNotificationRepository;
+            declarationsView.DeclarationRepository = _declarationRepository;
+            declarationsView.DoctorRepository = _doctorRepository;
+            declarationsView.ActiveUnitId = ViewModel.ActiveUnit?.Id;
 
             // ✅ ZMIENIONE: Zapisz aktualną jednostkę PRZED zarejestrowaniem handlera
             _previousUnitIdForDeclarations = ViewModel.ActiveUnit.Id;
@@ -1910,6 +1939,226 @@ namespace GrafikoMat
             public POINT ptMaxPosition;
             public POINT ptMinTrackSize;
             public POINT ptMaxTrackSize;
+        }
+
+        // ============================================================================
+        // Obsługa powiadomień o współdyżurach
+        // ============================================================================
+
+        private async void NotificationButton_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadAndShowNotificationsAsync();
+            NotificationFlyout.ShowAt(NotificationButton);
+        }
+
+        private async Task LoadAndShowNotificationsAsync()
+        {
+            if (_coDutyNotificationService == null || _doctorRepository == null)
+                return;
+
+            var currentUser = await _doctorRepository.GetCurrentDoctorProfileAsync();
+            if (currentUser == null)
+                return;
+
+            var notifications = await _coDutyNotificationService.GetPendingNotificationsAsync(currentUser.Id);
+
+            // Usuń wszystkie elementy POZA NoNotificationsText
+            var itemsToRemove = NotificationsContainer.Children
+                .Where(child => child != NoNotificationsText)
+                .ToList();
+
+            foreach (var item in itemsToRemove)
+            {
+                NotificationsContainer.Children.Remove(item);
+            }
+
+            if (notifications.Count == 0)
+            {
+                NoNotificationsText.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                NoNotificationsText.Visibility = Visibility.Collapsed;
+
+                foreach (var notification in notifications)
+                {
+                    var card = CreateNotificationCard(notification);
+                    NotificationsContainer.Children.Add(card);
+                }
+            }
+        }
+
+        private Border CreateNotificationCard(CoDutyNotificationViewModel notification)
+        {
+            var grid = new Grid
+            {
+                Padding = new Thickness(12),
+                RowSpacing = 4
+            };
+
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            // Wiersz 1: Tekst główny
+            var mainText = new TextBlock
+            {
+                FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 }
+            };
+            mainText.Inlines.Add(new Run { Text = notification.FromDoctorName });
+            mainText.Inlines.Add(new Run { Text = " zaprasza do współdyżuru" });
+            Grid.SetRow(mainText, 0);
+            grid.Children.Add(mainText);
+
+            // Wiersz 2: Szczegóły
+            var detailsText = new TextBlock
+            {
+                FontSize = 12,
+                Opacity = 0.8,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            detailsText.Inlines.Add(new Run { Text = notification.UnitName });
+            detailsText.Inlines.Add(new Run { Text = " • " });
+            detailsText.Inlines.Add(new Run { Text = notification.DateText });
+            detailsText.Inlines.Add(new Run { Text = " • " });
+            detailsText.Inlines.Add(new Run { Text = notification.SlotTypeText });
+            Grid.SetRow(detailsText, 1);
+            grid.Children.Add(detailsText);
+
+            // Wiersz 3: Przyciski
+            var buttonsPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+
+            var acceptButton = new Button
+            {
+                Content = "Akceptuj",
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                Tag = notification.Id
+            };
+            acceptButton.Click += async (s, e) => await AcceptNotification_Click(notification.Id);
+
+            var rejectButton = new Button
+            {
+                Content = "Odrzuć",
+                Tag = notification.Id
+            };
+            rejectButton.Click += async (s, e) => await RejectNotification_Click(notification.Id);
+
+            buttonsPanel.Children.Add(acceptButton);
+            buttonsPanel.Children.Add(rejectButton);
+
+            Grid.SetRow(buttonsPanel, 2);
+            grid.Children.Add(buttonsPanel);
+
+            var border = new Border
+            {
+                Background = (Brush)Application.Current.Resources["LayerFillColorDefaultBrush"],
+                CornerRadius = new CornerRadius(4),
+                Child = grid
+            };
+
+            return border;
+        }
+
+        private async Task AcceptNotification_Click(long notificationId)
+        {
+            if (_coDutyNotificationService == null)
+                return;
+
+            var success = await _coDutyNotificationService.AcceptNotificationAsync(notificationId);
+            if (success)
+            {
+                NotificationFlyout.Hide();
+                await LoadAndShowNotificationsAsync();
+                await UpdateNotificationBadgeAsync();
+            }
+        }
+
+        private async Task RejectNotification_Click(long notificationId)
+        {
+            if (_coDutyNotificationService == null)
+                return;
+
+            var success = await _coDutyNotificationService.RejectNotificationAsync(notificationId);
+            if (success)
+            {
+                NotificationFlyout.Hide();
+                await LoadAndShowNotificationsAsync();
+                await UpdateNotificationBadgeAsync();
+            }
+        }
+
+        private async void OnNotificationCountChanged(object? sender, EventArgs e)
+        {
+            await DispatcherQueue.EnqueueAsync(async () =>
+            {
+                await UpdateNotificationBadgeAsync();
+            });
+        }
+
+        private async Task UpdateNotificationBadgeAsync()
+        {
+            if (_coDutyNotificationService == null || _doctorRepository == null)
+            {
+                NotificationBadge.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var currentUser = await _doctorRepository.GetCurrentDoctorProfileAsync();
+            if (currentUser == null)
+            {
+                NotificationBadge.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var count = await _coDutyNotificationService.GetPendingCountAsync(currentUser.Id);
+
+            if (count > 0)
+            {
+                NotificationBadge.Value = count;
+                NotificationBadge.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                NotificationBadge.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async Task ShowStartupNotificationsAsync()
+        {
+            if (_coDutyNotificationService == null || _doctorRepository == null)
+                return;
+
+            var currentUser = await _doctorRepository.GetCurrentDoctorProfileAsync();
+            if (currentUser == null)
+                return;
+
+            var count = await _coDutyNotificationService.GetPendingCountAsync(currentUser.Id);
+            if (count == 0)
+                return;
+
+            var dialog = App.CreateThemedDialog();
+            dialog.Title = "Prośby o współdyżur";
+
+            string countText = count == 1 ? "nową prośbę" :
+                              count < 5 ? "nowe prośby" :
+                              "nowych próśb";
+
+            dialog.Content = $"Masz {count} {countText} o wspólny dyżur.";
+            dialog.PrimaryButtonText = "Pokaż";
+            dialog.CloseButtonText = "Później";
+            dialog.XamlRoot = this.Content.XamlRoot;
+
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                await LoadAndShowNotificationsAsync();
+                NotificationFlyout.ShowAt(NotificationButton);
+            }
         }
     }
 
