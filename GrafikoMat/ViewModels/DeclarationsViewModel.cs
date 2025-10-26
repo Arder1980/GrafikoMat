@@ -229,6 +229,7 @@ namespace GrafikoMat.ViewModels
             if (_isLoading) return;
             _isDirty = true;
             SaveCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(HasUnsavedChanges));
         }
 
         public void LoadDeclarationsForSelectedDoctor()
@@ -253,7 +254,7 @@ namespace GrafikoMat.ViewModels
 
             System.Diagnostics.Debug.WriteLine($"[LOAD] Selected doctor: {SelectedDoctor.FullName}");
 
-            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            var key = Key(SelectedDoctor.Id, Year, MonthIndex);
             if (_sharedDeclarations.TryGetValue(key, out var decl))
             {
                 System.Diagnostics.Debug.WriteLine($"[LOAD] Found declarations for {key}");
@@ -287,9 +288,7 @@ namespace GrafikoMat.ViewModels
                         if (d.CoDutyPartnerId.HasValue)
                         {
                             var partner = Doctors.FirstOrDefault(doc => doc.Profile.Id == d.CoDutyPartnerId.Value);
-                            string partnerDisplayName = partner != null
-                                ? $"+ {partner.Profile.LastName} {partner.Profile.FirstName}"
-                                : "+ ?";
+                            string partnerDisplayName = partner != null ? $"z {partner.DisplayName}" : "z ?";
                             string statusGlyph = d.CoDutyStatus == "accepted" ? "👥" : "⏳";
 
                             // Użyj CoDutySlotPart aby określić który slot ustawić
@@ -336,7 +335,7 @@ namespace GrafikoMat.ViewModels
         public void CommitChangesToSharedState()
         {
             if (SelectedDoctor == null) return;
-            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            var key = Key(SelectedDoctor.Id, Year, MonthIndex);
             int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
 
             // Pobierz istniejącą deklarację lub utwórz nową
@@ -344,6 +343,7 @@ namespace GrafikoMat.ViewModels
             {
                 existingDeclaration = new DoctorMonthDeclaration
                 {
+                    DoctorId = SelectedDoctor.Id,
                     Doctor = SelectedDoctor.FullName,
                     Year = Year,
                     MonthIndex = MonthIndex,
@@ -425,6 +425,7 @@ namespace GrafikoMat.ViewModels
             _isDirty = false;
             SaveCommand.NotifyCanExecuteChanged();
             SaveAsyncCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(HasUnsavedChanges));
 
             // Wywołaj event po zapisie - DeclarationsView użyje tego do wysłania powiadomień
             DeclarationsSaved?.Invoke(this, EventArgs.Empty);
@@ -483,6 +484,7 @@ namespace GrafikoMat.ViewModels
             _isDirty = false;
             SaveCommand.NotifyCanExecuteChanged();
             SaveAsyncCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(HasUnsavedChanges));
         }
 
         /// <summary>
@@ -523,10 +525,14 @@ namespace GrafikoMat.ViewModels
                         continue;
                     }
 
-                    var key = Key(doctor.Profile.FullName, Year, MonthIndex);
+                    var key = Key(doctor.Profile.Id, Year, MonthIndex);
                     int daysInMonth = DateTime.DaysInMonth(Year, MonthIndex + 1);
+
+                    // Ustaw DoctorId w deklaracji
+                    declaration.DoctorId = doctor.Profile.Id;
                     var doctorDeclaration = new DoctorMonthDeclaration
                     {
+                        DoctorId = doctor.Profile.Id,
                         Doctor = doctor.Profile.FullName,
                         Year = Year,
                         MonthIndex = MonthIndex,
@@ -601,7 +607,7 @@ namespace GrafikoMat.ViewModels
             var days = new List<DayDeclarationDto>();
 
             // Pobierz lokalną deklarację z _sharedDeclarations (zawiera pola co-duty)
-            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            var key = Key(SelectedDoctor.Id, Year, MonthIndex);
             _sharedDeclarations.TryGetValue(key, out var localDeclaration);
 
             // Konwertuj dane z DayCells do formatu JSON
@@ -689,7 +695,7 @@ namespace GrafikoMat.ViewModels
             if (SelectedDoctor == null)
                 return result;
 
-            var key = Key(SelectedDoctor.FullName, Year, MonthIndex);
+            var key = Key(SelectedDoctor.Id, Year, MonthIndex);
             if (!_sharedDeclarations.TryGetValue(key, out var declaration))
                 return result;
 
@@ -792,6 +798,10 @@ namespace GrafikoMat.ViewModels
                                      (startPart == SlotPart.Day || startPart == SlotPart.Night) &&
                                      (endPart == SlotPart.Day || endPart == SlotPart.Night);
 
+            // Jeśli oba Day lub oba Night, zaznaczaj tylko ten sam typ
+            bool selectSameTypeOnly = (startPart == endPart) &&
+                                       (startPart == SlotPart.Day || startPart == SlotPart.Night);
+
             for (int i = start; i <= end; i++)
             {
                 if (i < 0 || i >= DayCells.Count) continue;
@@ -817,8 +827,15 @@ namespace GrafikoMat.ViewModels
                 }
                 else
                 {
-                    if (cell.IsSplit)
+                    // Środkowe komórki
+                    if (selectSameTypeOnly && cell.IsSplit)
                     {
+                        // Zaznaczaj tylko Day lub tylko Night (ten sam typ co start/end)
+                        SelectedSlots.Add(new SelectedSlot(i, startPart));
+                    }
+                    else if (cell.IsSplit)
+                    {
+                        // Mieszane typy (Day->Night lub odwrotnie) - zaznacz oba
                         SelectedSlots.Add(new SelectedSlot(i, SlotPart.Day));
                         SelectedSlots.Add(new SelectedSlot(i, SlotPart.Night));
                     }
@@ -935,7 +952,7 @@ namespace GrafikoMat.ViewModels
         }
 
         private static string PolishMonth(int month) => new[] { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" }[month];
-        private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
+        private static string Key(Guid doctorId, int year, int monthIndex) => $"{doctorId}|{year:D4}-{monthIndex:D2}";
     }
 
     public sealed class DayCell : ObservableObject
@@ -1061,22 +1078,99 @@ namespace GrafikoMat.ViewModels
         // ============================================================================
 
         private string _coDutyPartnerFull = "";
-        public string CoDutyPartnerFull { get => _coDutyPartnerFull; set => SetProperty(ref _coDutyPartnerFull, value); }
+        public string CoDutyPartnerFull
+        {
+            get => _coDutyPartnerFull;
+            set
+            {
+                if (SetProperty(ref _coDutyPartnerFull, value))
+                {
+                    OnPropertyChanged(nameof(HasCoDutyFull));
+                }
+            }
+        }
 
         private string _coDutyPartnerDay = "";
-        public string CoDutyPartnerDay { get => _coDutyPartnerDay; set => SetProperty(ref _coDutyPartnerDay, value); }
+        public string CoDutyPartnerDay
+        {
+            get => _coDutyPartnerDay;
+            set
+            {
+                if (SetProperty(ref _coDutyPartnerDay, value))
+                {
+                    OnPropertyChanged(nameof(HasCoDutyDay));
+                }
+            }
+        }
 
         private string _coDutyPartnerNight = "";
-        public string CoDutyPartnerNight { get => _coDutyPartnerNight; set => SetProperty(ref _coDutyPartnerNight, value); }
+        public string CoDutyPartnerNight
+        {
+            get => _coDutyPartnerNight;
+            set
+            {
+                if (SetProperty(ref _coDutyPartnerNight, value))
+                {
+                    OnPropertyChanged(nameof(HasCoDutyNight));
+                }
+            }
+        }
+
+        // Computed properties - czy jest współdyżurny
+        public bool HasCoDutyFull => !string.IsNullOrEmpty(_coDutyPartnerFull);
+        public bool HasCoDutyDay => !string.IsNullOrEmpty(_coDutyPartnerDay);
+        public bool HasCoDutyNight => !string.IsNullOrEmpty(_coDutyPartnerNight);
 
         private string _coDutyStatusGlyphFull = "";
-        public string CoDutyStatusGlyphFull { get => _coDutyStatusGlyphFull; set => SetProperty(ref _coDutyStatusGlyphFull, value); }
+        public string CoDutyStatusGlyphFull
+        {
+            get => _coDutyStatusGlyphFull;
+            set
+            {
+                if (SetProperty(ref _coDutyStatusGlyphFull, value))
+                {
+                    OnPropertyChanged(nameof(CoDutyStatusTooltipFull));
+                }
+            }
+        }
 
         private string _coDutyStatusGlyphDay = "";
-        public string CoDutyStatusGlyphDay { get => _coDutyStatusGlyphDay; set => SetProperty(ref _coDutyStatusGlyphDay, value); }
+        public string CoDutyStatusGlyphDay
+        {
+            get => _coDutyStatusGlyphDay;
+            set
+            {
+                if (SetProperty(ref _coDutyStatusGlyphDay, value))
+                {
+                    OnPropertyChanged(nameof(CoDutyStatusTooltipDay));
+                }
+            }
+        }
 
         private string _coDutyStatusGlyphNight = "";
-        public string CoDutyStatusGlyphNight { get => _coDutyStatusGlyphNight; set => SetProperty(ref _coDutyStatusGlyphNight, value); }
+        public string CoDutyStatusGlyphNight
+        {
+            get => _coDutyStatusGlyphNight;
+            set
+            {
+                if (SetProperty(ref _coDutyStatusGlyphNight, value))
+                {
+                    OnPropertyChanged(nameof(CoDutyStatusTooltipNight));
+                }
+            }
+        }
+
+        // Computed properties - tooltipy dla statusu współdyżurnego
+        public string CoDutyStatusTooltipFull => _coDutyStatusGlyphFull == "👥" ? "Zaakceptowane przez współdyżurnego" : "Oczekiwanie na akceptację współdyżurnego";
+        public string CoDutyStatusTooltipDay => _coDutyStatusGlyphDay == "👥" ? "Zaakceptowane przez współdyżurnego" : "Oczekiwanie na akceptację współdyżurnego";
+        public string CoDutyStatusTooltipNight => _coDutyStatusGlyphNight == "👥" ? "Zaakceptowane przez współdyżurnego" : "Oczekiwanie na akceptację współdyżurnego";
+
+        // Wysokość i szerokość slotu dla dynamicznego skalowania czcionek
+        private double _slotHeight = 48.0;
+        public double SlotHeight { get => _slotHeight; set => SetProperty(ref _slotHeight, value); }
+
+        private double _slotWidth = 100.0;
+        public double SlotWidth { get => _slotWidth; set => SetProperty(ref _slotWidth, value); }
 
         public void UpdateSelection(HashSet<SlotPart> selectedParts)
         {
@@ -1135,12 +1229,12 @@ namespace GrafikoMat.ViewModels
         /// <summary>
         /// Aktualizuje pola współdyżurnego dla konkretnego dnia w lokalnych deklaracjach.
         /// </summary>
-        public void UpdateCoDutyFields(string doctorFullName, int day, Guid? partnerId, string? status, Guid? initiatorId, string? slotPart)
+        public void UpdateCoDutyFields(Guid doctorId, int day, Guid? partnerId, string? status, Guid? initiatorId, string? slotPart)
         {
-            var key = Key(doctorFullName, Year, MonthIndex);
+            var key = Key(doctorId, Year, MonthIndex);
             if (!_sharedDeclarations.TryGetValue(key, out var declaration))
             {
-                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Nie znaleziono deklaracji dla {doctorFullName}");
+                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Nie znaleziono deklaracji dla doctorId={doctorId}");
                 return;
             }
 
@@ -1153,7 +1247,9 @@ namespace GrafikoMat.ViewModels
                 declaration.Days[dayIndex].CoDutySlotPart = slotPart;
 
                 _isDirty = true;
-                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Zaktualizowano dzień {day} dla {doctorFullName}: partner={partnerId}, status={status}, slotPart={slotPart}");
+                SaveCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(HasUnsavedChanges));
+                System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Zaktualizowano dzień {day} dla doctorId={doctorId}: partner={partnerId}, status={status}, slotPart={slotPart}");
             }
         }
 

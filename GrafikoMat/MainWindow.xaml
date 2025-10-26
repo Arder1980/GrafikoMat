@@ -100,28 +100,16 @@
                 </Grid>
                 <FlyoutBase.AttachedFlyout>
                     <Flyout x:Name="NotificationFlyout" Placement="BottomEdgeAlignedLeft">
-                        <Grid Width="450" MaxHeight="500">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Grid.Row="0"
-                                       Text="Prośby o współdyżur"
-                                       Style="{ThemeResource SubtitleTextBlockStyle}"
-                                       Margin="0,0,0,12"/>
-
-                            <ScrollViewer Grid.Row="1" MaxHeight="400" VerticalScrollBarVisibility="Auto">
-                                <StackPanel x:Name="NotificationsContainer" Spacing="8">
-                                    <TextBlock x:Name="NoNotificationsText"
-                                               Text="Brak nowych powiadomień"
-                                               Visibility="Visible"
-                                               HorizontalAlignment="Center"
-                                               Margin="0,20"
-                                               Opacity="0.7"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Grid>
+                        <ScrollViewer Width="450" MaxHeight="500" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="NotificationsContainer" Spacing="8">
+                                <TextBlock x:Name="NoNotificationsText"
+                                           Text="Brak nowych powiadomień"
+                                           Visibility="Visible"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,20"
+                                           Opacity="0.7"/>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Flyout>
                 </FlyoutBase.AttachedFlyout>
             </Button>
@@ -228,8 +216,8 @@
              WAŻNE: Przyciski pomocnicze/drugorzędne mogą pozostać w widokach, ale główne 
              akcje (Zapisz, Generuj, Anuluj, itp.) należy ZAWSZE umieszczać w tym panelu 
              dla jednolitego wyglądu, zachowania i dostępności. -->
-        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,12" Opacity="0">
-            <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+        <Grid x:Name="ActionButtonsPanel" Grid.Row="3" Background="{ThemeResource LayerFillColorDefaultBrush}" Opacity="0">
+            <Border BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="16,12">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

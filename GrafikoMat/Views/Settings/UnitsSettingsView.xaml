@@ -293,25 +293,31 @@
                                  LostFocus="HospitalNameTextBox_LostFocus"
                                  IsEnabled="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
 
-                        <TextBox x:Name="DepartmentNameTextBox" 
+                        <TextBox x:Name="DepartmentNameTextBox"
                                  Grid.Row="1" Grid.Column="0"
                                  Header="Nazwa oddziału/zakładu"
                                  Text="{x:Bind SelectedUnit.DepartmentName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 TextChanged="FormField_Changed"
                                  IsEnabled="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
 
-                        <TextBox x:Name="NameTextBox" 
+                        <TextBox x:Name="NameTextBox"
                                  Grid.Row="1" Grid.Column="1"
                                  Header="Nazwa skrócona (np. Szpital Miejski)"
                                  Text="{x:Bind SelectedUnit.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 TextChanged="FormField_Changed"
                                  IsEnabled="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
 
                         <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Spacing="8">
                             <CheckBox Content="Używaj domyślnie dyżurów 12-godzinnych (Dzień/Noc)"
                                       IsChecked="{x:Bind SelectedUnit.UseTwelveHourShiftsByDefault, Mode=TwoWay}"
+                                      Checked="FormField_Changed"
+                                      Unchecked="FormField_Changed"
                                       IsEnabled="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
 
                             <CheckBox Content="Zezwalaj na teleradiologię jako zastępstwo przy braku obsady"
                                       IsChecked="{x:Bind SelectedUnit.AllowTeleradiologyFallback, Mode=TwoWay}"
+                                      Checked="FormField_Changed"
+                                      Unchecked="FormField_Changed"
                                       IsEnabled="{x:Bind IsArchived, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}"/>
                         </StackPanel>
                     </Grid>

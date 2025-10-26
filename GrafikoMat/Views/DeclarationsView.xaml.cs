@@ -28,30 +28,41 @@ namespace GrafikoMat.Views
         public event Action? SaveAndCloseRequested;
         public event Action? CloseRequested;
 
-        public async void OnDeclCloseOnly()
+        /// <summary>
+        /// Zamyka widok deklaracji z opcjonalnym sprawdzeniem niezapisanych zmian.
+        /// </summary>
+        /// <param name="skipChangeCheck">Jeśli true, pomija sprawdzanie zmian i zamyka natychmiast</param>
+        public async void OnDeclCloseOnly(bool skipChangeCheck = false)
         {
+            // Jeśli skipChangeCheck=true, zamknij bez sprawdzania (użytkownik już podjął decyzję)
+            if (skipChangeCheck)
+            {
+                CloseRequested?.Invoke();
+                return;
+            }
+
             // Sprawdź czy są niezapisane zmiany
             if (ViewModel != null && ViewModel.HasUnsavedChanges)
             {
                 var dialog = App.CreateThemedDialog();
                 dialog.Title = "Niezapisane zmiany";
-                dialog.Content = "Masz niezapisane zmiany w deklaracjach. Co chcesz zrobić?";
-                dialog.PrimaryButtonText = "Zapisz i zamknij";
-                dialog.SecondaryButtonText = "Odrzuć zmiany";
+                dialog.Content = "Masz niezapisane zmiany. Co chcesz zrobić?";
+                dialog.PrimaryButtonText = "Odrzuć zmiany i wyjdź";
+                dialog.SecondaryButtonText = "Zapisz i wyjdź";
                 dialog.CloseButtonText = "Anuluj";
-                dialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary;
+                dialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Secondary; // Zapisz jako domyślne (bezpieczniejsze)
 
                 var result = await dialog.ShowAsync();
 
                 if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
                 {
-                    // Użytkownik chce zapisać
-                    await ViewModel.SaveAsyncCommand.ExecuteAsync(null);
+                    // Użytkownik odrzuca zmiany - zamknij bez zapisu
                     CloseRequested?.Invoke();
                 }
                 else if (result == Microsoft.UI.Xaml.Controls.ContentDialogResult.Secondary)
                 {
-                    // Użytkownik odrzuca zmiany - zamknij bez zapisu
+                    // Użytkownik chce zapisać
+                    await ViewModel.SaveAsyncCommand.ExecuteAsync(null);
                     CloseRequested?.Invoke();
                 }
                 // Jeśli Close (Anuluj) - nie rób nic
@@ -583,6 +594,21 @@ namespace GrafikoMat.Views
             bool hasDeclarationInSelection = ViewModel.SelectedSlots
                 .Any(slot => ViewModel.HasDeclarationInSlot(slot.Index, slot.Part));
 
+            // ✅ SPRAWDŹ czy w zaznaczonych slotach są deklaracje negatywne (nie mogę, urlop, inny dyżur)
+            bool hasNegativeDeclarationInSelection = ViewModel.SelectedSlots
+                .Any(slot =>
+                {
+                    var cell = ViewModel.DayCells[slot.Index];
+                    string symbol = slot.Part switch
+                    {
+                        SlotPart.Full => cell.SymbolFull,
+                        SlotPart.Day => cell.SymbolDay,
+                        SlotPart.Night => cell.SymbolNight,
+                        _ => ""
+                    };
+                    return symbol == "---" || symbol == "URL" || symbol == "DYZ";
+                });
+
             var addCoWorkerSubItem = new MenuFlyoutSubItem
             {
                 Text = "Dodaj współdyżurnego"
@@ -595,6 +621,16 @@ namespace GrafikoMat.Views
                 var hintItem = new MenuFlyoutItem
                 {
                     Text = "Najpierw wstaw deklarację",
+                    IsEnabled = false
+                };
+                addCoWorkerSubItem.Items.Add(hintItem);
+            }
+            else if (hasNegativeDeclarationInSelection)
+            {
+                // ✅ Deklaracje negatywne - nie można dodać współdyżurnego
+                var hintItem = new MenuFlyoutItem
+                {
+                    Text = "Nie można dodać do tej deklaracji",
                     IsEnabled = false
                 };
                 addCoWorkerSubItem.Items.Add(hintItem);
@@ -831,7 +867,7 @@ namespace GrafikoMat.Views
                 }
 
                 // Wyczyść w _sharedDeclarations
-                ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.FullName, cell.Date.Day, null, null, null, null);
+                ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.Id, cell.Date.Day, null, null, null, null);
             }
         }
 
@@ -925,7 +961,7 @@ namespace GrafikoMat.Views
                 // Jeśli wymagane usunięcie współdyżurnego - wyczyść w _sharedDeclarations
                 if (requiresCoDutyRemoval)
                 {
-                    ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.FullName, cell.Date.Day, null, null, null, null);
+                    ViewModel.UpdateCoDutyFields(ViewModel.SelectedDoctor.Id, cell.Date.Day, null, null, null, null);
                 }
             }
         }
@@ -1062,7 +1098,7 @@ namespace GrafikoMat.Views
         /// <summary>
         /// Obsługa przełączania trybu 24h/12h dla zaznaczonych dni
         /// </summary>
-        private void OnToggleModeMenuItemClick(object sender, RoutedEventArgs e)
+        private async void OnToggleModeMenuItemClick(object sender, RoutedEventArgs e)
         {
             if (ViewModel == null)
                 return;
@@ -1074,6 +1110,47 @@ namespace GrafikoMat.Views
                 .Select(s => s.Index)
                 .Distinct()
                 .ToList();
+
+            // Sprawdź czy którykolwiek z zaznaczonych dni ma zawartość (deklarację)
+            bool hasAnyContent = false;
+            foreach (var dayIndex in uniqueDayIndices)
+            {
+                if (dayIndex < 0 || dayIndex >= ViewModel.DayCells.Count)
+                    continue;
+
+                var cell = ViewModel.DayCells[dayIndex];
+                if (!cell.InMonth)
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(cell.SymbolFull) ||
+                    !string.IsNullOrWhiteSpace(cell.SymbolDay) ||
+                    !string.IsNullOrWhiteSpace(cell.SymbolNight))
+                {
+                    hasAnyContent = true;
+                    break;
+                }
+            }
+
+            // Jeśli jest zawartość - pokaż ostrzeżenie
+            if (hasAnyContent)
+            {
+                var confirmDialog = App.CreateThemedDialog();
+                confirmDialog.Title = "Zmiana trybu dnia";
+                confirmDialog.Content = "Zmiana trybu dnia (24h ↔ 12h) może spowodować utratę lub zmianę deklaracji.\n\n" +
+                                       "Po zapisaniu zmiany zostaną nadpisane w bazie danych.\n\n" +
+                                       "Czy kontynuować?";
+                confirmDialog.PrimaryButtonText = "Kontynuuj";
+                confirmDialog.CloseButtonText = "Anuluj";
+                confirmDialog.DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Close;
+                confirmDialog.XamlRoot = this.XamlRoot;
+
+                var result = await confirmDialog.ShowAsync();
+                if (result != Microsoft.UI.Xaml.Controls.ContentDialogResult.Primary)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MENU] Toggle mode cancelled by user");
+                    return; // Użytkownik anulował
+                }
+            }
 
             // Zapamiętaj zaznaczenie przed zmianą trybu
             var selectedIndices = new HashSet<int>(uniqueDayIndices);
@@ -1196,14 +1273,17 @@ namespace GrafikoMat.Views
 
             try
             {
-                // Pobierz dane partnera
-                var allDoctors = await DoctorRepository.GetAllAsync();
-                var partner = allDoctors.FirstOrDefault(d => d.Id == partnerId);
+                // Pobierz dane partnera z ViewModel.Doctors (mają już uwzględnione duplikaty w DisplayName)
+                var partner = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == partnerId);
                 if (partner == null)
                 {
                     System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Nie znaleziono partnera: {partnerId}");
                     return;
                 }
+
+                System.Diagnostics.Debug.WriteLine($"[DeclarationsView] DODAWANIE WSPÓŁDYŻURNEGO:");
+                System.Diagnostics.Debug.WriteLine($"  currentDoctor.Id = {currentDoctor.Id} ({currentDoctor.FullName})");
+                System.Diagnostics.Debug.WriteLine($"  partnerId = {partnerId} ({partner.Profile.FullName})");
 
                 // Pobierz ID jednostki z ActiveUnitId (ustawione przez MainWindow)
                 if (!ActiveUnitId.HasValue)
@@ -1244,7 +1324,7 @@ namespace GrafikoMat.Views
                         slotPart,
                         currentDoctor.Id); // Inicjator = currentDoctor
 
-                    System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Zaznaczono lokalnie współdyżur: {currentDoctor.FullName} + {partner.FullName} na dzień {dayCell.Date.Day} ({slotPart})");
+                    System.Diagnostics.Debug.WriteLine($"[DeclarationsView] Zaznaczono lokalnie współdyżur: {currentDoctor.FullName} + {partner.Profile.FullName} na dzień {dayCell.Date.Day} ({slotPart})");
                 }
 
                 // Odśwież TYLKO pola współdyżurnych w UI (bez przeładowywania całego widoku)
@@ -1280,6 +1360,9 @@ namespace GrafikoMat.Views
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Aktualizuję lokalnie deklaracje dla dnia {day} ({slotPart})");
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   fromDoctorId = {fromDoctorId}");
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   toDoctorId = {toDoctorId}");
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   initiatorId = {initiatorId}");
 
                 // Znajdź lekarzy w ViewModel
                 var fromDoctor = ViewModel.Doctors.FirstOrDefault(d => d.Profile.Id == fromDoctorId);
@@ -1291,11 +1374,16 @@ namespace GrafikoMat.Views
                     return;
                 }
 
-                // Aktualizuj lokalną deklarację inicjatora
-                UpdateDoctorLocalDeclaration(fromDoctor.Profile.FullName, day, slotPart, toDoctorId, initiatorId);
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   fromDoctor.Profile.Id = {fromDoctor.Profile.Id} ({fromDoctor.Profile.FullName})");
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   toDoctor.Profile.Id = {toDoctor.Profile.Id} ({toDoctor.Profile.FullName})");
 
-                // Aktualizuj lokalną deklarację partnera
-                UpdateDoctorLocalDeclaration(toDoctor.Profile.FullName, day, slotPart, fromDoctorId, initiatorId);
+                // Aktualizuj lokalną deklarację inicjatora (fromDoctor dostaje toDoctorId jako partnera)
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal] >> Aktualizuję deklarację fromDoctor.Id={fromDoctor.Profile.Id}: partnerId = {toDoctorId}");
+                UpdateDoctorLocalDeclaration(fromDoctor.Profile.Id, day, slotPart, toDoctorId, initiatorId);
+
+                // Aktualizuj lokalną deklarację partnera (toDoctor dostaje fromDoctorId jako partnera)
+                System.Diagnostics.Debug.WriteLine($"[UpdateLocal] >> Aktualizuję deklarację toDoctor.Id={toDoctor.Profile.Id}: partnerId = {fromDoctorId}");
+                UpdateDoctorLocalDeclaration(toDoctor.Profile.Id, day, slotPart, fromDoctorId, initiatorId);
 
                 System.Diagnostics.Debug.WriteLine($"[UpdateLocal] ✓ Zaktualizowano lokalnie deklaracje");
             }
@@ -1309,7 +1397,7 @@ namespace GrafikoMat.Views
         /// Aktualizuje lokalną deklarację pojedynczego lekarza w _sharedDeclarations.
         /// </summary>
         private void UpdateDoctorLocalDeclaration(
-            string doctorFullName,
+            Guid doctorId,
             int day,
             string slotPart,
             Guid partnerId,
@@ -1318,10 +1406,11 @@ namespace GrafikoMat.Views
             if (ViewModel == null)
                 return;
 
-            System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Aktualizacja dla {doctorFullName}, dzień {day}, slotPart={slotPart}");
+            System.Diagnostics.Debug.WriteLine($"[UpdateLocal] Aktualizacja dla doctorId={doctorId}, dzień {day}, slotPart={slotPart}");
+            System.Diagnostics.Debug.WriteLine($"[UpdateLocal]   partnerId = {partnerId}, initiatorId = {initiatorId}");
 
             // Aktualizuj pola co-duty w lokalnej deklaracji
-            ViewModel.UpdateCoDutyFields(doctorFullName, day, partnerId, "pending", initiatorId, slotPart);
+            ViewModel.UpdateCoDutyFields(doctorId, day, partnerId, "pending", initiatorId, slotPart);
         }
 
         /// <summary>
@@ -1388,10 +1477,10 @@ namespace GrafikoMat.Views
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Refreshing co-duty UI for {doctor.Profile.FullName}");
+            System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Refreshing co-duty UI for {doctor.Profile.FullName} (ID={doctor.Profile.Id})");
 
             // Pobierz deklarację z shared state
-            var key = $"{doctor.Profile.FullName}|{ViewModel.Year:D4}-{ViewModel.MonthIndex:D2}";
+            var key = $"{doctor.Profile.Id}|{ViewModel.Year:D4}-{ViewModel.MonthIndex:D2}";
 
             // Użyj reflection aby dostać się do _sharedDeclarations (prywatne pole w ViewModel)
             var sharedDeclarationsField = ViewModel.GetType().GetField("_sharedDeclarations",
@@ -1449,14 +1538,18 @@ namespace GrafikoMat.Views
                     continue;
                 }
 
-                // Format: "+ Nazwisko Imię"
-                string partnerDisplayName = $"+ {partner.Profile.LastName} {partner.Profile.FirstName}";
+                // Użyj DisplayName który uwzględnia duplikaty (skrót tylko przy duplikatach)
+                string partnerDisplayName = $"z {partner.DisplayName}";
                 string statusGlyph = dayDeclaration.CoDutyStatus == "accepted" ? "👥" : "⏳";
 
                 // Określ który slot aktualizować na podstawie CoDutySlotPart
                 string slotPart = dayDeclaration.CoDutySlotPart ?? "full";
 
-                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Day {dayNumber}: partner={partnerDisplayName}, slotPart={slotPart}, status={dayDeclaration.CoDutyStatus}, partnerId={dayDeclaration.CoDutyPartnerId}");
+                System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Day {dayNumber}:");
+                System.Diagnostics.Debug.WriteLine($"  partnerId z deklaracji = {dayDeclaration.CoDutyPartnerId}");
+                System.Diagnostics.Debug.WriteLine($"  partnerDisplayName = {partnerDisplayName}");
+                System.Diagnostics.Debug.WriteLine($"  status = {dayDeclaration.CoDutyStatus}, glyph = {statusGlyph}");
+                System.Diagnostics.Debug.WriteLine($"  slotPart = {slotPart}");
 
                 // Aktualizuj TYLKO pola co-duty, nie dotykaj symboli
                 if (slotPart == "full")
@@ -1525,7 +1618,7 @@ namespace GrafikoMat.Views
                 }
 
                 // Wyczyść w _sharedDeclarations
-                ViewModel.UpdateCoDutyFields(currentDoctor.FullName, dayCell.Date.Day, null, null, null, null);
+                ViewModel.UpdateCoDutyFields(currentDoctor.Id, dayCell.Date.Day, null, null, null, null);
 
                 System.Diagnostics.Debug.WriteLine($"[RemoveCoDuty] Usunięto współdyżurnego z dnia {dayCell.Date.Day}, slot {slot.Part}");
             }
@@ -1594,12 +1687,23 @@ namespace GrafikoMat.Views
                 }
 
                 // Wyczyść w _sharedDeclarations (współdyżurny)
-                ViewModel.UpdateCoDutyFields(currentDoctor.FullName, dayCell.Date.Day, null, null, null, null);
+                ViewModel.UpdateCoDutyFields(currentDoctor.Id, dayCell.Date.Day, null, null, null, null);
 
                 System.Diagnostics.Debug.WriteLine($"[ClearDeclaration] Wyczyszczono dzień {dayCell.Date.Day}, slot {slot.Part}");
             }
 
             // Symbol dyżuru zostanie zapisany przez mechanizm dirty tracking w ViewModel
+        }
+
+        // Handler dla dynamicznego skalowania czcionek w slotach
+        private void SlotContentGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is FrameworkElement element && element.DataContext is DayCell dayCell)
+            {
+                // Aktualizuj wysokość i szerokość slotu w ViewModel
+                dayCell.SlotHeight = e.NewSize.Height;
+                dayCell.SlotWidth = e.NewSize.Width;
+            }
         }
     }
 }

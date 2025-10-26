@@ -228,4 +228,92 @@ namespace GrafikoMat.Common
             return DependencyProperty.UnsetValue;
         }
     }
+
+    /// <summary>
+    /// Konwertuje szerokość na MaxWidth z zadanym procentem.
+    /// Parametr: procent jako string np. "0.9" dla 90%
+    /// Domyślnie: 90%
+    /// </summary>
+    public class WidthToMaxWidthConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            double percentage = 0.9; // Domyślnie 90%
+
+            // Parse parametru
+            if (parameter is string paramStr && !string.IsNullOrEmpty(paramStr))
+            {
+                if (double.TryParse(paramStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedPercent))
+                {
+                    percentage = parsedPercent;
+                }
+            }
+
+            // Jeśli nie ma wartości szerokości, zwróć bardzo dużą wartość (brak ograniczenia)
+            if (value is not double width || width <= 0)
+            {
+                return double.PositiveInfinity;
+            }
+
+            return width * percentage;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Konwertuje wysokość slotu na rozmiar czcionki z osłabionym skalowaniem.
+    /// Parametr: "BaseFontSize;ScaleFactor;Divisor" np. "18;0.1;1" lub "14;0.08;2"
+    /// Divisor: dzielnik wysokości (dla slotów 12h użyj 2, dla 24h użyj 1)
+    /// Formuła: FontSize = BaseFontSize + ((SlotHeight / Divisor) - 48) * ScaleFactor
+    /// </summary>
+    public class SlotHeightToFontSizeConverter : IValueConverter
+    {
+        private const double BaseSlotHeight = 48.0;
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            // Domyślne wartości
+            double baseFontSize = 16.0;
+            double scaleFactor = 0.1;
+            double divisor = 1.0;
+
+            // Parse parametru "BaseFontSize;ScaleFactor;Divisor"
+            if (parameter is string paramStr && !string.IsNullOrEmpty(paramStr))
+            {
+                var parts = paramStr.Split(';');
+                if (parts.Length >= 1 && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedBase))
+                {
+                    baseFontSize = parsedBase;
+                }
+                if (parts.Length >= 2 && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedScale))
+                {
+                    scaleFactor = parsedScale;
+                }
+                if (parts.Length >= 3 && double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsedDivisor) && parsedDivisor > 0)
+                {
+                    divisor = parsedDivisor;
+                }
+            }
+
+            // Jeśli nie ma wartości wysokości, zwróć bazowy rozmiar
+            if (value is not double height || height <= 0)
+            {
+                return baseFontSize;
+            }
+
+            // Oblicz efektywną wysokość (podzieloną przez divisor dla slotów 12h)
+            double effectiveHeight = height / divisor;
+
+            // Oblicz rozmiar czcionki: BaseFontSize + (EffectiveHeight - BaseHeight) * ScaleFactor
+            double fontSize = baseFontSize + Math.Max(0, effectiveHeight - BaseSlotHeight) * scaleFactor;
+
+            // Minimum to baseFontSize
+            return Math.Max(baseFontSize, fontSize);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
 }

@@ -20,7 +20,8 @@ namespace GrafikoMat.Models
 
     public sealed class DoctorMonthDeclaration
     {
-        public string Doctor { get; set; } = "";
+        public Guid DoctorId { get; set; }  // Unique ID lekarza
+        public string Doctor { get; set; } = "";  // FullName (może być duplikat!)
         public int Year { get; set; }
         public int MonthIndex { get; set; } // 0..11
         public DayDeclaration[] Days { get; set; } = System.Array.Empty<DayDeclaration>();

@@ -53,6 +53,7 @@ namespace GrafikoMat
         private SettingsView? _settingsView;
         private ManagementView? _managementView;
         private DeclarationsView? _currentDeclarationsView;
+        private System.ComponentModel.PropertyChangedEventHandler? _declarationsViewModelPropertyChangedHandler;
 
         private bool _isAnimating;
         private bool _isClosing;
@@ -886,11 +887,76 @@ namespace GrafikoMat
         {
             ActionsLeft.Clear();
             ActionsRight.Clear();
-            ActionsLeft.Add(new Models.UiAction("Anuluj", new RelayCommand(view.OnDeclCloseOnly)));
+            ActionsLeft.Add(new Models.UiAction("Wstecz", new RelayCommand(async () => await OnDeclarationsBackAsync(view))));
             ActionsLeft.Add(new Models.UiAction("Wyczyść deklaracje", new RelayCommand(async () => await ConfirmAndClearDeclarationsAsync(view))));
 
-            ActionsRight.Add(new Models.UiAction("Zapisz", new RelayCommand(() => view.ViewModel?.SaveCommand.Execute(null))));
-            ActionsRight.Add(new Models.UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly), isPrimary: true));
+            ActionsRight.Add(new Models.UiAction("Zapisz", view.ViewModel?.SaveCommand));
+            ActionsRight.Add(new Models.UiAction("Zapisz i zamknij", new RelayCommand(view.OnDeclSaveAndCloseOnly, () => view.ViewModel?.HasUnsavedChanges ?? false), isPrimary: true));
+
+            // Cleanup starego handlera jeśli istnieje (np. przy zmianie ViewModel)
+            if (_declarationsViewModelPropertyChangedHandler != null && _currentDeclarationsView?.ViewModel != null)
+            {
+                _currentDeclarationsView.ViewModel.PropertyChanged -= _declarationsViewModelPropertyChangedHandler;
+                _declarationsViewModelPropertyChangedHandler = null;
+            }
+
+            // Subskrybuj do zmian HasUnsavedChanges aby aktualizować przyciski
+            if (view.ViewModel != null)
+            {
+                _declarationsViewModelPropertyChangedHandler = (sender, e) =>
+                {
+                    if (e.PropertyName == "HasUnsavedChanges" && _currentDeclarationsView != null)
+                    {
+                        // Przebuduj akcje aby zaktualizować stan przycisków
+                        // UWAGA: Rekursywne wywołanie jest bezpieczne bo handler jest usuwany przed dodaniem nowego
+                        DispatcherQueue.TryEnqueue(() => BuildActionsForDeclarations(_currentDeclarationsView));
+                    }
+                };
+                view.ViewModel.PropertyChanged += _declarationsViewModelPropertyChangedHandler;
+            }
+        }
+
+        private async Task OnDeclarationsBackAsync(DeclarationsView view)
+        {
+            if (view?.ViewModel == null)
+            {
+                view.OnDeclCloseOnly();
+                return;
+            }
+
+            // Sprawdź czy są niezapisane zmiany
+            if (view.ViewModel.HasUnsavedChanges)
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "Niezapisane zmiany",
+                    Content = "Masz niezapisane zmiany. Co chcesz zrobić?",
+                    PrimaryButtonText = "Odrzuć zmiany i wyjdź",
+                    SecondaryButtonText = "Zapisz i wyjdź",
+                    CloseButtonText = "Anuluj",
+                    DefaultButton = ContentDialogButton.Secondary, // Zapisz jako domyślne (bezpieczniejsze)
+                    XamlRoot = this.Content.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+
+                if (result == ContentDialogResult.Primary)
+                {
+                    // Odrzuć zmiany i wyjdź - skipChangeCheck=true bo użytkownik już podjął decyzję
+                    view.OnDeclCloseOnly(skipChangeCheck: true);
+                }
+                else if (result == ContentDialogResult.Secondary)
+                {
+                    // Zapisz i wyjdź
+                    view.OnDeclSaveAndCloseOnly();
+                }
+                // Close = Anuluj - nic nie rób
+            }
+            else
+            {
+                // Brak zmian - po prostu wyjdź
+                view.OnDeclCloseOnly();
+            }
         }
 
         private async Task ConfirmAndClearDeclarationsAsync(DeclarationsView view)
@@ -898,10 +964,15 @@ namespace GrafikoMat
             if (view?.ViewModel == null)
                 return;
 
+            // Pobierz nazwę miesiąca
+            string[] polishMonths = { "", "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec", "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień" };
+            string monthName = polishMonths[view.ViewModel.MonthIndex + 1];
+            int year = view.ViewModel.Year;
+
             var dialog = new ContentDialog
             {
                 Title = "Potwierdzenie",
-                Content = $"Czy na pewno chcesz usunąć wszystkie deklaracje dla lekarza {view.ViewModel.SelectedDoctor?.FullName} z miesiąca {view.ViewModel.MonthHeader}?\n\nTa operacja nie może być cofnięta.",
+                Content = $"Czy na pewno chcesz usunąć wszystkie deklaracje dla lekarza {view.ViewModel.SelectedDoctor?.FullName} z miesiąca {monthName} {year}?\n\nTa operacja nie może być cofnięta.",
                 PrimaryButtonText = "Usuń",
                 CloseButtonText = "Anuluj",
                 DefaultButton = ContentDialogButton.Close,
@@ -1045,6 +1116,13 @@ namespace GrafikoMat
             }
 
             ViewModel.PropertyChanged -= OnMainViewModelPropertyChangedForDeclarations;
+
+            // Cleanup PropertyChanged handler dla DeclarationsViewModel
+            if (_declarationsViewModelPropertyChangedHandler != null && _currentDeclarationsView?.ViewModel != null)
+            {
+                _currentDeclarationsView.ViewModel.PropertyChanged -= _declarationsViewModelPropertyChangedHandler;
+                _declarationsViewModelPropertyChangedHandler = null;
+            }
 
             // POPRAWKA: Dispose DeclarationsViewModel przed nullowaniem
             _currentDeclarationsView?.ViewModel?.Dispose();
@@ -1402,6 +1480,13 @@ namespace GrafikoMat
             // Cleanup widoków
             _settingsView = null;
             _managementView = null;
+
+            // Cleanup PropertyChanged handler dla DeclarationsViewModel
+            if (_declarationsViewModelPropertyChangedHandler != null && _currentDeclarationsView?.ViewModel != null)
+            {
+                _currentDeclarationsView.ViewModel.PropertyChanged -= _declarationsViewModelPropertyChangedHandler;
+                _declarationsViewModelPropertyChangedHandler = null;
+            }
 
             // POPRAWKA: Dispose DeclarationsViewModel przed nullowaniem
             _currentDeclarationsView?.ViewModel?.Dispose();
@@ -1980,11 +2065,23 @@ namespace GrafikoMat
             {
                 NoNotificationsText.Visibility = Visibility.Collapsed;
 
+                // Dodaj nagłówek sekcji "Prośby o współdyżur"
+                var pendingHeader = new TextBlock
+                {
+                    Text = "Prośby o współdyżur",
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Margin = new Thickness(0, 4, 0, 8)
+                };
+                NotificationsContainer.Children.Add(pendingHeader);
+
+                // Dodaj karty powiadomień
                 foreach (var notification in notifications)
                 {
                     var card = CreateNotificationCard(notification);
                     NotificationsContainer.Children.Add(card);
                 }
+
+                // TODO: W przyszłości dodać separator i sekcję "Odrzucone prośby o współdyżur"
             }
         }
 

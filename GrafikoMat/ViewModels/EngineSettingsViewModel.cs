@@ -19,6 +19,7 @@ namespace GrafikoMat.ViewModels
         private AppSettings _appSettings;
         private Guid _viewId;
         private bool _isDirty = false;
+        private bool _isInitializing = false;
         public ObservableCollection<EngineOption> EngineOptions { get; } = new();
 
         private EngineOption? _selectedEngine;
@@ -134,6 +135,7 @@ namespace GrafikoMat.ViewModels
 
         private void MarkAsDirty()
         {
+            if (_isInitializing) return; // Nie oznaczaj jako "dirty" podczas inicjalizacji
             _isDirty = true;
             SaveCommand.NotifyCanExecuteChanged();
         }
@@ -147,6 +149,8 @@ namespace GrafikoMat.ViewModels
 
         private void LoadInitialSelection()
         {
+            _isInitializing = true;
+
             SelectedEngine = EngineOptions.FirstOrDefault(o => o.Type == _appSettings.SelectedSolver)
                 ?? EngineOptions.FirstOrDefault();
 
@@ -158,6 +162,12 @@ namespace GrafikoMat.ViewModels
             AntColonyGenerationsValue = _appSettings.AntColonyGenerations;
             TabuListSizeValue = _appSettings.TabuListSize;
             TabuMaxIterationsValue = _appSettings.TabuMaxIterations;
+
+            _isInitializing = false;
+
+            // Resetuj _isDirty po początkowym załadowaniu - przycisk "Zapisz" powinien być nieaktywny
+            _isDirty = false;
+            SaveCommand.NotifyCanExecuteChanged();
         }
 
         private async Task SaveSettingsAsync()

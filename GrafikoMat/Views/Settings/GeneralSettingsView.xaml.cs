@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace GrafikoMat.Views.Settings
 {
@@ -21,14 +22,22 @@ namespace GrafikoMat.Views.Settings
             this.Unloaded += OnUnloaded;
         }
 
-        private void OnLoaded(object sender, RoutedEventArgs e)
+        private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Zarejestruj przycisk Zapisz w ActionButtonsPanel
-            var actions = new List<UiAction>
+            // Najpierw wyślij pustą listę aby wyczyścić panel akcji
+            ActionsChanged?.Invoke(new List<UiAction>());
+
+            // Opóźnij rejestrację akcji aby uniknąć migania przycisku podczas inicjalizacji
+            await Task.Delay(100);
+
+            if (this.IsLoaded)
             {
-                new UiAction("Zapisz ustawienia", ViewModel.SaveCommand, isPrimary: true)
-            };
-            ActionsChanged?.Invoke(actions);
+                var actions = new List<UiAction>
+                {
+                    new UiAction("Zapisz zmiany", ViewModel.SaveCommand, isPrimary: true)
+                };
+                ActionsChanged?.Invoke(actions);
+            }
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs e)

@@ -30,6 +30,8 @@ namespace GrafikoMat.Views.Settings
         private Unit? _currentSuggestion;
         private string _searchText = string.Empty;
         private bool _isFormVisible = false;
+        private Unit? _originalUnit; // Przechowuje oryginalny stan jednostki do porównania zmian
+        private bool _isInitializingUnit = false; // Flaga zapobiegająca miganiu przycisków podczas inicjalizacji
 
         public event Action<List<UiAction>>? ActionsChanged;
 
@@ -58,7 +60,7 @@ namespace GrafikoMat.Views.Settings
                         OnPropertyChanged(nameof(IsArchived));
                         OnPropertyChanged(nameof(EditModeTitle));
                         OnPropertyChanged(nameof(ShouldShowArchiveButton));
-                        BuildActions();
+                        // BuildActions() zostanie wywołane manualnie po zakończeniu inicjalizacji
 
                         if (value != null)
                         {
@@ -88,9 +90,12 @@ namespace GrafikoMat.Views.Settings
 
         private Unit? _pendingSelectedUnit;
 
-        private void OnFadeOutForUnitChange(object? sender, object e)
+        private async void OnFadeOutForUnitChange(object? sender, object e)
         {
             FormFadeOutStoryboard.Completed -= OnFadeOutForUnitChange;
+
+            // Najpierw wyczyść akcje
+            ActionsChanged?.Invoke(new List<UiAction>());
 
             _selectedUnit = _pendingSelectedUnit;
             _pendingSelectedUnit = null;
@@ -100,11 +105,14 @@ namespace GrafikoMat.Views.Settings
             OnPropertyChanged(nameof(IsArchived));
             OnPropertyChanged(nameof(EditModeTitle));
             OnPropertyChanged(nameof(ShouldShowArchiveButton));
-            BuildActions();
 
             // Ustaw Tag dla autouzupełniania
             HospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(NameTextBox, DepartmentNameTextBox);
             FormFadeInStoryboard.Begin();
+
+            // Opóźnij budowanie akcji aby uniknąć migania
+            await Task.Delay(100);
+            BuildActions();
         }
 
         public bool IsEditMode => SelectedUnit != null && _masterUnitList.Any(u => u.Id == SelectedUnit.Id);
@@ -120,7 +128,7 @@ namespace GrafikoMat.Views.Settings
             _unitRepository = unitRepository;
             _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
             this.Loaded += UnitsSettingsView_Loaded;
-            BuildActions();
+            // BuildActions() zostanie wywołane automatycznie po wybraniu jednostki z listy
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -181,10 +189,15 @@ namespace GrafikoMat.Views.Settings
             FilterUnits();
         }
 
-        private void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void UnitsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (UnitsListView.SelectedItem is Unit selectedUnit)
             {
+                _isInitializingUnit = true;
+
+                // Najpierw wyczyść akcje
+                ActionsChanged?.Invoke(new List<UiAction>());
+
                 SelectedUnit = new Unit
                 {
                     Id = selectedUnit.Id,
@@ -196,12 +209,35 @@ namespace GrafikoMat.Views.Settings
                     IsArchived = selectedUnit.IsArchived
                 };
 
+                // Zapisz oryginalny stan do porównania zmian
+                _originalUnit = new Unit
+                {
+                    Id = selectedUnit.Id,
+                    Name = selectedUnit.Name,
+                    HospitalFullName = selectedUnit.HospitalFullName,
+                    DepartmentName = selectedUnit.DepartmentName,
+                    UseTwelveHourShiftsByDefault = selectedUnit.UseTwelveHourShiftsByDefault,
+                    AllowTeleradiologyFallback = selectedUnit.AllowTeleradiologyFallback,
+                    IsArchived = selectedUnit.IsArchived
+                };
+
+                _isInitializingUnit = false;
+
                 HospitalNameTextBox.Tag = new Tuple<TextBox, TextBox>(NameTextBox, DepartmentNameTextBox);
+
+                // Opóźnij budowanie akcji aby uniknąć migania
+                await Task.Delay(100);
+                BuildActions();
             }
         }
 
-        private void AddNewButton_Click(object sender, RoutedEventArgs e)
+        private async void AddNewButton_Click(object sender, RoutedEventArgs e)
         {
+            _isInitializingUnit = true;
+
+            // Najpierw wyczyść akcje
+            ActionsChanged?.Invoke(new List<UiAction>());
+
             UnitsListView.SelectedItem = null;
             SelectedUnit = new Unit
             {
@@ -214,7 +250,25 @@ namespace GrafikoMat.Views.Settings
                 IsArchived = false
             };
 
+            // Zapisz oryginalny stan (pusta jednostka) - przycisk Zapisz będzie nieaktywny dopóki user czegoś nie wpisze
+            _originalUnit = new Unit
+            {
+                Id = SelectedUnit.Id,
+                Name = string.Empty,
+                HospitalFullName = string.Empty,
+                DepartmentName = string.Empty,
+                UseTwelveHourShiftsByDefault = false,
+                AllowTeleradiologyFallback = false,
+                IsArchived = false
+            };
+
+            _isInitializingUnit = false;
+
             // Tag zostanie ustawiony w SelectedUnit setter po opóźnieniu
+
+            // Opóźnij budowanie akcji aby uniknąć migania
+            await Task.Delay(100);
+            BuildActions();
         }
 
         private void CancelButton_Click(object? sender, RoutedEventArgs? e)
@@ -401,7 +455,14 @@ namespace GrafikoMat.Views.Settings
 
         private async void HospitalNameTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (!_isAutocompleteActive || _unitRepository == null || sender is not TextBox hospitalTextBox) return;
+            if (_isInitializingUnit) return; // Ignoruj zmiany podczas inicjalizacji
+
+            if (!_isAutocompleteActive || _unitRepository == null || sender is not TextBox hospitalTextBox)
+            {
+                // Odśwież przyciski nawet gdy autocomplete nie jest aktywne
+                BuildActions();
+                return;
+            }
 
             var userText = hospitalTextBox.Text;
             var selectionStart = hospitalTextBox.SelectionStart;
@@ -410,6 +471,7 @@ namespace GrafikoMat.Views.Settings
             if (selectionStart < userText.Length)
             {
                 _currentSuggestion = null;
+                BuildActions();
                 return;
             }
 
@@ -417,6 +479,7 @@ namespace GrafikoMat.Views.Settings
             if (string.IsNullOrWhiteSpace(userText) || userText.Length < 3)
             {
                 _currentSuggestion = null;
+                BuildActions();
                 return;
             }
 
@@ -431,10 +494,39 @@ namespace GrafikoMat.Views.Settings
                 hospitalTextBox.Select(userText.Length, match.HospitalFullName.Length - userText.Length);
                 _isAutocompleteActive = true;
             }
+
+            // Odśwież przyciski po zmianie tekstu
+            BuildActions();
+        }
+
+        /// <summary>
+        /// Handler wywoływany przy zmianie wartości w polach formularza.
+        /// Odświeża stan przycisków akcji (włącza/wyłącza "Zapisz zmiany").
+        /// </summary>
+        private void FormField_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isInitializingUnit) return; // Ignoruj zmiany podczas inicjalizacji
+            BuildActions();
+        }
+
+        /// <summary>
+        /// Sprawdza czy obecna jednostka ma jakieś niezapisane zmiany w porównaniu z oryginalnym stanem.
+        /// </summary>
+        private bool HasChanges()
+        {
+            if (SelectedUnit == null || _originalUnit == null) return false;
+
+            return SelectedUnit.Name != _originalUnit.Name ||
+                   SelectedUnit.HospitalFullName != _originalUnit.HospitalFullName ||
+                   SelectedUnit.DepartmentName != _originalUnit.DepartmentName ||
+                   SelectedUnit.UseTwelveHourShiftsByDefault != _originalUnit.UseTwelveHourShiftsByDefault ||
+                   SelectedUnit.AllowTeleradiologyFallback != _originalUnit.AllowTeleradiologyFallback;
         }
 
         private void BuildActions()
         {
+            if (_isInitializingUnit) return; // Nie odświeżaj przycisków podczas inicjalizacji
+
             var actions = new List<UiAction>();
 
             if (SelectedUnit != null)
@@ -451,7 +543,7 @@ namespace GrafikoMat.Views.Settings
                     actions.Add(new UiAction("Aktywuj ponownie", new RelayCommand(() => RestoreButton_Click(null, null)), isPrimary: false));
                 }
 
-                actions.Add(new UiAction("Zapisz zmiany", new RelayCommand(execute: () => SaveButton_Click(null, null), canExecute: () => !IsArchived), isPrimary: true));
+                actions.Add(new UiAction("Zapisz zmiany", new RelayCommand(execute: () => SaveButton_Click(null, null), canExecute: () => !IsArchived && HasChanges()), isPrimary: true));
             }
 
             ActionsChanged?.Invoke(actions);

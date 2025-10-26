@@ -40,8 +40,8 @@ namespace GrafikoMat.Views
         new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
     };
 
-            // Domyślnie wybierz "Ustawienia Ogólne" przy wejściu
-            SettingsMenu.SelectedIndex = 0;
+            // Na początku żadna pozycja nie jest zaznaczona
+            // SettingsMenu.SelectedIndex = -1; // domyślnie już -1
         }
         public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, SupabaseService supabaseService, AppSettings settings)
         {
