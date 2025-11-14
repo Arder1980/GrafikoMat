@@ -1,4 +1,5 @@
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -35,8 +36,8 @@ namespace GrafikoMat.Core.Repositories
         /// Aktualizuje status powiadomienia.
         /// </summary>
         /// <param name="notificationId">ID powiadomienia</param>
-        /// <param name="status">Nowy status ("pending", "accepted", "rejected")</param>
-        Task UpdateNotificationStatusAsync(long notificationId, string status);
+        /// <param name="status">Nowy status</param>
+        Task UpdateNotificationStatusAsync(long notificationId, CoDutyStatus status);
 
         /// <summary>
         /// Usuwa powiadomienie po ID.
@@ -52,8 +53,8 @@ namespace GrafikoMat.Core.Repositories
         /// <param name="year">Rok</param>
         /// <param name="month">Miesiąc</param>
         /// <param name="day">Dzień</param>
-        /// <param name="slotPart">Część dnia ("full", "day", "night")</param>
-        Task DeleteByDeclarationAsync(Guid doctorId, Guid unitId, int year, int month, int day, string slotPart);
+        /// <param name="slotPart">Część dnia</param>
+        Task DeleteByDeclarationAsync(Guid doctorId, Guid unitId, int year, int month, int day, SlotPart slotPart);
 
         /// <summary>
         /// Pobiera powiadomienie po ID.

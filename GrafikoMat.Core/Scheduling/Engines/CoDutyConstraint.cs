@@ -29,7 +29,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
             var acceptedPairs = declarations
                 .Where(d => d.DeclarationDataJson?.Days != null)
                 .SelectMany(d => d.DeclarationDataJson.Days
-                    .Where(day => day.CoDutyStatus == "accepted" && day.CoDutyPartnerId != null)
+                    .Where(day => day.CoDutyStatus == Enums.CoDutyStatus.Accepted && day.CoDutyPartnerId != null)
                     .Select(day => new
                     {
                         DoctorId = d.DoctorId,
@@ -93,7 +93,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 return;
 
             var dayDecl = declaration.DeclarationDataJson.Days.FirstOrDefault(d => d.Day == dayIndex + 1);
-            if (dayDecl == null || dayDecl.CoDutyStatus != "accepted" || dayDecl.CoDutyPartnerId == null)
+            if (dayDecl == null || dayDecl.CoDutyStatus != Enums.CoDutyStatus.Accepted || dayDecl.CoDutyPartnerId == null)
                 return;
 
             // Przypisz partnera tak samo
@@ -126,7 +126,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 return;
 
             var dayDecl = declaration.DeclarationDataJson.Days.FirstOrDefault(d => d.Day == dayIndex + 1);
-            if (dayDecl == null || dayDecl.CoDutyStatus != "accepted" || dayDecl.CoDutyPartnerId == null)
+            if (dayDecl == null || dayDecl.CoDutyStatus != Enums.CoDutyStatus.Accepted || dayDecl.CoDutyPartnerId == null)
                 return;
 
             // Wyczyść partnera

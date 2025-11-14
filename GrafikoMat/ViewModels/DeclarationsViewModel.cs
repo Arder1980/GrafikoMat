@@ -4,6 +4,9 @@ using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Core.Scheduling;
 using GrafikoMat.Models;
+using SlotPart = GrafikoMat.Core.Enums.SlotPart;
+using CoDutyStatus = GrafikoMat.Core.Enums.CoDutyStatus;
+using DayMode = GrafikoMat.Core.Enums.DayMode;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using System;
@@ -26,9 +29,6 @@ namespace GrafikoMat.ViewModels
             DisplayName = displayName;
         }
     }
-
-    public enum SlotPart { Full, Day, Night }
-    public record SelectedSlot(int Index, SlotPart Part);
 
     public sealed partial class DeclarationsViewModel : ObservableObject, IDisposable
     {
@@ -295,22 +295,22 @@ namespace GrafikoMat.ViewModels
                         {
                             var partner = Doctors.FirstOrDefault(doc => doc.Profile.Id == d.CoDutyPartnerId.Value);
                             string partnerDisplayName = partner != null ? $"z {partner.DisplayName}" : "z ?";
-                            string statusGlyph = d.CoDutyStatus == "accepted" ? "👥" : "⏳";
+                            string statusGlyph = d.CoDutyStatus.HasValue && (int)d.CoDutyStatus.Value == (int)CoDutyStatus.Accepted ? "👥" : "⏳";
 
                             // Użyj CoDutySlotPart aby określić który slot ustawić
-                            string slotPart = d.CoDutySlotPart ?? "full";
+                            SlotPart slotPart = d.CoDutySlotPart.HasValue ? (SlotPart)(int)d.CoDutySlotPart.Value : SlotPart.Full;
 
-                            if (slotPart == "full" || d.Mode == DayMode.Full24)
+                            if (slotPart == SlotPart.Full || d.Mode == DayMode.Full24)
                             {
                                 cell.CoDutyPartnerFull = partnerDisplayName;
                                 cell.CoDutyStatusGlyphFull = statusGlyph;
                             }
-                            else if (slotPart == "day")
+                            else if (slotPart == SlotPart.Day)
                             {
                                 cell.CoDutyPartnerDay = partnerDisplayName;
                                 cell.CoDutyStatusGlyphDay = statusGlyph;
                             }
-                            else if (slotPart == "night")
+                            else if (slotPart == SlotPart.Night)
                             {
                                 cell.CoDutyPartnerNight = partnerDisplayName;
                                 cell.CoDutyStatusGlyphNight = statusGlyph;
@@ -556,15 +556,15 @@ namespace GrafikoMat.ViewModels
                             {
                                 doctorDeclaration.Days[dayIndex] = new DayDeclaration
                                 {
-                                    Mode = dayDto.Mode == "Split12" ? DayMode.Split12 : DayMode.Full24,
+                                    Mode = dayDto.Mode == DayMode.Split12 ? DayMode.Split12 : DayMode.Full24,
                                     Full = dayDto.Full,
                                     Day = dayDto.DaySlot,
                                     Night = dayDto.Night,
                                     // Współdyżurni
                                     CoDutyPartnerId = dayDto.CoDutyPartnerId,
-                                    CoDutyStatus = dayDto.CoDutyStatus,
+                                    CoDutyStatus = dayDto.CoDutyStatus.HasValue ? (GrafikoMat.Models.CoDutyStatus)(int)dayDto.CoDutyStatus.Value : null,
                                     CoDutyInitiatorId = dayDto.CoDutyInitiatorId,
-                                    CoDutySlotPart = dayDto.CoDutySlotPart
+                                    CoDutySlotPart = dayDto.CoDutySlotPart.HasValue ? (GrafikoMat.Models.SlotPart)(int)dayDto.CoDutySlotPart.Value : null
                                 };
                                 System.Diagnostics.Debug.WriteLine($"[LOAD-SUPABASE] Dzień {dayDto.Day}: mode={dayDto.Mode}, full={dayDto.Full}, day={dayDto.DaySlot}, night={dayDto.Night}");
                             }
@@ -624,7 +624,7 @@ namespace GrafikoMat.ViewModels
                 var dayDto = new DayDeclarationDto
                 {
                     Day = dayNumber,
-                    Mode = cell.IsSplit ? "Split12" : "Full24"
+                    Mode = cell.IsSplit ? DayMode.Split12 : DayMode.Full24
                 };
 
                 if (cell.IsSplit)
@@ -644,9 +644,13 @@ namespace GrafikoMat.ViewModels
                     if (dayIndex >= 0 && dayIndex < localDeclaration.Days.Length)
                     {
                         dayDto.CoDutyPartnerId = localDeclaration.Days[dayIndex].CoDutyPartnerId;
-                        dayDto.CoDutyStatus = localDeclaration.Days[dayIndex].CoDutyStatus;
+                        dayDto.CoDutyStatus = localDeclaration.Days[dayIndex].CoDutyStatus.HasValue
+                            ? (CoDutyStatus)(int)localDeclaration.Days[dayIndex].CoDutyStatus.Value
+                            : null;
                         dayDto.CoDutyInitiatorId = localDeclaration.Days[dayIndex].CoDutyInitiatorId;
-                        dayDto.CoDutySlotPart = localDeclaration.Days[dayIndex].CoDutySlotPart;
+                        dayDto.CoDutySlotPart = localDeclaration.Days[dayIndex].CoDutySlotPart.HasValue
+                            ? (SlotPart)(int)localDeclaration.Days[dayIndex].CoDutySlotPart.Value
+                            : null;
 
                         if (dayDto.CoDutyPartnerId.HasValue)
                         {
@@ -711,13 +715,15 @@ namespace GrafikoMat.ViewModels
 
                 // Sprawdź czy jestem inicjatorem i status to "pending"
                 if (day.CoDutyInitiatorId == SelectedDoctor.Id &&
-                    day.CoDutyStatus == "pending" &&
+                    day.CoDutyStatus.HasValue && (int)day.CoDutyStatus.Value == (int)GrafikoMat.Models.CoDutyStatus.Pending &&
                     day.CoDutyPartnerId.HasValue)
                 {
                     int dayNumber = i + 1;
 
                     // Użyj zapisanego CoDutySlotPart lub domyślnie "full"
-                    string slotPart = day.CoDutySlotPart ?? "full";
+                    var slotPart = day.CoDutySlotPart.HasValue
+                        ? day.CoDutySlotPart.Value.ToString().ToLowerInvariant()
+                        : "full";
 
                     result.Add((dayNumber, day.CoDutyPartnerId.Value, slotPart));
 
@@ -1248,9 +1254,13 @@ namespace GrafikoMat.ViewModels
             if (dayIndex >= 0 && dayIndex < declaration.Days.Length)
             {
                 declaration.Days[dayIndex].CoDutyPartnerId = partnerId;
-                declaration.Days[dayIndex].CoDutyStatus = status;
+                declaration.Days[dayIndex].CoDutyStatus = status != null && Enum.TryParse<GrafikoMat.Models.CoDutyStatus>(status, true, out var parsedStatus)
+                    ? parsedStatus
+                    : null;
                 declaration.Days[dayIndex].CoDutyInitiatorId = initiatorId;
-                declaration.Days[dayIndex].CoDutySlotPart = slotPart;
+                declaration.Days[dayIndex].CoDutySlotPart = slotPart != null && Enum.TryParse<GrafikoMat.Models.SlotPart>(slotPart, true, out var parsedSlotPart)
+                    ? parsedSlotPart
+                    : null;
 
                 _isDirty = true;
                 SaveCommand.NotifyCanExecuteChanged();

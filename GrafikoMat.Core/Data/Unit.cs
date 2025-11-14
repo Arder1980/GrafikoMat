@@ -34,7 +34,7 @@ namespace GrafikoMat.Core.Data
         // ======================================================
 
         [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
 
         public int CompareTo(Unit? other)
         {

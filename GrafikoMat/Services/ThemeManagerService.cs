@@ -13,13 +13,16 @@ namespace GrafikoMat.Services
 
         /// <summary>
         /// Przechowuje aktualnie obowiązujący motyw w aplikacji.
+        /// Volatile gwarantuje atomowość odczytu/zapisu i zapobiega race conditions.
         /// </summary>
-        public ElementTheme CurrentTheme { get; private set; }
+        private volatile ElementTheme _currentTheme;
+
+        public ElementTheme CurrentTheme => _currentTheme;
 
         private ThemeManagerService()
         {
             // Domyślnie startujemy z motywem jasnym
-            CurrentTheme = ElementTheme.Light;
+            _currentTheme = ElementTheme.Light;
         }
 
         /// <summary>
@@ -27,15 +30,16 @@ namespace GrafikoMat.Services
         /// </summary>
         public void Initialize(ElementTheme initialTheme)
         {
-            CurrentTheme = initialTheme;
+            _currentTheme = initialTheme;
         }
 
         /// <summary>
         /// Ustawia nowy motyw. Jest to jedyne miejsce, w którym stan motywu jest zmieniany.
+        /// Volatile zapewnia thread-safety.
         /// </summary>
         public void SetTheme(ElementTheme newTheme)
         {
-            CurrentTheme = newTheme;
+            _currentTheme = newTheme;
         }
     }
 }

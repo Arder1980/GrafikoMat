@@ -456,7 +456,7 @@ namespace GrafikoMat.Core.Scheduling.Engines
                 if (declaration?.DeclarationDataJson?.Days != null)
                 {
                     var dayDecl = declaration.DeclarationDataJson.Days.FirstOrDefault(d => d.Day == dayIndex + 1);
-                    if (dayDecl?.CoDutyStatus == "accepted" && dayDecl.CoDutyPartnerId != null)
+                    if (dayDecl?.CoDutyStatus == Enums.CoDutyStatus.Accepted && dayDecl.CoDutyPartnerId != null)
                     {
                         // Ten lekarz ma zaakceptowaną parę - sprawdź czy partner też może
                         if (_doctorIndexMap.TryGetValue(dayDecl.CoDutyPartnerId.Value, out int partnerIdx))

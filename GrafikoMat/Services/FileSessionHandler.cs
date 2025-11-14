@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -37,8 +39,17 @@ namespace GrafikoMat.Services
             try
             {
                 var json = JsonSerializer.Serialize(session, JsonOpts);
-                await File.WriteAllTextAsync(SessionPath, json).ConfigureAwait(false);
-                Debug.WriteLine($"[FileSessionHandler] Sesja ZAPISANA do pliku: {SessionPath}");
+                var jsonBytes = Encoding.UTF8.GetBytes(json);
+
+                // Szyfrowanie używając Windows DPAPI (Data Protection API)
+                var encryptedBytes = ProtectedData.Protect(
+                    jsonBytes,
+                    null, // Brak dodatkowej entropii
+                    DataProtectionScope.CurrentUser // Tylko aktualny użytkownik może odszyfrować
+                );
+
+                await File.WriteAllBytesAsync(SessionPath, encryptedBytes).ConfigureAwait(false);
+                Debug.WriteLine($"[FileSessionHandler] Sesja ZASZYFROWANA i zapisana do pliku: {SessionPath}");
             }
             catch (Exception ex)
             {
@@ -57,16 +68,51 @@ namespace GrafikoMat.Services
                     return null;
                 }
 
-                var json = await File.ReadAllTextAsync(SessionPath).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(json))
+                var fileBytes = await File.ReadAllBytesAsync(SessionPath).ConfigureAwait(false);
+                if (fileBytes == null || fileBytes.Length == 0)
                 {
                     Debug.WriteLine($"[FileSessionHandler] LoadAsync: plik {SessionPath} pusty.");
                     return null;
                 }
 
-                var session = JsonSerializer.Deserialize<Session>(json, JsonOpts);
-                Debug.WriteLine($"[FileSessionHandler] Sesja WCZYTANA z pliku: {SessionPath}");
-                return session;
+                string json;
+
+                try
+                {
+                    // Próba odszyfrowania (nowy format)
+                    var decryptedBytes = ProtectedData.Unprotect(
+                        fileBytes,
+                        null,
+                        DataProtectionScope.CurrentUser
+                    );
+
+                    json = Encoding.UTF8.GetString(decryptedBytes);
+                    Debug.WriteLine($"[FileSessionHandler] Sesja ODSZYFROWANA i wczytana z pliku: {SessionPath}");
+                }
+                catch (CryptographicException)
+                {
+                    // Jeśli deszyfrowanie nie powiodło się, spróbuj odczytać jako plain text (stary format)
+                    Debug.WriteLine($"[FileSessionHandler] Nie można odszyfrować - próba odczytu jako plain text (stary format)");
+                    json = Encoding.UTF8.GetString(fileBytes);
+
+                    // Jeśli udało się odczytać jako plain text, automatycznie konwertuj na zaszyfrowany format
+                    var session = JsonSerializer.Deserialize<Session>(json, JsonOpts);
+                    if (session != null)
+                    {
+                        Debug.WriteLine($"[FileSessionHandler] Konwersja starego formatu na zaszyfrowany...");
+                        await SaveAsync(session).ConfigureAwait(false);
+                    }
+                    return session;
+                }
+
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    Debug.WriteLine($"[FileSessionHandler] LoadAsync: odszyfrowany JSON pusty.");
+                    return null;
+                }
+
+                var sessionResult = JsonSerializer.Deserialize<Session>(json, JsonOpts);
+                return sessionResult;
             }
             catch (Exception ex)
             {

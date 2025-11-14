@@ -1,4 +1,5 @@
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Enums;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using System;
@@ -27,7 +28,7 @@ namespace GrafikoMat.Repositories
             var response = await _supabase
                 .From<CoDutyNotification>()
                 .Where(n => n.ToDoctorId == doctorId)
-                .Where(n => n.Status == "pending")
+                .Where(n => n.Status == CoDutyStatus.Pending)
                 .Order("created_at", Supabase.Postgrest.Constants.Ordering.Descending)
                 .Get();
 
@@ -46,7 +47,7 @@ namespace GrafikoMat.Repositories
                 throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
 
             notification.CreatedAt = DateTime.UtcNow;
-            notification.Status = "pending";
+            notification.Status = CoDutyStatus.Pending;
 
             var response = await _supabase
                 .From<CoDutyNotification>()
@@ -59,7 +60,7 @@ namespace GrafikoMat.Repositories
             return inserted;
         }
 
-        public async Task UpdateNotificationStatusAsync(long notificationId, string status)
+        public async Task UpdateNotificationStatusAsync(long notificationId, CoDutyStatus status)
         {
             if (_supabase == null)
                 throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");
@@ -94,7 +95,7 @@ namespace GrafikoMat.Repositories
             int year,
             int month,
             int day,
-            string slotPart)
+            SlotPart slotPart)
         {
             if (_supabase == null)
                 throw new InvalidOperationException("Klient Supabase nie jest zainicjalizowany.");

@@ -1,8 +1,9 @@
 ﻿using System;
+using GrafikoMat.Core.Enums;
 
 namespace GrafikoMat.Models
 {
-    public enum DayMode { Full24, Split12 }
+    // Enum przeniesiony do GrafikoMat.Core.Enums.DayMode (type safety + współdzielony)
 
     public sealed class DayDeclaration
     {
@@ -13,9 +14,9 @@ namespace GrafikoMat.Models
 
         // Współdyżurni
         public Guid? CoDutyPartnerId { get; set; }
-        public string? CoDutyStatus { get; set; }  // "pending", "accepted", "rejected"
+        public CoDutyStatus? CoDutyStatus { get; set; }  // Pending, Accepted, Rejected
         public Guid? CoDutyInitiatorId { get; set; }
-        public string? CoDutySlotPart { get; set; }  // "full", "day", "night" - który slot ma współdyżurnego
+        public SlotPart? CoDutySlotPart { get; set; }  // Full, Day, Night - który slot ma współdyżurnego
     }
 
     public sealed class DoctorMonthDeclaration

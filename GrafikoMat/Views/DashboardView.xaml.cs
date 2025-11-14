@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using GrafikoMat.Common;
+using GrafikoMat.Core.Enums;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using Microsoft.UI.Xaml;
@@ -178,11 +179,11 @@ namespace GrafikoMat.Views
 
                     var entry = _vm.TryGetEntry(doctor.Profile.FullName, year, _vm.SelectedMonthIndex, d - 1);
                     FrameworkElement content;
-                    if (!entry.has || (entry.mode == Models.DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == Models.DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
+                    if (!entry.has || (entry.mode == DayMode.Full24 && string.IsNullOrEmpty(entry.full)) || (entry.mode == DayMode.Split12 && string.IsNullOrEmpty(entry.day) && string.IsNullOrEmpty(entry.night)))
                     {
                         content = new TextBlock { Text = "", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
                     }
-                    else if (entry.mode == Models.DayMode.Full24)
+                    else if (entry.mode == DayMode.Full24)
                     {
                         content = new TextBlock { Text = ConvertTo1LetterCode(entry.full), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontSize = 14 };
                     }

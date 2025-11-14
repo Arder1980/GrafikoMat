@@ -338,12 +338,43 @@ if "!db_password!"=="" (
     exit /b
 )
 
-REM Stworz plik konfiguracyjny
-echo @echo off > supabase_config.bat
-echo REM Konfiguracja Supabase - wygenerowana automatycznie >> supabase_config.bat
-echo set SUPABASE_PROJECT_REF=!project_ref! >> supabase_config.bat
-echo set SUPABASE_DB_PASSWORD=!db_password! >> supabase_config.bat
-echo set SUPABASE_DB_URL=postgresql://postgres.!project_ref!:!db_password!@db.!project_ref!.supabase.co:5432/postgres >> supabase_config.bat
+REM ============================================================================
+REM BEZPIECZNIE: Zapisz haslo do Windows Credential Manager
+REM ============================================================================
+echo.
+echo Zapisywanie hasla do Windows Credential Manager...
+cmdkey /generic:"GrafikoMat_Supabase_DB" /user:"postgres_!project_ref!" /pass:"!db_password!" >nul 2>&1
+
+if %errorlevel% neq 0 (
+    echo [BLAD] Nie udalo sie zapisac hasla do Credential Manager!
+    echo Zapisuje do pliku supabase_config.bat (MNIEJ BEZPIECZNE)
+    echo UWAGA: Plik jest w .gitignore ale haslo jest w plain text lokalnie!
+    echo.
+    echo @echo off > supabase_config.bat
+    echo REM Konfiguracja Supabase - haslo w plain text (FALLBACK^) >> supabase_config.bat
+    echo set SUPABASE_PROJECT_REF=!project_ref! >> supabase_config.bat
+    echo set SUPABASE_DB_PASSWORD=!db_password! >> supabase_config.bat
+    echo set SUPABASE_DB_URL=postgresql://postgres.!project_ref!:!db_password!@db.!project_ref!.supabase.co:5432/postgres >> supabase_config.bat
+) else (
+    echo [OK] Haslo zapisane bezpiecznie w Windows Credential Manager!
+    echo      (Zobacz: Menedzer poswiadczen Windows -^> GrafikoMat_Supabase_DB^)
+    echo.
+    echo Tworze plik supabase_config.bat (BEZ hasla^)...
+    echo @echo off > supabase_config.bat
+    echo REM Konfiguracja Supabase - haslo w Windows Credential Manager >> supabase_config.bat
+    echo set SUPABASE_PROJECT_REF=!project_ref! >> supabase_config.bat
+    echo. >> supabase_config.bat
+    echo REM Odczytaj haslo z Credential Manager PowerShell helper >> supabase_config.bat
+    echo for /f "delims=" %%%%i in ('powershell -NoProfile -Command "$cred = [System.Management.Automation.PSCredential]::new('postgres_!project_ref!', (Get-Credential -Credential 'GrafikoMat_Supabase_DB' -ErrorAction SilentlyContinue).Password); $cred.GetNetworkCredential().Password"'^) do set SUPABASE_DB_PASSWORD=%%%%i >> supabase_config.bat
+    echo. >> supabase_config.bat
+    echo if not defined SUPABASE_DB_PASSWORD (>> supabase_config.bat
+    echo     echo [BLAD] Nie mozna odczytac hasla z Credential Manager! >> supabase_config.bat
+    echo     echo Uruchom: %%%%~nx0 --config-supabase >> supabase_config.bat
+    echo     exit /b 1 >> supabase_config.bat
+    echo ^) >> supabase_config.bat
+    echo. >> supabase_config.bat
+    echo set SUPABASE_DB_URL=postgresql://postgres.%%SUPABASE_PROJECT_REF%%:%%SUPABASE_DB_PASSWORD%%@db.%%SUPABASE_PROJECT_REF%%.supabase.co:5432/postgres >> supabase_config.bat
+)
 
 echo.
 echo [OK] Konfiguracja zapisana do: supabase_config.bat

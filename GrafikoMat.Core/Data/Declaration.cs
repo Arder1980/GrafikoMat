@@ -2,8 +2,9 @@ using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using GrafikoMat.Core.Enums;
 
 namespace GrafikoMat.Core.Data
 {
@@ -35,7 +36,17 @@ namespace GrafikoMat.Core.Data
         public DeclarationDataJson? DeclarationDataJson { get; set; }
 
         [Column("last_modified")]
-        public DateTime LastModified { get; set; }
+        public DateTimeOffset LastModified { get; set; }
+
+        // Pola współdyżurnych (top-level dla RLS i indeksów)
+        [Column("co_duty_partner_id")]
+        public Guid? CoDutyPartnerId { get; set; }
+
+        [Column("co_duty_status")]
+        public string? CoDutyStatus { get; set; }
+
+        [Column("co_duty_initiator_id")]
+        public Guid? CoDutyInitiatorId { get; set; }
     }
 
     /// <summary>
@@ -43,7 +54,7 @@ namespace GrafikoMat.Core.Data
     /// </summary>
     public class DeclarationDataJson
     {
-        [JsonPropertyName("days")]
+        [JsonProperty("days")]
         public List<DayDeclarationDto> Days { get; set; } = new();
     }
 
@@ -55,55 +66,58 @@ namespace GrafikoMat.Core.Data
         /// <summary>
         /// Numer dnia w miesiącu (1-31)
         /// </summary>
-        [JsonPropertyName("dayNumber")]
+        [JsonProperty("dayNumber")]
         public int Day { get; set; }
 
         /// <summary>
-        /// Tryb dnia: "Full24" lub "Split12"
+        /// Tryb dnia: Full24 lub Split12
         /// </summary>
-        [JsonPropertyName("mode")]
-        public string Mode { get; set; } = "Full24";
+        [JsonProperty("mode")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public DayMode Mode { get; set; } = DayMode.Full24;
 
         /// <summary>
         /// Deklaracja dla całodobowego dyżuru (MOG, CHC, WAR, REZ, URL, DYZ, ---)
         /// </summary>
-        [JsonPropertyName("full")]
+        [JsonProperty("full")]
         public string? Full { get; set; }
 
         /// <summary>
         /// Deklaracja dla dyżuru dziennego (7:00-19:00)
         /// </summary>
-        [JsonPropertyName("day")]
+        [JsonProperty("day")]
         public string? DaySlot { get; set; }
 
         /// <summary>
         /// Deklaracja dla dyżuru nocnego (19:00-7:00)
         /// </summary>
-        [JsonPropertyName("night")]
+        [JsonProperty("night")]
         public string? Night { get; set; }
 
         /// <summary>
         /// ID partnera współdyżurnego (jeśli dotyczy)
         /// </summary>
-        [JsonPropertyName("coDutyPartnerId")]
+        [JsonProperty("coDutyPartnerId")]
         public Guid? CoDutyPartnerId { get; set; }
 
         /// <summary>
-        /// Status współdyżuru: "pending", "accepted", "rejected" lub null
+        /// Status współdyżuru: Pending, Accepted, Rejected lub null
         /// </summary>
-        [JsonPropertyName("coDutyStatus")]
-        public string? CoDutyStatus { get; set; }
+        [JsonProperty("coDutyStatus")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public CoDutyStatus? CoDutyStatus { get; set; }
 
         /// <summary>
         /// ID lekarza który zainicjował współdyżur (jeśli dotyczy)
         /// </summary>
-        [JsonPropertyName("coDutyInitiatorId")]
+        [JsonProperty("coDutyInitiatorId")]
         public Guid? CoDutyInitiatorId { get; set; }
 
         /// <summary>
-        /// Który slot ma współdyżurnego: "full", "day", "night"
+        /// Który slot ma współdyżurnego: Full, Day, Night
         /// </summary>
-        [JsonPropertyName("coDutySlotPart")]
-        public string? CoDutySlotPart { get; set; }
+        [JsonProperty("coDutySlotPart")]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public SlotPart? CoDutySlotPart { get; set; }
     }
 }

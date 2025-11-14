@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Enums;
 using System;
 
 namespace GrafikoMat.ViewModels
@@ -36,7 +37,7 @@ namespace GrafikoMat.ViewModels
         public int Year => _notification.Year;
         public int Month => _notification.Month;
         public int Day => _notification.Day;
-        public string SlotPart => _notification.SlotPart;
+        public Core.Enums.SlotPart SlotPart => _notification.SlotPart;
 
         public CoDutyNotificationViewModel(
             CoDutyNotification notification,
@@ -52,10 +53,10 @@ namespace GrafikoMat.ViewModels
 
             SlotTypeText = notification.SlotPart switch
             {
-                "full" => "24h",
-                "day" => "Dzienny (7-19)",
-                "night" => "Nocny (19-7)",
-                _ => notification.SlotPart
+                Core.Enums.SlotPart.Full => "24h",
+                Core.Enums.SlotPart.Day => "Dzienny (7-19)",
+                Core.Enums.SlotPart.Night => "Nocny (19-7)",
+                _ => notification.SlotPart.ToString()
             };
 
             SummaryText = $"{fromDoctorName} zaprasza do współdyżuru";

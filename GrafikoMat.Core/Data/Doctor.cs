@@ -38,7 +38,7 @@ namespace GrafikoMat.Core.Data
         public bool RequiresPasswordChange { get; set; }
 
         [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
 
         [JsonIgnore]
         public string FullName => $"{LastName} {FirstName}";

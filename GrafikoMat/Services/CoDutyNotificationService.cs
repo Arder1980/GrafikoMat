@@ -1,4 +1,5 @@
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Enums;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.ViewModels;
 using System;
@@ -83,7 +84,7 @@ namespace GrafikoMat.Services
                 return false;
 
             // Aktualizuj status w deklaracjach obu lekarzy na "accepted"
-            await UpdateBothDeclarationsStatusAsync(notification, "accepted");
+            await UpdateBothDeclarationsStatusAsync(notification, CoDutyStatus.Accepted);
 
             // Usuń powiadomienie
             await _notificationRepo.DeleteNotificationAsync(notificationId);
@@ -114,7 +115,7 @@ namespace GrafikoMat.Services
         /// <summary>
         /// Aktualizuje status współdyżuru w deklaracjach obu lekarzy.
         /// </summary>
-        private async Task UpdateBothDeclarationsStatusAsync(CoDutyNotification notification, string status)
+        private async Task UpdateBothDeclarationsStatusAsync(CoDutyNotification notification, CoDutyStatus status)
         {
             // Pobierz deklaracje obu lekarzy
             var initiatorDecl = await _declarationRepo.GetDeclarationForDoctorAsync(
@@ -164,7 +165,7 @@ namespace GrafikoMat.Services
                 notification.Year,
                 notification.Month,
                 notification.Day,
-                notification.SlotPart);
+                notification.SlotPart.ToString().ToLowerInvariant());
 
             // Usuń deklarację dla dnia u partnera
             await _declarationRepo.DeleteDayDeclarationAsync(
@@ -173,7 +174,7 @@ namespace GrafikoMat.Services
                 notification.Year,
                 notification.Month,
                 notification.Day,
-                notification.SlotPart);
+                notification.SlotPart.ToString().ToLowerInvariant());
         }
     }
 }

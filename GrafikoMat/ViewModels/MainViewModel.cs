@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using GrafikoMat.Common;
 using GrafikoMat.Core.Data;
+using GrafikoMat.Core.Enums;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Core.Scheduling.Engines;
 using GrafikoMat.Core.Scheduling.Models;
@@ -361,7 +362,7 @@ namespace GrafikoMat.ViewModels
                             {
                                 doctorDeclaration.Days[dayIndex] = new DayDeclaration
                                 {
-                                    Mode = dayDto.Mode == "Split12" ? DayMode.Split12 : DayMode.Full24,
+                                    Mode = dayDto.Mode == DayMode.Split12 ? DayMode.Split12 : DayMode.Full24,
                                     Full = dayDto.Full,
                                     Day = dayDto.DaySlot,
                                     Night = dayDto.Night
@@ -488,7 +489,7 @@ namespace GrafikoMat.ViewModels
         {
             if (_settingsService == null || ActiveUnit == null || _orchestrator == null)
             {
-                // TODO: Pokaż błąd - brak jednostki, serwisu ustawień lub orkiestratora
+                System.Diagnostics.Debug.WriteLine("[MainViewModel] Błąd: Brak jednostki, serwisu ustawień lub orkiestratora");
                 return;
             }
 
@@ -496,7 +497,7 @@ namespace GrafikoMat.ViewModels
             var activePriorities = settings.Priorities.Where(p => p.IsActive).Select(p => p.Priority).ToList();
             if (!activePriorities.Any())
             {
-                // TODO: Pokaż błąd - brak priorytetów
+                System.Diagnostics.Debug.WriteLine("[MainViewModel] Błąd: Brak aktywnych priorytetów");
                 return;
             }
 
@@ -504,22 +505,77 @@ namespace GrafikoMat.ViewModels
             var doctorsForSchedule = DoctorRows.Select(dr => dr.Profile).ToList();
             if (!doctorsForSchedule.Any())
             {
-                // TODO: Pokaż błąd - brak lekarzy dla jednostki
+                System.Diagnostics.Debug.WriteLine("[MainViewModel] Błąd: Brak lekarzy dla aktywnej jednostki");
                 return;
             }
 
-            // Przykład budowania Availability (na podstawie danych z _declByKey - DO ROZWINIĘCIA)
             var availability = new Dictionary<DateTime, Dictionary<string, AvailabilityType>>();
             int daysInMonth = DateTime.DaysInMonth(SelectedYear, SelectedMonthIndex + 1);
             for (int d = 1; d <= daysInMonth; d++)
             {
                 var date = new DateTime(SelectedYear, SelectedMonthIndex + 1, d);
                 var dayAvailability = new Dictionary<string, AvailabilityType>();
+
                 foreach (var doctor in doctorsForSchedule)
                 {
-                    // Tutaj trzeba by wczytać prawdziwą deklarację z _declByKey i zmapować na AvailabilityType
-                    // Na razie przykład: co drugi lekarz jest dostępny
-                    dayAvailability[doctor.Abbreviation] = (doctorsForSchedule.IndexOf(doctor) % 2 == 0) ? AvailabilityType.Available : AvailabilityType.Unavailable;
+                    AvailabilityType currentAvailability = AvailabilityType.Available; // Domyślnie dostępny
+
+                    var key = Key(doctor.FullName, SelectedYear, SelectedMonthIndex);
+                    if (_declByKey.TryGetValue(key, out var doctorMonthDeclaration))
+                    {
+                        if (d - 1 >= 0 && d - 1 < doctorMonthDeclaration.Days.Length)
+                        {
+                            var dayDeclaration = doctorMonthDeclaration.Days[d - 1];
+
+                            // Priorytet dla deklaracji Full, w przeciwnym razie rozważ Day/Night
+                            if (!string.IsNullOrEmpty(dayDeclaration.Full))
+                            {
+                                currentAvailability = dayDeclaration.Full switch
+                                {
+                                    "---" => AvailabilityType.Unavailable,
+                                    "URL" => AvailabilityType.Unavailable,
+                                    "DYZ" => AvailabilityType.Unavailable,
+                                    "REZ" => AvailabilityType.Reservation,
+                                    "WAR" => AvailabilityType.ConditionallyAvailable,
+                                    "CHC" => AvailabilityType.Wants,
+                                    "MOG" => AvailabilityType.Available,
+                                    _ => AvailabilityType.Available // Domyślnie, jeśli nieznane
+                                };
+                            }
+                            // Jeśli Full jest null/puste, rozważ zmiany dzielone.
+                            // Jeśli Day lub Night jest zadeklarowane jako niedostępne, lekarz jest niedostępny na dany dzień
+                            else if (!string.IsNullOrEmpty(dayDeclaration.Day) || !string.IsNullOrEmpty(dayDeclaration.Night))
+                            {
+                                if (dayDeclaration.Day == "---" || dayDeclaration.Night == "---" ||
+                                    dayDeclaration.Day == "URL" || dayDeclaration.Night == "URL" ||
+                                    dayDeclaration.Day == "DYZ" || dayDeclaration.Night == "DYZ")
+                                {
+                                    currentAvailability = AvailabilityType.Unavailable;
+                                }
+                                else if (dayDeclaration.Day == "REZ" || dayDeclaration.Night == "REZ")
+                                {
+                                    currentAvailability = AvailabilityType.Reservation;
+                                }
+                                else if (dayDeclaration.Day == "WAR" || dayDeclaration.Night == "WAR")
+                                {
+                                    currentAvailability = AvailabilityType.ConditionallyAvailable;
+                                }
+                                else if (dayDeclaration.Day == "CHC" || dayDeclaration.Night == "CHC")
+                                {
+                                    currentAvailability = AvailabilityType.Wants;
+                                }
+                                else if (dayDeclaration.Day == "MOG" || dayDeclaration.Night == "MOG")
+                                {
+                                    currentAvailability = AvailabilityType.Available;
+                                }
+                                else
+                                {
+                                    currentAvailability = AvailabilityType.Available; // Domyślnie, jeśli nieznane dzielone
+                                }
+                            }
+                        }
+                    }
+                    dayAvailability[doctor.Abbreviation] = currentAvailability;
                 }
                 availability[date] = dayAvailability;
             }
@@ -528,7 +584,7 @@ namespace GrafikoMat.ViewModels
             {
                 Doctors = doctorsForSchedule,
                 Availability = availability,
-                DutyLimits = doctorsForSchedule.ToDictionary(dr => dr.Abbreviation, dr => 10) // Przykładowy limit, TODO: Wczytać prawdziwe limity
+                DutyLimits = doctorsForSchedule.ToDictionary(dr => dr.Abbreviation, dr => 10) // TODO: Wczytać prawdziwe limity z profilu lekarza lub ustawień jednostki
             };
             // --- Koniec przygotowania ScheduleInput ---
 

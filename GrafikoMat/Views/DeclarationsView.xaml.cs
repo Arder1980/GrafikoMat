@@ -1,5 +1,9 @@
-﻿using GrafikoMat.Services;
+﻿using GrafikoMat.Core.Data;
+using GrafikoMat.Models;
+using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
+using SlotPart = GrafikoMat.Core.Enums.SlotPart;
+using CoDutyStatus = GrafikoMat.Core.Enums.CoDutyStatus;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -154,8 +158,8 @@ namespace GrafikoMat.Views
                         Year = ViewModel.Year,
                         Month = ViewModel.MonthIndex + 1,
                         Day = day,
-                        SlotPart = slotPart,
-                        Status = "pending",
+                        SlotPart = Enum.Parse<SlotPart>(slotPart),
+                        Status = CoDutyStatus.Pending,
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -1540,10 +1544,12 @@ namespace GrafikoMat.Views
 
                 // Użyj DisplayName który uwzględnia duplikaty (skrót tylko przy duplikatach)
                 string partnerDisplayName = $"z {partner.DisplayName}";
-                string statusGlyph = dayDeclaration.CoDutyStatus == "accepted" ? "👥" : "⏳";
+                string statusGlyph = dayDeclaration.CoDutyStatus.HasValue && (int)dayDeclaration.CoDutyStatus.Value == (int)GrafikoMat.Models.CoDutyStatus.Accepted ? "👥" : "⏳";
 
                 // Określ który slot aktualizować na podstawie CoDutySlotPart
-                string slotPart = dayDeclaration.CoDutySlotPart ?? "full";
+                string slotPart = dayDeclaration.CoDutySlotPart.HasValue
+                    ? dayDeclaration.CoDutySlotPart.Value.ToString().ToLowerInvariant()
+                    : "full";
 
                 System.Diagnostics.Debug.WriteLine($"[RefreshCoDutyFromShared] Day {dayNumber}:");
                 System.Diagnostics.Debug.WriteLine($"  partnerId z deklaracji = {dayDeclaration.CoDutyPartnerId}");

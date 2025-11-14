@@ -1,6 +1,9 @@
 using Supabase.Postgrest.Attributes;
 using Supabase.Postgrest.Models;
 using System;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using GrafikoMat.Core.Enums;
 
 namespace GrafikoMat.Core.Data
 {
@@ -35,15 +38,17 @@ namespace GrafikoMat.Core.Data
         public int Day { get; set; }
 
         [Column("slot_part")]
-        public string SlotPart { get; set; } = "full";
+        [JsonConverter(typeof(StringEnumConverter))]
+        public SlotPart SlotPart { get; set; } = SlotPart.Full;
 
         [Column("status")]
-        public string Status { get; set; } = "pending";
+        [JsonConverter(typeof(StringEnumConverter))]
+        public CoDutyStatus Status { get; set; } = CoDutyStatus.Pending;
 
         [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
 
         [Column("responded_at")]
-        public DateTime? RespondedAt { get; set; }
+        public DateTimeOffset? RespondedAt { get; set; }
     }
 }

@@ -68,13 +68,13 @@ namespace GrafikoMat.Core.Data
         /// Data utworzenia
         /// </summary>
         [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
 
         /// <summary>
         /// Data ostatniej aktualizacji
         /// </summary>
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
 
         /// <summary>
         /// Sprawdza czy dzień specjalny jest aktywny dla danej daty
