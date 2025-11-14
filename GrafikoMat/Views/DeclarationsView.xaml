@@ -187,7 +187,7 @@
                         <GridView.ItemTemplate>
                             <DataTemplate x:DataType="vm:DayCell">
                                 <!-- Border z tłem - ZAWSZE widoczny -->
-                                <Border Background="{x:Bind EffectiveBackground, Mode=OneWay}" CornerRadius="4">
+                                <Border Background="{x:Bind EffectiveBackground, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}" CornerRadius="4">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="24"/>
@@ -195,7 +195,7 @@
                                         </Grid.RowDefinitions>
 
                                         <!-- NAGŁÓWEK - tło ZAWSZE widoczne -->
-                                        <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay}" CornerRadius="4,4,0,0"/>
+                                        <Border Grid.Row="0" Background="{x:Bind EffectiveHeaderBackground, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}" CornerRadius="4,4,0,0"/>
 
                                         <!-- Zawartość nagłówka - z Opacity zależną od InMonth -->
                                         <Grid Grid.Row="0" Padding="6,0">
@@ -203,14 +203,14 @@
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold" 
-                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}" VerticalAlignment="Center"
+                                            <TextBlock Grid.Column="0" Text="{x:Bind DayNumber}" FontWeight="SemiBold"
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}" VerticalAlignment="Center"
                                                       Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
 
-                                            <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}" 
-                                                      Visibility="{x:Bind HolidayVisibility, Mode=OneWay}" 
-                                                      FontSize="11" 
-                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay}"
+                                            <TextBlock Grid.Column="1" Text="{x:Bind HolidayName}"
+                                                      Visibility="{x:Bind HasHolidayName, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                      FontSize="11"
+                                                      Foreground="{x:Bind DayNumberForeground, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}"
                                                       HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0"
                                                       Opacity="{x:Bind InMonth, Converter={StaticResource BooleanToOpacityConverter}, ConverterParameter=0.35;0.6}"/>
                                         </Grid>
@@ -389,8 +389,8 @@
                                         </Grid>
 
                                         <!-- RAMKI - ZAWSZE widoczne -->
-                                        <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="4,4,0,0"/>
-                                        <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay}" BorderThickness="1" CornerRadius="0,0,4,4"/>
+                                        <Border Grid.Row="0" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}" BorderThickness="1" CornerRadius="4,4,0,0"/>
+                                        <Border Grid.Row="1" BorderBrush="{x:Bind EffectiveBorderBrush, Mode=OneWay, Converter={StaticResource ColorStringToBrushConverter}}" BorderThickness="1" CornerRadius="0,0,4,4"/>
 
                                         <!-- ZAZNACZENIA -->
                                         <Border Grid.Row="1" CornerRadius="0,0,4,4" Opacity="0.2"

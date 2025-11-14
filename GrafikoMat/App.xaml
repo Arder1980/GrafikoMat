@@ -22,6 +22,7 @@
             <common:DateOnlyToDateTimeOffsetConverter x:Key="DateOnlyToDateTimeOffsetConverter" />
             <common:InverseBooleanConverter x:Key="InverseBoolConverter" />
             <common:StringNotEmptyToBoolConverter x:Key="StringNotEmptyToBoolConverter" />
+            <common:ColorStringToBrushConverter x:Key="ColorStringToBrushConverter" />
 
         </ResourceDictionary>
     </Application.Resources>

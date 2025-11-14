@@ -239,6 +239,52 @@ namespace GrafikoMat.Common
     }
 
     /// <summary>
+    /// Konwertuje string z kolorem w formacie hex (#AARRGGBB lub #RRGGBB) na SolidColorBrush.
+    /// Jeśli wartość jest null/pusty string, zwraca transparentny pędzel.
+    /// </summary>
+    public class ColorStringToBrushConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is not string colorString || string.IsNullOrWhiteSpace(colorString))
+            {
+                return new SolidColorBrush(Colors.Transparent);
+            }
+
+            try
+            {
+                // Parse formatu #AARRGGBB lub #RRGGBB
+                if (colorString.StartsWith("#") && (colorString.Length == 7 || colorString.Length == 9))
+                {
+                    byte a = 255;
+                    int offset = 1;
+
+                    if (colorString.Length == 9)
+                    {
+                        a = System.Convert.ToByte(colorString.Substring(1, 2), 16);
+                        offset = 3;
+                    }
+
+                    byte r = System.Convert.ToByte(colorString.Substring(offset, 2), 16);
+                    byte g = System.Convert.ToByte(colorString.Substring(offset + 2, 2), 16);
+                    byte b = System.Convert.ToByte(colorString.Substring(offset + 4, 2), 16);
+
+                    return new SolidColorBrush(Color.FromArgb(a, r, g, b));
+                }
+            }
+            catch
+            {
+                // W przypadku błędu parsowania, zwróć transparentny pędzel
+            }
+
+            return new SolidColorBrush(Colors.Transparent);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
+
+    /// <summary>
     /// Konwertuje szerokość na MaxWidth z zadanym procentem.
     /// Parametr: procent jako string np. "0.9" dla 90%
     /// Domyślnie: 90%

@@ -1025,58 +1025,50 @@ namespace GrafikoMat.Views
 
             foreach (var cell in ViewModel.DayCells)
             {
-                WinUIBrush effectiveBackground;
-                WinUIBrush effectiveBorder;
-                WinUIBrush dayNumberFg;
-                WinUIBrush headerBg;
+                string effectiveBackground;
+                string effectiveBorder;
+                string dayNumberFg;
+                string headerBg;
 
                 if (cell.IsFullSelected || cell.IsDaySelected || cell.IsNightSelected)
                 {
-                    effectiveBackground = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
-                    effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 66, 135, 245));
-                    dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
-                    headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(255, 50, 110, 200));
+                    effectiveBackground = "#FF4287F5"; // WinUIColor.FromArgb(255, 66, 135, 245)
+                    effectiveBorder = "#FF4287F5";
+                    dayNumberFg = "#FFFFFFFF"; // White
+                    headerBg = "#FF326EC8"; // WinUIColor.FromArgb(255, 50, 110, 200)
                 }
                 else if (!cell.InMonth)
                 {
                     if (isDark)
                     {
-                        effectiveBackground = cell.IsDayOff ?
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 60, 60, 60)) :
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 50, 50, 50));
-                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 255, 255, 255));
-                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
-                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 70, 70, 70));
+                        effectiveBackground = cell.IsDayOff ? "#283C3C3C" : "#28323232"; // FromArgb(40, 60/50, 60/50, 60/50)
+                        effectiveBorder = "#0AFFFFFF"; // FromArgb(10, 255, 255, 255)
+                        dayNumberFg = "#FFFFFFFF"; // White
+                        headerBg = "#28464646"; // FromArgb(40, 70, 70, 70)
                     }
                     else
                     {
-                        effectiveBackground = cell.IsDayOff ?
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 220, 220, 220)) :
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(40, 240, 240, 240));
-                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(10, 0, 0, 0));
-                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
-                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(40, 230, 230, 230));
+                        effectiveBackground = cell.IsDayOff ? "#28DCDCDC" : "#28F0F0F0"; // FromArgb(40, 220/240, ...)
+                        effectiveBorder = "#0A000000"; // FromArgb(10, 0, 0, 0)
+                        dayNumberFg = "#FF000000"; // Black
+                        headerBg = "#28E6E6E6"; // FromArgb(40, 230, 230, 230)
                     }
                 }
                 else
                 {
                     if (isDark)
                     {
-                        effectiveBackground = cell.IsDayOff ?
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 50, 50, 50)) :
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 40, 40, 40));
-                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 255, 255, 255));
-                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.White);
-                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 60, 60, 60));
+                        effectiveBackground = cell.IsDayOff ? "#96323232" : "#96282828"; // FromArgb(150, 50/40, ...)
+                        effectiveBorder = "#50FFFFFF"; // FromArgb(80, 255, 255, 255)
+                        dayNumberFg = "#FFFFFFFF"; // White
+                        headerBg = "#963C3C3C"; // FromArgb(150, 60, 60, 60)
                     }
                     else
                     {
-                        effectiveBackground = cell.IsDayOff ?
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 235, 235, 235)) :
-                            new WinUISolidColorBrush(WinUIColor.FromArgb(150, 250, 250, 250));
-                        effectiveBorder = new WinUISolidColorBrush(WinUIColor.FromArgb(80, 0, 0, 0));
-                        dayNumberFg = new WinUISolidColorBrush(WinUIColors.Black);
-                        headerBg = new WinUISolidColorBrush(WinUIColor.FromArgb(150, 245, 245, 245));
+                        effectiveBackground = cell.IsDayOff ? "#96EBEBEB" : "#96FAFAFA"; // FromArgb(150, 235/250, ...)
+                        effectiveBorder = "#50000000"; // FromArgb(80, 0, 0, 0)
+                        dayNumberFg = "#FF000000"; // Black
+                        headerBg = "#96F5F5F5"; // FromArgb(150, 245, 245, 245)
                     }
                 }
 

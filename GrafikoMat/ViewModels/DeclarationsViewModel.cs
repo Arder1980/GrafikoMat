@@ -989,31 +989,31 @@ namespace GrafikoMat.ViewModels
         public bool IsHoliday { get; }
         public bool IsDayOff => IsHoliday || IsWeekend;
         public string? HolidayName { get; }
-        public Visibility HolidayVisibility => string.IsNullOrEmpty(HolidayName) ? Visibility.Collapsed : Visibility.Visible;
+        public bool HasHolidayName => !string.IsNullOrEmpty(HolidayName);
 
-        private Brush _effectiveBackground = new SolidColorBrush();
-        public Brush EffectiveBackground
+        private string _effectiveBackground = "#00000000";
+        public string EffectiveBackground
         {
             get => _effectiveBackground;
             set => SetProperty(ref _effectiveBackground, value);
         }
 
-        private Brush _effectiveBorderBrush = new SolidColorBrush();
-        public Brush EffectiveBorderBrush
+        private string _effectiveBorderBrush = "#00000000";
+        public string EffectiveBorderBrush
         {
             get => _effectiveBorderBrush;
             set => SetProperty(ref _effectiveBorderBrush, value);
         }
 
-        private Brush _dayNumberForeground = new SolidColorBrush();
-        public Brush DayNumberForeground
+        private string _dayNumberForeground = "#FFFFFFFF";
+        public string DayNumberForeground
         {
             get => _dayNumberForeground;
             set => SetProperty(ref _dayNumberForeground, value);
         }
 
-        private Brush _effectiveHeaderBackground = new SolidColorBrush();
-        public Brush EffectiveHeaderBackground
+        private string _effectiveHeaderBackground = "#00000000";
+        public string EffectiveHeaderBackground
         {
             get => _effectiveHeaderBackground;
             set => SetProperty(ref _effectiveHeaderBackground, value);
