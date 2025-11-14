@@ -37,11 +37,37 @@ namespace GrafikoMat.Views
         private const int RowHeight = 32;
 
         private MainViewModel? _vm;
+        private SizeChangedEventHandler? _sizeChangedHandler;
+
         public DashboardView()
         {
             InitializeComponent();
-            DeclarationsGrid.SizeChanged += (s, e) => BuildLeftTable();
+            _sizeChangedHandler = (s, e) => BuildLeftTable();
+            DeclarationsGrid.SizeChanged += _sizeChangedHandler;
             this.ActualThemeChanged += OnThemeChanged;
+            this.Unloaded += OnDashboardViewUnloaded;
+        }
+
+        private void OnDashboardViewUnloaded(object sender, RoutedEventArgs e)
+        {
+            // Odsubskrybuj event handlery kontrolek
+            if (_sizeChangedHandler != null)
+            {
+                DeclarationsGrid.SizeChanged -= _sizeChangedHandler;
+                _sizeChangedHandler = null;
+            }
+
+            this.ActualThemeChanged -= OnThemeChanged;
+
+            // Odsubskrybuj od ViewModelu
+            if (_vm != null)
+            {
+                _vm.PropertyChanged -= OnVmPropertyChanged;
+                _vm.DoctorRows.CollectionChanged -= OnDoctorRowsChanged;
+                _vm = null;
+            }
+
+            this.Unloaded -= OnDashboardViewUnloaded;
         }
 
         public void Attach(MainViewModel vm)

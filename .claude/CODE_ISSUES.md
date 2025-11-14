@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 7 | 19 | 26 |
+| 🔴 KRYTYCZNE | 6 | 20 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **109** | **21** | **130** |
+| **SUMA** | **108** | **22** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 16% (21/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 17% (22/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023
 
 ---
 
@@ -606,93 +606,6 @@ Wszystkie funkcje powinny działać, code-behind < 50 linii.
 ---
 
 ---
-
-### 🔴 #023 - Brak wyrejestrowania event handlers
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Memory Leaks
-**Pliki:**
-- `GrafikoMat/MainWindow.xaml.cs:93`
-- `GrafikoMat/Views/DeclarationsView.xaml.cs:241`
-- `GrafikoMat/Views/DashboardView.xaml.cs:42`
-
-**Problem:** Event handlers rejestrowane, ale NIGDY nie odsubskrybowywane
-
-**Rozwiązanie:**
-
-**MainWindow.xaml.cs:**
-```csharp
-private void OnWindowClosed(object sender, WindowEventArgs args)
-{
-    // Dodaj:
-    if (ViewModel != null)
-    {
-        ViewModel.PropertyChanged -= OnMainViewModelPropertyChanged;
-    }
-
-    WeakReferenceMessenger.Default.UnregisterAll(this);
-
-    // ... reszta cleanup
-}
-```
-
-**DeclarationsView.xaml.cs:**
-```csharp
-// Dodaj pole:
-private DeclarationsViewModel? _currentViewModel;
-
-private void AttachViewModel(DeclarationsViewModel? vm)
-{
-    // Odsubskrybuj stary:
-    if (_currentViewModel != null)
-    {
-        _currentViewModel.PropertyChanged -= Vm_PropertyChanged;
-    }
-
-    _currentViewModel = vm;
-
-    // Subskrybuj nowy:
-    if (_currentViewModel != null)
-    {
-        _currentViewModel.PropertyChanged += Vm_PropertyChanged;
-    }
-}
-
-// W Unloaded:
-private void OnDeclarationsViewUnloaded(object sender, RoutedEventArgs e)
-{
-    if (_currentViewModel != null)
-    {
-        _currentViewModel.PropertyChanged -= Vm_PropertyChanged;
-        _currentViewModel = null;
-    }
-
-    // ... reszta cleanup
-}
-```
-
-**DashboardView.xaml.cs:**
-```csharp
-public DashboardView()
-{
-    this.InitializeComponent();
-
-    // Dodaj Unloaded handler:
-    this.Unloaded += OnUnloaded;
-}
-
-private void OnUnloaded(object sender, RoutedEventArgs e)
-{
-    DeclarationsGrid.SizeChanged -= OnSizeChanged; // lub jak nazywa się handler
-
-    // Inne event handlers...
-}
-```
-
-**Weryfikacja:**
-Trudne - memory leak występuje stopniowo. Sprawdź w Task Manager po 100 zmianach widoku.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #023` do linii `---`
 
 ---
 
@@ -1461,7 +1374,26 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (21)
+## ✅ NAPRAWIONE PROBLEMY (22)
+
+### ✅ #023 - Brak wyrejestrowania event handlers
+**Data naprawy:** 2025-11-14 (MainWindow i DeclarationsView wcześniej, DashboardView teraz)
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Memory Leaks
+**Pliki:**
+- `GrafikoMat/MainWindow.xaml.cs:1417-1499`
+- `GrafikoMat/Views/DeclarationsView.xaml.cs:1228-1253`
+- `GrafikoMat/Views/DashboardView.xaml.cs:40,42-71`
+**Co zrobiono:**
+- MainWindow: już miał cleanup w OnWindowClosed (ViewModel.PropertyChanged, WeakReferenceMessenger, AppWindow, etc.)
+- DeclarationsView: już miał cleanup w OnDeclarationsViewUnloaded
+- DashboardView: dodano pole _sizeChangedHandler (SizeChangedEventHandler)
+- DashboardView: dodano metodę OnDashboardViewUnloaded z cleanup wszystkich event handlerów
+- DashboardView: odsubskrybowanie od DeclarationsGrid.SizeChanged, ActualThemeChanged, ViewModel events
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - wszystkie event handlers są poprawnie wyrejestrowywane przy Unloaded
+
+---
 
 ### ✅ #022 - MainViewModel._declByKey rośnie w nieskończoność
 **Data naprawy:** 2025-11-14
