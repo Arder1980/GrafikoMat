@@ -64,7 +64,7 @@ namespace GrafikoMat.Services
                 var testClient = new SbClient(url, apiKey, options);
 
                 // Inicjalizacja klienta - rzuci wyjątek jeśli URL/Key są nieprawidłowe
-                await testClient.InitializeAsync();
+                await testClient.InitializeAsync().ConfigureAwait(false);
 
                 Debug.WriteLine("[SupabaseService] TestConnection: SUCCESS");
                 return true;
@@ -114,7 +114,7 @@ namespace GrafikoMat.Services
                 if (setSession3 != null)
                 {
                     Debug.WriteLine("[SupabaseService] Restore: SetSession(access,refresh,force=true) AWAIT...");
-                    await InvokeAwaitIfTask(setSession3, auth, saved.AccessToken, saved.RefreshToken, true);
+                    await InvokeAwaitIfTask(setSession3, auth, saved.AccessToken, saved.RefreshToken, true).ConfigureAwait(false);
                     if (auth.CurrentSession != null)
                     {
                         Debug.WriteLine("[SupabaseService] Restore: Session restored via SetSession");
@@ -135,7 +135,7 @@ namespace GrafikoMat.Services
                 if (refreshToken2 != null)
                 {
                     Debug.WriteLine("[SupabaseService] Restore: RefreshToken(access,refresh) AWAIT...");
-                    await InvokeAwaitIfTask(refreshToken2, auth, saved.AccessToken, saved.RefreshToken);
+                    await InvokeAwaitIfTask(refreshToken2, auth, saved.AccessToken, saved.RefreshToken).ConfigureAwait(false);
                     if (auth.CurrentSession != null)
                     {
                         Debug.WriteLine("[SupabaseService] Restore: Session restored via RefreshToken");
@@ -156,7 +156,7 @@ namespace GrafikoMat.Services
                 if (refreshNoArgs != null)
                 {
                     Debug.WriteLine("[SupabaseService] Restore: RefreshSession() AWAIT...");
-                    await InvokeAwaitIfTask(refreshNoArgs, auth);
+                    await InvokeAwaitIfTask(refreshNoArgs, auth).ConfigureAwait(false);
                     if (auth.CurrentSession != null)
                     {
                         Debug.WriteLine("[SupabaseService] Restore: Session restored via RefreshSession");
@@ -212,7 +212,7 @@ namespace GrafikoMat.Services
             try
             {
                 if (_client != null)
-                    await _client.Auth.SignOut();
+                    await _client.Auth.SignOut().ConfigureAwait(false);
             }
             catch { }
 
@@ -231,12 +231,12 @@ namespace GrafikoMat.Services
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany.");
 
             var attributes = new UserAttributes { Password = newPassword };
-            await Client.Auth.Update(attributes);
+            await Client.Auth.Update(attributes).ConfigureAwait(false);
 
             // Wyczyść flagę requires_password_change
             try
             {
-                await Client.Functions.Invoke("clear-password-change-flag");
+                await Client.Functions.Invoke("clear-password-change-flag").ConfigureAwait(false);
                 Debug.WriteLine("[SupabaseService] Flaga requires_password_change wyczyszczona");
             }
             catch (Exception ex)

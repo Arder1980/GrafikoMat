@@ -41,7 +41,7 @@ namespace GrafikoMat.Services
 
                 // Sukces: wyświetlamy i czekamy
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Sukces", successMessage, InfoBarSeverity.Success));
-                await Task.Delay(3000);
+                await Task.Delay(3000).ConfigureAwait(false);
                 _messenger.Send(new HideOverlayMessage(viewId));
             }
             catch (Exception ex)
@@ -59,20 +59,20 @@ namespace GrafikoMat.Services
             _messenger.Send(new ShowBusyOverlayMessage(viewId));
 
             // Dodajemy małe opóźnienie, aby overlay mógł się poprawnie wyświetlić
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
 
             try
             {
                 await loadActionAsync();
 
                 // Dodajemy małe opóźnienie przed ukryciem, aby uniknąć "migania"
-                await Task.Delay(200);
+                await Task.Delay(200).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 // Jeśli ładowanie się nie powiedzie, pokaż błąd i schowaj nakładkę po 3s.
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Błąd ładowania danych", ex.Message, InfoBarSeverity.Error));
-                await Task.Delay(3000); // Automatyczne zamykanie dla błędów ładowania (nie blokujemy UI)
+                await Task.Delay(3000).ConfigureAwait(false); // Automatyczne zamykanie dla błędów ładowania (nie blokujemy UI)
             }
             finally
             {
@@ -119,7 +119,7 @@ namespace GrafikoMat.Services
                 _messenger.Send(new ShowProgressOverlayMessage(viewId, title, engineName, isCancellable, showIndeterminateProgress));
 
                 // Małe opóźnienie aby overlay się wyświetlił
-                await Task.Delay(100);
+                await Task.Delay(100).ConfigureAwait(false);
 
                 // Utwórz Progress który będzie wysyłać aktualizacje przez Messenger
                 var progress = new Progress<(double progress, string? statusText)>(update =>
@@ -134,7 +134,7 @@ namespace GrafikoMat.Services
                 if (cts.Token.IsCancellationRequested)
                 {
                     _messenger.Send(new ShowStatusOverlayMessage(viewId, "Anulowano", "Operacja została anulowana przez użytkownika.", InfoBarSeverity.Warning));
-                    await Task.Delay(2000);
+                    await Task.Delay(2000).ConfigureAwait(false);
                     _messenger.Send(new HideOverlayMessage(viewId));
                     return false;
                 }
@@ -143,7 +143,7 @@ namespace GrafikoMat.Services
                 if (!string.IsNullOrEmpty(successMessage))
                 {
                     _messenger.Send(new ShowStatusOverlayMessage(viewId, "Sukces", successMessage, InfoBarSeverity.Success));
-                    await Task.Delay(2000);
+                    await Task.Delay(2000).ConfigureAwait(false);
                 }
 
                 _messenger.Send(new HideOverlayMessage(viewId));
@@ -153,7 +153,7 @@ namespace GrafikoMat.Services
             {
                 // Anulowanie przez CancellationToken
                 _messenger.Send(new ShowStatusOverlayMessage(viewId, "Anulowano", "Operacja została anulowana.", InfoBarSeverity.Warning));
-                await Task.Delay(2000);
+                await Task.Delay(2000).ConfigureAwait(false);
                 _messenger.Send(new HideOverlayMessage(viewId));
                 return false;
             }
