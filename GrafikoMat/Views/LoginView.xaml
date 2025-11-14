@@ -18,19 +18,25 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,12"/>
 
-            <TextBox x:Name="EmailTextBox" Header="Adres e-mail"/>
-            <PasswordBox x:Name="PasswordBox" Header="Hasło" KeyDown="PasswordBox_KeyDown"/>
+            <TextBox x:Name="EmailTextBox"
+                     Header="Adres e-mail"
+                     Text="{x:Bind ViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            <PasswordBox x:Name="PasswordBox"
+                         Header="Hasło"
+                         Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
+                         KeyDown="PasswordBox_KeyDown"/>
 
             <Grid ColumnDefinitions="*,*" ColumnSpacing="8" Margin="0,12,0,0">
                 <Button Grid.Column="0"
                         Content="Wyjdź"
                         HorizontalAlignment="Stretch"
-                        Click="CancelButton_Click"/>
+                        Command="{x:Bind ViewModel.CancelCommand}"/>
                 <Button Grid.Column="1"
                         Content="Zaloguj"
                         Style="{StaticResource AccentButtonStyle}"
                         HorizontalAlignment="Stretch"
-                        Click="LoginButton_Click"/>
+                        Command="{x:Bind ViewModel.LoginCommand}"
+                        IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBoolConverter}}"/>
             </Grid>
 
             <HyperlinkButton Content="Zapomniałem hasła..."
@@ -39,8 +45,8 @@
                              Click="ForgotPassword_Click"/>
 
             <InfoBar x:Name="ErrorBar"
-                     IsOpen="False"
-                     Opacity="0"
+                     IsOpen="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource StringNotEmptyToBoolConverter}}"
+                     Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
                      IsClosable="True"
                      Severity="Error"
                      MinHeight="72"/>

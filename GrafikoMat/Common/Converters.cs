@@ -89,6 +89,15 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();
     }
 
+    public class StringNotEmptyToBoolConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            return value is string str && !string.IsNullOrEmpty(str);
+        }
+        public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
     public class IntegerToItemsConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, string language)

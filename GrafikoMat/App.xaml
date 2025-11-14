@@ -20,6 +20,8 @@
             <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
             <common:BooleanToOpacityConverter x:Key="BooleanToOpacityConverter" />
             <common:DateOnlyToDateTimeOffsetConverter x:Key="DateOnlyToDateTimeOffsetConverter" />
+            <common:InverseBooleanConverter x:Key="InverseBoolConverter" />
+            <common:StringNotEmptyToBoolConverter x:Key="StringNotEmptyToBoolConverter" />
 
         </ResourceDictionary>
     </Application.Resources>
