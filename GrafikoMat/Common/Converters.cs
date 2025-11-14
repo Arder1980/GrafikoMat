@@ -371,4 +371,48 @@ namespace GrafikoMat.Common
         public object ConvertBack(object value, Type targetType, object parameter, string language)
             => throw new NotImplementedException();
     }
+
+    /// <summary>
+    /// Konwertuje string "0,0,1,1" na Thickness.
+    /// </summary>
+    public class StringToThicknessConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is string str && !string.IsNullOrWhiteSpace(str))
+            {
+                var parts = str.Split(',');
+                if (parts.Length == 4 &&
+                    double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double left) &&
+                    double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double top) &&
+                    double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double right) &&
+                    double.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double bottom))
+                {
+                    return new Thickness(left, top, right, bottom);
+                }
+                if (parts.Length == 1 && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double uniform))
+                {
+                    return new Thickness(uniform);
+                }
+            }
+            return new Thickness(0);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Konwertuje bool na FontWeight (true = SemiBold, false = Normal).
+    /// </summary>
+    public class BoolToFontWeightConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            return (value is bool b && b) ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
+    }
 }

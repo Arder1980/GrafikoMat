@@ -23,6 +23,8 @@
             <common:InverseBooleanConverter x:Key="InverseBoolConverter" />
             <common:StringNotEmptyToBoolConverter x:Key="StringNotEmptyToBoolConverter" />
             <common:ColorStringToBrushConverter x:Key="ColorStringToBrushConverter" />
+            <common:StringToThicknessConverter x:Key="StringToThicknessConverter" />
+            <common:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter" />
 
         </ResourceDictionary>
     </Application.Resources>

@@ -83,6 +83,7 @@ namespace GrafikoMat.ViewModels
 
         public ObservableCollection<DoctorRow> DoctorRows { get; } = new();
         public ObservableCollection<RosterRow> RosterRows { get; } = new();
+        public ObservableCollection<CalendarCellViewModel> CalendarCells { get; } = new();
 
         private string _engineName = "Silnik: (nieustawiony)";
         public string EngineName { get => _engineName; set { if (_engineName != value) { _engineName = value; OnPropertyChanged(); } } }
@@ -417,7 +418,7 @@ namespace GrafikoMat.ViewModels
                     {
                         dutyLabel = doctor.Abbreviation; // Przypisany lekarz
                     }
-                    else // Brak przypisanego lekarza (null w solution.Assignments)
+                    else // Brak przypisanego lekarza (null in solution.Assignments)
                     {
                         // Zastosuj logikę teleradiologii
                         dutyLabel = allowTele ? "TELE" : "—"; // Użyj "TELE" jeśli dozwolone, inaczej "—"
@@ -426,6 +427,126 @@ namespace GrafikoMat.ViewModels
 
                 RosterRows.Add(new RosterRow(dateLabel, dutyLabel, isDayOff, isLast));
             }
+
+            BuildCalendarCells();
+        }
+
+        public void BuildCalendarCells()
+        {
+            CalendarCells.Clear();
+
+            int year = SelectedYear;
+            int month = SelectedMonthIndex + 1;
+            int daysInMonth = DateTime.DaysInMonth(year, month);
+
+            // Kolory zależne od motywu
+            var currentTheme = ThemeManagerService.Instance.CurrentTheme;
+            string borderColor = currentTheme == Microsoft.UI.Xaml.ElementTheme.Light ? "#18000000" : "#18FFFFFF";
+            string dayOffFill = currentTheme == Microsoft.UI.Xaml.ElementTheme.Light ? "#0A000000" : "#0AFFFFFF";
+
+            // Nagłówek - komórka z nazwą "Dyżurny"
+            CalendarCells.Add(new CalendarCellViewModel
+            {
+                Row = 0,
+                Column = 0,
+                Text = "Dyżurny",
+                BorderColor = borderColor,
+                BorderThickness = "0,0,1,1",
+                IsBold = true
+            });
+
+            // Nagłówki dni (numery + dni tygodnia)
+            for (int d = 1; d <= daysInMonth; d++)
+            {
+                var date = new DateTime(year, month, d);
+                bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
+                bool isLastColumn = (d == daysInMonth);
+
+                CalendarCells.Add(new CalendarCellViewModel
+                {
+                    Row = 0,
+                    Column = d,
+                    Text = $"{d:00}\n{DowPlShort(date.DayOfWeek)}",
+                    BackgroundColor = isDayOff ? dayOffFill : "#00000000",
+                    BorderColor = borderColor,
+                    BorderThickness = isLastColumn ? "0,0,0,1" : "0,0,1,1",
+                    TextAlignment = "Center",
+                    LineHeight = 14,
+                    Padding = "0,4,0,4"
+                });
+            }
+
+            // Wiersze lekarzy
+            for (int r = 0; r < DoctorRows.Count; r++)
+            {
+                var doctor = DoctorRows[r];
+                int row = r + 1;
+
+                // Komórka z nazwiskiem
+                CalendarCells.Add(new CalendarCellViewModel
+                {
+                    Row = row,
+                    Column = 0,
+                    Text = doctor.DisplayName,
+                    BorderColor = borderColor,
+                    BorderThickness = "0,0,1,1",
+                    Opacity = doctor.HasDeclarations ? 1.0 : 0.6,
+                    Padding = "8,0,8,0"
+                });
+
+                // Komórki z dniami
+                for (int d = 1; d <= daysInMonth; d++)
+                {
+                    var date = new DateTime(year, month, d);
+                    bool isDayOff = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || PolishHolidays.IsPublicHoliday(date);
+                    bool isLastColumn = (d == daysInMonth);
+
+                    var entry = TryGetEntry(doctor.Profile.FullName, year, SelectedMonthIndex, d - 1);
+                    string text = "";
+
+                    if (entry.has)
+                    {
+                        if (entry.mode == DayMode.Full24 && !string.IsNullOrEmpty(entry.full))
+                        {
+                            text = ConvertTo1LetterCode(entry.full);
+                        }
+                        else if (entry.mode == DayMode.Split12)
+                        {
+                            string dayPart = !string.IsNullOrEmpty(entry.day) ? ConvertTo1LetterCode(entry.day) : "";
+                            string nightPart = !string.IsNullOrEmpty(entry.night) ? ConvertTo1LetterCode(entry.night) : "";
+                            text = $"{dayPart}\n{nightPart}";
+                        }
+                    }
+
+                    CalendarCells.Add(new CalendarCellViewModel
+                    {
+                        Row = row,
+                        Column = d,
+                        Text = text,
+                        BackgroundColor = isDayOff ? dayOffFill : "#00000000",
+                        BorderColor = borderColor,
+                        BorderThickness = isLastColumn ? "0,0,0,1" : "0,0,1,1",
+                        TextAlignment = "Center",
+                        LineHeight = 14
+                    });
+                }
+            }
+        }
+
+        private static string DowPlShort(DayOfWeek dow) => new[] { "Nd", "Pn", "Wt", "Śr", "Cz", "Pt", "So" }[(int)dow];
+
+        private static string ConvertTo1LetterCode(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return "";
+            string upper = input.Trim().ToUpperInvariant();
+            return upper switch
+            {
+                "DYŻUR" or "D" or "DYŻ" => "D",
+                "URLOP" or "U" or "URL" => "U",
+                "L4" or "CHOROBA" or "CH" => "L",
+                "SZKOLENIE" or "S" or "SZK" => "S",
+                _ => upper.Length > 0 ? upper.Substring(0, 1) : ""
+            };
         }
 
 
