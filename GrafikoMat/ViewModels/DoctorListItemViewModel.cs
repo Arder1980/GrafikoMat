@@ -1,4 +1,5 @@
-﻿using GrafikoMat.Core.Data;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
+using GrafikoMat.Core.Data;
 using System;
 
 namespace GrafikoMat.ViewModels
@@ -7,10 +8,14 @@ namespace GrafikoMat.ViewModels
     /// Reprezentuje pojedynczy, gotowy do wyświetlenia element na liście lekarzy.
     /// Zawiera logikę decydującą, czy do nazwy należy dodać skrót w nawiasach.
     /// </summary>
-    public class DoctorListItemViewModel
+    public partial class DoctorListItemViewModel : ObservableObject
     {
-        public DoctorProfile Profile { get; }
-        public string DisplayName { get; }
+        [ObservableProperty]
+        private DoctorProfile _profile;
+
+        [ObservableProperty]
+        private string _displayName;
+
         public bool IsArchived => Profile.IsArchived;
         public Guid Id => Profile.Id;
 
@@ -27,12 +32,20 @@ namespace GrafikoMat.ViewModels
         // ================== ZMIANA W KONSTRUKTORZE ==================
         public DoctorListItemViewModel(DoctorProfile profile, bool needsDifferentiator, bool isCurrentUser)
         {
-            Profile = profile;
+            _profile = profile;
             IsCurrentUser = isCurrentUser; // <-- Zapamiętujemy informację
 
-            DisplayName = needsDifferentiator
+            _displayName = needsDifferentiator
                 ? $"{profile.LastName} {profile.FirstName} ({profile.Abbreviation})"
                 : $"{profile.LastName} {profile.FirstName}";
+        }
+
+        partial void OnProfileChanged(DoctorProfile value)
+        {
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(IsArchived));
+            OnPropertyChanged(nameof(Id));
+            OnPropertyChanged(nameof(SortableName));
         }
     }
 }

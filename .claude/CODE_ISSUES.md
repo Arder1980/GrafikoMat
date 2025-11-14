@@ -62,14 +62,14 @@
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
 | 🔴 KRYTYCZNE | 11 | 15 | 26 |
-| 🟠 WYSOKIE | 41 | 1 | 42 |
+| 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **114** | **16** | **130** |
+| **SUMA** | **113** | **17** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 12% (16/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 13% (17/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029
 
 ---
 
@@ -1143,48 +1143,6 @@ Spróbuj zapisać doktora z pustym imieniem - powinien rzucić ValidationExcepti
 
 ---
 
-### 🟠 #029 - DoctorListItemViewModel nie jest ObservableObject
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** WYSOKI
-**Kategoria:** MVVM
-**Plik:** `GrafikoMat/ViewModels/DoctorListItemViewModel.cs:10`
-**Problem:** Brak INotifyPropertyChanged - UI nie reaguje na zmiany
-
-**Rozwiązanie:**
-```csharp
-// BYŁO:
-public class DoctorListItemViewModel
-{
-    public DoctorProfile Profile { get; }
-    public string DisplayName { get; }
-}
-
-// ZMIEŃ NA:
-public partial class DoctorListItemViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private DoctorProfile _profile;
-
-    public string DisplayName => $"{Profile.LastName} {Profile.FirstName} ({Profile.Abbreviation})";
-
-    public DoctorListItemViewModel(DoctorProfile profile)
-    {
-        _profile = profile;
-    }
-
-    partial void OnProfileChanged(DoctorProfile value)
-    {
-        OnPropertyChanged(nameof(DisplayName));
-    }
-}
-```
-
-**Weryfikacja:**
-Zmień dane doctora - UI powinno się zaktualizować automatycznie.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🟠 #029` do linii `---`
-
----
 
 ### 🟠 #030 - CalendarSettingsViewModel brak IDisposable
 **Status:** ❌ DO NAPRAWY
@@ -1827,7 +1785,23 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (16)
+## ✅ NAPRAWIONE PROBLEMY (17)
+
+### ✅ #029 - DoctorListItemViewModel nie jest ObservableObject
+**Data naprawy:** 2025-11-14
+**Priorytet:** WYSOKI
+**Plik:** `GrafikoMat/ViewModels/DoctorListItemViewModel.cs`
+**Co zrobiono:**
+- Zmieniono `public class` na `public partial class : ObservableObject`
+- Dodano using CommunityToolkit.Mvvm.ComponentModel
+- Profile: zmieniono z `public property` na `[ObservableProperty] private _profile`
+- DisplayName: zmieniono z `public property` na `[ObservableProperty] private _displayName`
+- Dodano partial void OnProfileChanged() z powiadomieniami dla wszystkich dependent properties
+- UI teraz reaguje na zmiany w profilu lekarza
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - INotifyPropertyChanged działa, UI będzie się aktualizować
+
+---
 
 ### ✅ #026 - Hasła wyświetlane w UI
 **Data naprawy:** 2025-11-14
