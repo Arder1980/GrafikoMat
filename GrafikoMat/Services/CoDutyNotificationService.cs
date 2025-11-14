@@ -38,12 +38,12 @@ namespace GrafikoMat.Services
         /// </summary>
         public async Task<List<CoDutyNotificationViewModel>> GetPendingNotificationsAsync(Guid doctorId)
         {
-            var notifications = await _notificationRepo.GetPendingNotificationsAsync(doctorId);
+            var notifications = await _notificationRepo.GetPendingNotificationsAsync(doctorId).ConfigureAwait(false);
             if (!notifications.Any())
                 return new List<CoDutyNotificationViewModel>();
 
-            var doctors = await _doctorRepo.GetAllAsync();
-            var units = await _unitRepo.GetAllAsync();
+            var doctors = await _doctorRepo.GetAllAsync().ConfigureAwait(false);
+            var units = await _unitRepo.GetAllAsync().ConfigureAwait(false);
 
             var viewModels = new List<CoDutyNotificationViewModel>();
 
@@ -71,7 +71,7 @@ namespace GrafikoMat.Services
         /// </summary>
         public async Task<int> GetPendingCountAsync(Guid doctorId)
         {
-            return await _notificationRepo.GetPendingCountAsync(doctorId);
+            return await _notificationRepo.GetPendingCountAsync(doctorId).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -79,15 +79,15 @@ namespace GrafikoMat.Services
         /// </summary>
         public async Task<bool> AcceptNotificationAsync(long notificationId)
         {
-            var notification = await _notificationRepo.GetNotificationByIdAsync(notificationId);
+            var notification = await _notificationRepo.GetNotificationByIdAsync(notificationId).ConfigureAwait(false);
             if (notification == null)
                 return false;
 
             // Aktualizuj status w deklaracjach obu lekarzy na "accepted"
-            await UpdateBothDeclarationsStatusAsync(notification, CoDutyStatus.Accepted);
+            await UpdateBothDeclarationsStatusAsync(notification, CoDutyStatus.Accepted).ConfigureAwait(false);
 
             // Usuń powiadomienie
-            await _notificationRepo.DeleteNotificationAsync(notificationId);
+            await _notificationRepo.DeleteNotificationAsync(notificationId).ConfigureAwait(false);
 
             NotificationCountChanged?.Invoke(this, EventArgs.Empty);
             return true;
@@ -98,15 +98,15 @@ namespace GrafikoMat.Services
         /// </summary>
         public async Task<bool> RejectNotificationAsync(long notificationId)
         {
-            var notification = await _notificationRepo.GetNotificationByIdAsync(notificationId);
+            var notification = await _notificationRepo.GetNotificationByIdAsync(notificationId).ConfigureAwait(false);
             if (notification == null)
                 return false;
 
             // Wyczyść deklaracje obu lekarzy
-            await ClearBothDeclarationsAsync(notification);
+            await ClearBothDeclarationsAsync(notification).ConfigureAwait(false);
 
             // Usuń powiadomienie
-            await _notificationRepo.DeleteNotificationAsync(notificationId);
+            await _notificationRepo.DeleteNotificationAsync(notificationId).ConfigureAwait(false);
 
             NotificationCountChanged?.Invoke(this, EventArgs.Empty);
             return true;
@@ -122,13 +122,13 @@ namespace GrafikoMat.Services
                 notification.UnitId,
                 notification.FromDoctorId,
                 notification.Year,
-                notification.Month);
+                notification.Month).ConfigureAwait(false);
 
             var partnerDecl = await _declarationRepo.GetDeclarationForDoctorAsync(
                 notification.UnitId,
                 notification.ToDoctorId,
                 notification.Year,
-                notification.Month);
+                notification.Month).ConfigureAwait(false);
 
             if (initiatorDecl?.DeclarationDataJson?.Days == null ||
                 partnerDecl?.DeclarationDataJson?.Days == null)
@@ -149,8 +149,8 @@ namespace GrafikoMat.Services
             }
 
             // Zapisz obie deklaracje
-            await _declarationRepo.SaveDeclarationAsync(initiatorDecl);
-            await _declarationRepo.SaveDeclarationAsync(partnerDecl);
+            await _declarationRepo.SaveDeclarationAsync(initiatorDecl).ConfigureAwait(false);
+            await _declarationRepo.SaveDeclarationAsync(partnerDecl).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -165,7 +165,7 @@ namespace GrafikoMat.Services
                 notification.Year,
                 notification.Month,
                 notification.Day,
-                notification.SlotPart.ToString().ToLowerInvariant());
+                notification.SlotPart.ToString().ToLowerInvariant()).ConfigureAwait(false);
 
             // Usuń deklarację dla dnia u partnera
             await _declarationRepo.DeleteDayDeclarationAsync(
@@ -174,7 +174,7 @@ namespace GrafikoMat.Services
                 notification.Year,
                 notification.Month,
                 notification.Day,
-                notification.SlotPart.ToString().ToLowerInvariant());
+                notification.SlotPart.ToString().ToLowerInvariant()).ConfigureAwait(false);
         }
     }
 }

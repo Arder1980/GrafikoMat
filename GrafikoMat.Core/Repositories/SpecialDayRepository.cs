@@ -22,7 +22,7 @@ namespace GrafikoMat.Core.Repositories
             var response = await _supabase
                 .From<SpecialDay>()
                 .Where(sd => sd.Year == year)
-                .Get();
+                .Get().ConfigureAwait(false);
 
             var allDays = response.Models ?? new List<SpecialDay>();
 
@@ -44,7 +44,7 @@ namespace GrafikoMat.Core.Repositories
             var response = await _supabase
                 .From<SpecialDay>()
                 .Where(sd => sd.Year == year && sd.Type == type)
-                .Get();
+                .Get().ConfigureAwait(false);
 
             var allDays = response.Models ?? new List<SpecialDay>();
 
@@ -73,7 +73,7 @@ namespace GrafikoMat.Core.Repositories
         public async Task<SpecialDay?> GetSpecialDayForDateAsync(DateOnly date, Guid? unitId = null)
         {
             var year = date.Year;
-            var allDays = await GetSpecialDaysForYearAsync(year, unitId);
+            var allDays = await GetSpecialDaysForYearAsync(year, unitId).ConfigureAwait(false);
 
             // Priorytet: najpierw jednostkowe, potem globalne
             return allDays
@@ -133,13 +133,13 @@ namespace GrafikoMat.Core.Repositories
             await _supabase
                 .From<SpecialDay>()
                 .Where(sd => sd.Id == id)
-                .Delete();
+                .Delete().ConfigureAwait(false);
         }
 
         public async Task<SpecialDay> GetOrCreateWinterHolidayAsync(int year, Guid? unitId = null)
         {
             // Sprawdź czy istnieje
-            var existing = await GetSpecialDaysByTypeAsync(year, SpecialDayTypes.WinterHoliday, unitId);
+            var existing = await GetSpecialDaysByTypeAsync(year, SpecialDayTypes.WinterHoliday, unitId).ConfigureAwait(false);
 
             // Filtruj dokładnie - jeśli szukamy globalnych (unitId == null), bierz tylko globalne
             // Jeśli szukamy dla jednostki, bierz dla tej jednostki
@@ -164,7 +164,7 @@ namespace GrafikoMat.Core.Repositories
                 IsSchoolBreak = true
             };
 
-            return await CreateSpecialDayAsync(winterHoliday);
+            return await CreateSpecialDayAsync(winterHoliday).ConfigureAwait(false);
         }
     }
 }
