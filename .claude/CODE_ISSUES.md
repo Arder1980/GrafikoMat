@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 8 | 18 | 26 |
+| 🔴 KRYTYCZNE | 7 | 19 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **110** | **20** | **130** |
+| **SUMA** | **109** | **21** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 15% (20/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 16% (21/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022
 
 ---
 
@@ -604,132 +604,6 @@ Wszystkie funkcje powinny działać, code-behind < 50 linii.
 ---
 
 ---
-
-### 🔴 #022 - MainViewModel._declByKey rośnie w nieskończoność
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Memory Leaks
-**Plik:** `GrafikoMat/ViewModels/MainViewModel.cs:109`
-**Problem:** Dictionary przechowuje WSZYSTKIE deklaracje dla WSZYSTKICH miesięcy bez czyszczenia
-
-**Rozwiązanie:**
-Implementować LRU cache z limitem:
-
-```csharp
-// Zamiast prostego Dictionary:
-private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
-
-// Użyj:
-private readonly LruCache<string, DoctorMonthDeclaration> _declByKey = new(maxSize: 1000);
-
-// LRU Cache implementation:
-public class LruCache<TKey, TValue>
-{
-    private readonly int _maxSize;
-    private readonly Dictionary<TKey, LinkedListNode<CacheItem>> _cache;
-    private readonly LinkedList<CacheItem> _lruList;
-
-    public LruCache(int maxSize)
-    {
-        _maxSize = maxSize;
-        _cache = new Dictionary<TKey, LinkedListNode<CacheItem>>(maxSize);
-        _lruList = new LinkedList<CacheItem>();
-    }
-
-    public TValue this[TKey key]
-    {
-        get
-        {
-            if (!_cache.TryGetValue(key, out var node))
-                throw new KeyNotFoundException();
-
-            // Move to front (most recently used)
-            _lruList.Remove(node);
-            _lruList.AddFirst(node);
-
-            return node.Value.Value;
-        }
-        set
-        {
-            if (_cache.TryGetValue(key, out var node))
-            {
-                node.Value.Value = value;
-                _lruList.Remove(node);
-                _lruList.AddFirst(node);
-            }
-            else
-            {
-                if (_cache.Count >= _maxSize)
-                {
-                    // Remove least recently used
-                    var lru = _lruList.Last;
-                    _lruList.RemoveLast();
-                    _cache.Remove(lru.Value.Key);
-                }
-
-                var newNode = new LinkedListNode<CacheItem>(new CacheItem(key, value));
-                _lruList.AddFirst(newNode);
-                _cache[key] = newNode;
-            }
-        }
-    }
-
-    private class CacheItem
-    {
-        public TKey Key { get; }
-        public TValue Value { get; set; }
-
-        public CacheItem(TKey key, TValue value)
-        {
-            Key = key;
-            Value = value;
-        }
-    }
-}
-```
-
-**Alternatywnie (prostsze):**
-Dodaj metodę czyszczenia:
-
-```csharp
-private void CleanOldDeclarations()
-{
-    var currentDate = DateTime.Today;
-    var keysToRemove = _declByKey.Keys
-        .Where(k =>
-        {
-            // Parse key: "abbrev-year-month"
-            var parts = k.Split('-');
-            if (parts.Length == 3 &&
-                int.TryParse(parts[1], out int year) &&
-                int.TryParse(parts[2], out int month))
-            {
-                var declDate = new DateTime(year, month + 1, 1);
-                // Usuń jeśli starsze niż 6 miesięcy
-                return (currentDate - declDate).TotalDays > 180;
-            }
-            return false;
-        })
-        .ToList();
-
-    foreach (var key in keysToRemove)
-    {
-        _declByKey.Remove(key);
-    }
-}
-
-// Wywołuj co jakiś czas:
-private async Task LoadDataForActiveUnitAsync()
-{
-    CleanOldDeclarations(); // Czyść na początku
-    // ... reszta
-}
-```
-
-**Weryfikacja:**
-Po 6 miesiącach użytkowania pamięć nie powinna rosnąć bez końca.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #022` do linii `---`
 
 ---
 
@@ -1587,7 +1461,28 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (20)
+## ✅ NAPRAWIONE PROBLEMY (21)
+
+### ✅ #022 - MainViewModel._declByKey rośnie w nieskończoność
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Memory Leaks
+**Pliki:**
+- `GrafikoMat/Common/LruCache.cs` (nowy)
+- `GrafikoMat/ViewModels/MainViewModel.cs:110-111`
+- `GrafikoMat/ViewModels/DeclarationsViewModel.cs:35,102`
+**Co zrobiono:**
+- Utworzono interfejs IDictionaryLike<TKey, TValue> z podstawowymi operacjami
+- Utworzono klasę LruCache<TKey, TValue> implementującą IDictionaryLike
+- LRU cache automatycznie usuwa najmniej ostatnio używane elementy po osiągnięciu limitu (1000)
+- Zmieniono MainViewModel._declByKey z Dictionary na LruCache(maxSize: 1000)
+- Zmieniono MainViewModel.Declarations aby zwracał IDictionaryLike zamiast konkretnego typu
+- Zmieniono DeclarationsViewModel._sharedDeclarations na IDictionaryLike
+- Zmieniono konstruktor DeclarationsViewModel aby przyjmował IDictionaryLike
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - memory leak naprawiony, deklaracje będą automatycznie czyszczone po przekroczeniu limitu 1000 elementów
+
+---
 
 ### ✅ #021 - DeclarationsViewModel.Dispose() nigdy nie wywoływane
 **Data naprawy:** Wcześniejsza sesja (zweryfikowano 2025-11-14)

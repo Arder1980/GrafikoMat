@@ -32,7 +32,7 @@ namespace GrafikoMat.ViewModels
 
     public sealed partial class DeclarationsViewModel : ObservableObject, IDisposable
     {
-        private readonly Dictionary<string, DoctorMonthDeclaration> _sharedDeclarations;
+        private readonly IDictionaryLike<string, DoctorMonthDeclaration> _sharedDeclarations;
         private readonly Action _onSaveCallback;
 
         /// <summary>
@@ -99,7 +99,7 @@ namespace GrafikoMat.ViewModels
 
         public DeclarationsViewModel(
             int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
-            Dictionary<string, DoctorMonthDeclaration> sharedDeclarations, bool isAdmin,
+            IDictionaryLike<string, DoctorMonthDeclaration> sharedDeclarations, bool isAdmin,
             bool use12hShifts, Action onSaveCallback, IDeclarationRepository? declarationRepository = null,
             Guid? unitId = null, ISpecialDayRepository? specialDayRepository = null)
         {

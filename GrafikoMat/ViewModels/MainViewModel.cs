@@ -107,8 +107,8 @@ namespace GrafikoMat.ViewModels
             }
         }
 
-        private readonly Dictionary<string, DoctorMonthDeclaration> _declByKey = new();
-        public Dictionary<string, DoctorMonthDeclaration> Declarations => _declByKey;
+        private readonly LruCache<string, DoctorMonthDeclaration> _declByKey = new(maxSize: 1000);
+        public IDictionaryLike<string, DoctorMonthDeclaration> Declarations => _declByKey;
 
         private static string Key(string doctor, int year, int monthIndex) => $"{doctor}|{year:D4}-{monthIndex:D2}";
 
