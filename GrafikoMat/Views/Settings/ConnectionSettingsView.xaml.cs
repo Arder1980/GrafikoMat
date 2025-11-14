@@ -1,5 +1,6 @@
 ﻿using GrafikoMat.Core.Data;
 using GrafikoMat.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Supabase;
@@ -29,7 +30,7 @@ namespace GrafikoMat.Views.Settings
         public ConnectionSettingsView()
         {
             this.InitializeComponent();
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
             DataContext = this;
         }
 

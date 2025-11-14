@@ -34,11 +34,11 @@ namespace GrafikoMat.ViewModels
         public IRelayCommand<PriorityOptionViewModel> MoveDownCommand { get; }
         public IAsyncRelayCommand SaveCommand { get; }
 
-        public PrioritiesSettingsViewModel(SettingsService settingsService, AppSettings appSettings, DispatcherQueue? dispatcher)
+        public PrioritiesSettingsViewModel(SettingsService settingsService, AppSettings appSettings, DispatcherQueue? dispatcher, IUxActionOrchestrator orchestrator)
         {
             _settingsService = settingsService;
             _appSettings = appSettings;
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = orchestrator;
             _dispatcher = dispatcher;
 
             // ZMIANA: Inicjalizuj kolekcję i nasłuchuj zmian

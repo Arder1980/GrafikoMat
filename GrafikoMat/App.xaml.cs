@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Mvvm.Messaging;
 using GrafikoMat.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -17,37 +18,51 @@ namespace GrafikoMat
     {
         public static MainWindow MainRoot { get; private set; } = null!;
 
+        /// <summary>
+        /// Kontener Dependency Injection dla całej aplikacji.
+        /// </summary>
+        public IServiceProvider Services { get; }
+
         // Win32 API do wykrywania DPI
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hWnd);
 
         public App()
         {
+            Services = ConfigureServices();
             this.InitializeComponent();
             // Wyświetl ścieżkę do LocalFolder w oknie Output Visual Studio
             System.Diagnostics.Debug.WriteLine($"---> Ścieżka LocalFolder: {Windows.Storage.ApplicationData.Current.LocalFolder.Path}");
         }
 
+        /// <summary>
+        /// Konfiguruje Dependency Injection i rejestruje wszystkie serwisy.
+        /// </summary>
+        private IServiceProvider ConfigureServices()
+        {
+            var services = new ServiceCollection();
+
+            // Rejestracja podstawowych serwisów jako Singleton
+            services.AddSingleton(WeakReferenceMessenger.Default);
+            services.AddSingleton<IUxActionOrchestrator>(sp => new UxActionOrchestrator(WeakReferenceMessenger.Default));
+            services.AddSingleton<IDialogService, DialogService>();
+            services.AddSingleton(ThemeManagerService.Instance);
+
+            return services.BuildServiceProvider();
+        }
+
         protected override void OnLaunched(LaunchActivatedEventArgs args)
         {
-            var orchestrator = new UxActionOrchestrator(WeakReferenceMessenger.Default);
-            ServiceProvider.Register<IUxActionOrchestrator>(orchestrator);
-
-            // Rejestruj DialogService
-            var dialogService = new DialogService();
-            ServiceProvider.Register<IDialogService>(dialogService);
-
             MainRoot = new MainWindow();
 
             // Ustaw motyw i stan okna PRZED aktywacją
             ApplyThemeEarly(MainRoot);
-            ApplyInitialWindowState(MainRoot); // <-- DODAJ TĘ LINIĘ
+            ApplyInitialWindowState(MainRoot);
 
             if (MainRoot.Content is FrameworkElement rootElement)
             {
                 var initialTheme = rootElement.ActualTheme;
                 ThemeManagerService.Instance.Initialize(initialTheme);
-                ServiceProvider.Register(ThemeManagerService.Instance);
             }
 
             MainRoot.Activate();

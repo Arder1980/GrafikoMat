@@ -2,6 +2,7 @@
 using GrafikoMat.Models;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -17,7 +18,8 @@ namespace GrafikoMat.Views.Settings
         public EngineSettingsView(SettingsService settingsService, AppSettings appSettings)
         {
             this.InitializeComponent();
-            ViewModel = new EngineSettingsViewModel(settingsService, appSettings);
+            var orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
+            ViewModel = new EngineSettingsViewModel(settingsService, appSettings, orchestrator);
             this.Loaded += OnLoaded;
         }
 

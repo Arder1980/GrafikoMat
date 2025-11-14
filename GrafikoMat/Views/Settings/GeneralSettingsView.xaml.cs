@@ -1,6 +1,7 @@
 ﻿using GrafikoMat.Models;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -17,7 +18,8 @@ namespace GrafikoMat.Views.Settings
         public GeneralSettingsView(SettingsService settingsService, SupabaseService supabaseService, AppSettings appSettings)
         {
             this.InitializeComponent();
-            ViewModel = new GeneralSettingsViewModel(settingsService, supabaseService, appSettings);
+            var orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
+            ViewModel = new GeneralSettingsViewModel(settingsService, supabaseService, appSettings, orchestrator);
             this.Loaded += OnLoaded;
             this.Unloaded += OnUnloaded;
         }

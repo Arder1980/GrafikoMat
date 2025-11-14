@@ -7,6 +7,7 @@ using GrafikoMat.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
@@ -107,7 +108,7 @@ namespace GrafikoMat
                 System.Diagnostics.Debug.WriteLine($"RootGrid.Loaded: DPI calculated, scale={_currentScaleFactor:F2}x");
 
                 // Ustaw XamlRoot dla DialogService
-                var dialogService = ServiceProvider.GetService<IDialogService>();
+                var dialogService = ((App)Application.Current).Services.GetRequiredService<IDialogService>();
                 if (this.Content.XamlRoot != null)
                 {
                     dialogService.SetXamlRoot(this.Content.XamlRoot);

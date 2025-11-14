@@ -230,12 +230,12 @@ namespace GrafikoMat.ViewModels
         public IRelayCommand ResetThreadCountCommand { get; }
         public IAsyncRelayCommand TestConnectionCommand { get; }
 
-        public GeneralSettingsViewModel(SettingsService settingsService, SupabaseService supabaseService, AppSettings appSettings)
+        public GeneralSettingsViewModel(SettingsService settingsService, SupabaseService supabaseService, AppSettings appSettings, IUxActionOrchestrator orchestrator)
         {
             _settingsService = settingsService;
             _supabaseService = supabaseService;
             _appSettings = appSettings;
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = orchestrator;
 
             // Załaduj aktualne wartości
             _selectedTheme = appSettings.Theme;

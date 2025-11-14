@@ -87,14 +87,14 @@ namespace GrafikoMat.ViewModels
         public IAsyncRelayCommand ArchiveDoctorCommand { get; }
         public IAsyncRelayCommand RestoreDoctorCommand { get; }
 
-        public ManagementViewModel(IDoctorRepository doctorRepo, IUnitRepository unitRepo, IAssignmentRepository assignmentRepo, SupabaseService supabaseService, DispatcherQueue? dispatcher)
+        public ManagementViewModel(IDoctorRepository doctorRepo, IUnitRepository unitRepo, IAssignmentRepository assignmentRepo, SupabaseService supabaseService, DispatcherQueue? dispatcher, IUxActionOrchestrator orchestrator)
         {
             _doctorRepository = doctorRepo;
             _unitRepository = unitRepo;
             _assignmentRepository = assignmentRepo;
             _supabaseService = supabaseService;
             _dispatcher = dispatcher;
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = orchestrator;
 
             AddNewDoctorCommand = new AsyncRelayCommand(AddNewDoctorAsync);
             SaveDoctorCommand = new AsyncRelayCommand(SaveDoctorAsync, () => EditorViewModel?.IsValid ?? false);

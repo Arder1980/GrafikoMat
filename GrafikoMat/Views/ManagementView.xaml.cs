@@ -2,6 +2,7 @@
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels; // <-- DODANA BRAKUJĄCA LINIA
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,7 +23,8 @@ namespace GrafikoMat.Views
             DispatcherQueue dispatcher)
         {
             this.InitializeComponent();
-            ViewModel = new ManagementViewModel(doctorRepo, unitRepo, assignmentRepo, supabaseService, dispatcher);
+            var orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
+            ViewModel = new ManagementViewModel(doctorRepo, unitRepo, assignmentRepo, supabaseService, dispatcher, orchestrator);
             this.Loaded += ManagementView_Loaded;
         }
 

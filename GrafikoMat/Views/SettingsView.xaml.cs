@@ -4,6 +4,8 @@ using GrafikoMat.Models;
 using GrafikoMat.Services;
 using GrafikoMat.ViewModels;
 using GrafikoMat.Views.Settings;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 using System;
@@ -250,7 +252,8 @@ namespace GrafikoMat.Views
                 case "Priorytety Obliczeń Grafiku":
                     if (_appSettings != null)
                     {
-                        var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue);
+                        var orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
+                        var prioritiesViewModel = new PrioritiesSettingsViewModel(_settingsService, _appSettings, this.DispatcherQueue, orchestrator);
                         var prioritiesView = new PrioritiesSettingsView(prioritiesViewModel);
                         prioritiesView.ActionsChanged += (actions) =>
                         {

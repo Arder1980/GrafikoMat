@@ -101,11 +101,11 @@ namespace GrafikoMat.ViewModels
         public ICommand ResetAntColonyCommand { get; }
         public ICommand ResetTabuSearchCommand { get; }
 
-        public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings)
+        public EngineSettingsViewModel(SettingsService settingsService, AppSettings appSettings, IUxActionOrchestrator orchestrator)
         {
             _settingsService = settingsService;
             _appSettings = appSettings;
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = orchestrator;
             SaveCommand = new AsyncRelayCommand(SaveSettingsAsync, () => _isDirty);
 
             ResetSimulatedAnnealingCommand = new RelayCommand(() =>

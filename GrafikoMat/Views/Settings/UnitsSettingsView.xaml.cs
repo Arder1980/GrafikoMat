@@ -1,6 +1,7 @@
 ﻿using GrafikoMat.Core.Data;
 using GrafikoMat.Core.Repositories;
 using GrafikoMat.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -126,7 +127,7 @@ namespace GrafikoMat.Views.Settings
         {
             this.InitializeComponent();
             _unitRepository = unitRepository;
-            _orchestrator = ServiceProvider.GetService<IUxActionOrchestrator>();
+            _orchestrator = ((App)Application.Current).Services.GetRequiredService<IUxActionOrchestrator>();
             this.Loaded += UnitsSettingsView_Loaded;
             // BuildActions() zostanie wywołane automatycznie po wybraniu jednostki z listy
         }
