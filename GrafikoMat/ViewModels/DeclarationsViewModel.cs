@@ -103,11 +103,22 @@ namespace GrafikoMat.ViewModels
             bool use12hShifts, Action onSaveCallback, IDeclarationRepository? declarationRepository = null,
             Guid? unitId = null, ISpecialDayRepository? specialDayRepository = null)
         {
+            // Walidacja parametrów
+            if (doctors == null || doctors.Count == 0)
+                throw new ArgumentException("Lista lekarzy nie może być pusta", nameof(doctors));
+
+            if (year < 2000 || year > 2100)
+                throw new ArgumentOutOfRangeException(nameof(year), "Rok musi być w zakresie 2000-2100");
+
+            if (monthIndex < 0 || monthIndex > 11)
+                throw new ArgumentOutOfRangeException(nameof(monthIndex), "Indeks miesiąca musi być w zakresie 0-11");
+
+            _sharedDeclarations = sharedDeclarations ?? throw new ArgumentNullException(nameof(sharedDeclarations));
+            _onSaveCallback = onSaveCallback ?? throw new ArgumentNullException(nameof(onSaveCallback));
+
             Year = year;
             MonthIndex = monthIndex;
-            _sharedDeclarations = sharedDeclarations;
             CanSwitchDoctors = isAdmin;
-            _onSaveCallback = onSaveCallback;
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
             _declarationRepository = declarationRepository;

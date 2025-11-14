@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 13 | 13 | 26 |
+| 🔴 KRYTYCZNE | 12 | 14 | 26 |
 | 🟠 WYSOKIE | 41 | 1 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **116** | **14** | **130** |
+| **SUMA** | **115** | **15** | **130** |
 
-**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 11% (14/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 12% (15/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016
 
 ---
 
@@ -332,45 +332,6 @@ Trudne - deadlocki występują rzadko. Przejrzyj kod, dodaj wszędzie gdzie moż
 
 ---
 
-### 🔴 #016 - Null reference risks w DeclarationsViewModel
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Walidacja
-**Plik:** `GrafikoMat/ViewModels/DeclarationsViewModel.cs:100-115`
-**Problem:** Brak null checks dla parametrów konstruktora
-
-**Rozwiązanie:**
-```csharp
-public DeclarationsViewModel(
-    int year, int monthIndex, List<DoctorProfile> doctors,
-    int initialDoctorIndex, Dictionary<string, DoctorMonthDeclaration> sharedDeclarations,
-    bool isAdmin, bool use12hShifts, Action onSaveCallback, ...)
-{
-    // Dodaj walidację:
-    _sharedDeclarations = sharedDeclarations ?? throw new ArgumentNullException(nameof(sharedDeclarations));
-    _onSaveCallback = onSaveCallback ?? throw new ArgumentNullException(nameof(onSaveCallback));
-
-    if (doctors == null || doctors.Count == 0)
-        throw new ArgumentException("Doctors list cannot be null or empty", nameof(doctors));
-
-    if (year < 2000 || year > 2100)
-        throw new ArgumentOutOfRangeException(nameof(year), "Year must be between 2000 and 2100");
-
-    if (monthIndex < 0 || monthIndex > 11)
-        throw new ArgumentOutOfRangeException(nameof(monthIndex), "Month index must be 0-11");
-
-    Year = year;
-    MonthIndex = monthIndex;
-    // ... reszta
-}
-```
-
-**Weryfikacja:**
-Spróbuj utworzyć DeclarationsViewModel z null - powinien rzucić ArgumentNullException.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #016` do linii `---`
-
----
 
 
 ### 🔴 #018 - LoginView - BRAK MVVM
@@ -1907,7 +1868,24 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (14)
+## ✅ NAPRAWIONE PROBLEMY (15)
+
+### ✅ #016 - Null reference risks w DeclarationsViewModel
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Plik:** `GrafikoMat/ViewModels/DeclarationsViewModel.cs:106-117`
+**Co zrobiono:**
+- Dodano walidację parametrów konstruktora na początku metody
+- Lista lekarzy: sprawdzenie czy null lub pusta
+- Rok: sprawdzenie zakresu 2000-2100
+- Indeks miesiąca: sprawdzenie zakresu 0-11
+- sharedDeclarations: ArgumentNullException jeśli null
+- onSaveCallback: ArgumentNullException jeśli null
+- Wszystkie komunikaty błędów po polsku
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - fail-fast validation na początku konstruktora
+
+---
 
 ### ✅ #027 - Weak password policy
 **Data naprawy:** 2025-11-14
