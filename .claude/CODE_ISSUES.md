@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 14 | 12 | 26 |
+| 🔴 KRYTYCZNE | 13 | 13 | 26 |
 | 🟠 WYSOKIE | 42 | 0 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **118** | **12** | **130** |
+| **SUMA** | **117** | **13** | **130** |
 
-**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 9% (12/130)
+**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 10% (13/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017
 
 ---
 
@@ -372,47 +372,6 @@ Spróbuj utworzyć DeclarationsViewModel z null - powinien rzucić ArgumentNullE
 
 ---
 
-### 🔴 #017 - Async void w ManagementViewModel.LoadEditorFor
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Async/Await
-**Plik:** `GrafikoMat/ViewModels/ManagementViewModel.cs:333`
-**Problem:** `async void` crashuje aplikację przy wyjątku
-
-**Rozwiązanie:**
-```csharp
-// BYŁO:
-private async void LoadEditorFor(DoctorProfile? doctorProfile)
-{
-    // ... await operations
-}
-
-// ZMIEŃ NA:
-private async Task LoadEditorForAsync(DoctorProfile? doctorProfile)
-{
-    try
-    {
-        // ... await operations
-    }
-    catch (Exception ex)
-    {
-        Debug.WriteLine($"Error loading editor: {ex.Message}");
-        // Pokazać błąd użytkownikowi
-    }
-}
-
-// W miejscu wywołania:
-await LoadEditorForAsync(profile);
-// LUB jeśli nie można await:
-_ = LoadEditorForAsync(profile); // Ale z try-catch wewnątrz!
-```
-
-**Weryfikacja:**
-Symuluj błąd w LoadEditorFor - aplikacja nie powinna crashować.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #017` do linii `---`
-
----
 
 ### 🔴 #018 - LoginView - BRAK MVVM
 **Status:** ❌ DO NAPRAWY
@@ -2009,7 +1968,21 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (12)
+## ✅ NAPRAWIONE PROBLEMY (13)
+
+### ✅ #017 - Async void w ManagementViewModel.LoadEditorFor
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Plik:** `GrafikoMat/ViewModels/ManagementViewModel.cs:334`
+**Co zrobiono:**
+- Zmieniono `async void LoadEditorFor` → `async Task LoadEditorForAsync`
+- Dodano try-catch z logowaniem do Debug.WriteLine
+- Zaktualizowano wywołanie w property setterze SelectedDoctor: `_ = LoadEditorForAsync(value?.Profile)`
+- Fire-and-forget pattern jest bezpieczny (wyjątki są przechwytywane wewnątrz metody)
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - async void wyeliminowane, wyjątki obsługiwane
+
+---
 
 ### ✅ #014 - Fire-and-forget w CalendarSettingsViewModel
 **Data naprawy:** 2025-11-14

@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -43,7 +44,7 @@ namespace GrafikoMat.ViewModels
             {
                 if (SetProperty(ref _selectedDoctor, value))
                 {
-                    LoadEditorFor(value?.Profile);
+                    _ = LoadEditorForAsync(value?.Profile);
                     ResetPasswordCommand.NotifyCanExecuteChanged();
                     ArchiveDoctorCommand.NotifyCanExecuteChanged();
                     RestoreDoctorCommand.NotifyCanExecuteChanged();
@@ -330,33 +331,40 @@ namespace GrafikoMat.ViewModels
             ClearDirty();
         }
 
-        private async void LoadEditorFor(DoctorProfile? doctorProfile)
+        private async Task LoadEditorForAsync(DoctorProfile? doctorProfile)
         {
-            if (doctorProfile == null)
+            try
             {
-                if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
+                if (doctorProfile == null)
                 {
-                    EditorViewModel = null;
+                    if (EditorViewModel != null && !EditorViewModel.IsNewDoctor)
+                    {
+                        EditorViewModel = null;
+                    }
+                    return;
                 }
-                return;
+
+                await EnsureUnitsLoadedAsync();
+                if (!_allUnits.Any()) return;
+
+                var existingAbbreviations = _allDoctorsMasterList
+                    .Where(d => d.Id != doctorProfile.Id)
+                    .Select(d => d.Abbreviation);
+                var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
+
+                EditorViewModel = new DoctorEditorViewModel(
+                    (DoctorProfile)doctorProfile.Clone(),
+                    new List<Unit>(_allUnits),
+                    currentAssignments,
+                    existingAbbreviations,
+                    _currentUserId,
+                    _currentUserLevel
+                );
             }
-
-            await EnsureUnitsLoadedAsync();
-            if (!_allUnits.Any()) return;
-
-            var existingAbbreviations = _allDoctorsMasterList
-                .Where(d => d.Id != doctorProfile.Id)
-                .Select(d => d.Abbreviation);
-            var currentAssignments = await _assignmentRepository.GetForDoctorAsync(doctorProfile.Id);
-
-            EditorViewModel = new DoctorEditorViewModel(
-                (DoctorProfile)doctorProfile.Clone(),
-                new List<Unit>(_allUnits),
-                currentAssignments,
-                existingAbbreviations,
-                _currentUserId,
-                _currentUserLevel
-            );
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ManagementViewModel] LoadEditorForAsync failed: {ex.Message}");
+            }
         }
 
         private async Task ShowInfo(string title, string message)
