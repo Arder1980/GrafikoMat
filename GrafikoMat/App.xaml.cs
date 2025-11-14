@@ -33,6 +33,10 @@ namespace GrafikoMat
             var orchestrator = new UxActionOrchestrator(WeakReferenceMessenger.Default);
             ServiceProvider.Register<IUxActionOrchestrator>(orchestrator);
 
+            // Rejestruj DialogService
+            var dialogService = new DialogService();
+            ServiceProvider.Register<IDialogService>(dialogService);
+
             MainRoot = new MainWindow();
 
             // Ustaw motyw i stan okna PRZED aktywacją

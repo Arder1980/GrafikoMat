@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 6 | 20 | 26 |
+| 🔴 KRYTYCZNE | 5 | 21 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **108** | **22** | **130** |
+| **SUMA** | **107** | **23** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 17% (22/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 18% (23/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011
 
 ---
 
@@ -172,75 +172,6 @@ public MainWindow()
 ---
 
 
-
-### 🔴 #011 - XamlRoot w MainViewModel
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** MVVM
-**Plik:** `GrafikoMat/ViewModels/MainViewModel.cs:66-67`
-**Problem:** Bezpośrednia referencja do obiektu UI narusza separację MVVM
-
-**Rozwiązanie:**
-Utworzyć `IDialogService`:
-
-```csharp
-// GrafikoMat/Services/IDialogService.cs
-public interface IDialogService
-{
-    Task<ContentDialogResult> ShowDialogAsync(
-        string title,
-        string content,
-        string primaryButtonText = "OK",
-        string? secondaryButtonText = null
-    );
-}
-
-// GrafikoMat/Services/DialogService.cs
-public class DialogService : IDialogService
-{
-    private XamlRoot? _xamlRoot;
-
-    public void SetXamlRoot(XamlRoot xamlRoot)
-    {
-        _xamlRoot = xamlRoot;
-    }
-
-    public async Task<ContentDialogResult> ShowDialogAsync(...)
-    {
-        var dialog = new ContentDialog
-        {
-            Title = title,
-            Content = content,
-            PrimaryButtonText = primaryButtonText,
-            SecondaryButtonText = secondaryButtonText,
-            XamlRoot = _xamlRoot
-        };
-        return await dialog.ShowAsync();
-    }
-}
-```
-
-**W MainViewModel:**
-```csharp
-// Zamiast:
-public XamlRoot? XamlRoot { get; set; }
-
-// Używaj:
-private readonly IDialogService _dialogService;
-
-public MainViewModel(IDialogService dialogService, ...)
-{
-    _dialogService = dialogService;
-}
-
-// Później:
-await _dialogService.ShowDialogAsync("Tytuł", "Treść");
-```
-
-**Weryfikacja:**
-Wszystkie dialogi powinny działać bez bezpośredniego dostępu do XamlRoot.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #011` do linii `---`
 
 ---
 
@@ -1374,7 +1305,30 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (22)
+## ✅ NAPRAWIONE PROBLEMY (23)
+
+### ✅ #011 - XamlRoot w MainViewModel
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** MVVM
+**Pliki:**
+- `GrafikoMat/Services/IDialogService.cs` (nowy)
+- `GrafikoMat/Services/DialogService.cs` (nowy)
+- `GrafikoMat/App.xaml.cs:36-38`
+- `GrafikoMat/MainWindow.xaml.cs:109-114`
+- `GrafikoMat/ViewModels/MainViewModel.cs`
+**Co zrobiono:**
+- Utworzono interfejs IDialogService z metodami ShowMessageAsync, ShowConfirmationAsync, ShowDialogAsync
+- Utworzono klasę DialogService implementującą IDialogService
+- Zarejestrowano DialogService w ServiceProvider (App.xaml.cs)
+- Ustawienie XamlRoot dla DialogService w MainWindow.RootGrid.Loaded
+- Usunięto właściwość XamlRoot z MainViewModel (linia 67-68)
+- Usunięto using Microsoft.UI.Xaml z MainViewModel
+- ViewModel nie ma już bezpośredniej referencji do obiektów UI
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - separacja MVVM przywrócona, XamlRoot przeniesiony do serwisu
+
+---
 
 ### ✅ #023 - Brak wyrejestrowania event handlers
 **Data naprawy:** 2025-11-14 (MainWindow i DeclarationsView wcześniej, DashboardView teraz)

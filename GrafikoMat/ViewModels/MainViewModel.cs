@@ -9,7 +9,6 @@ using GrafikoMat.Core.Scheduling.Engines;
 using GrafikoMat.Core.Scheduling.Models;
 using GrafikoMat.Models;
 using GrafikoMat.Services;
-using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -64,8 +63,6 @@ namespace GrafikoMat.ViewModels
             set => SetProperty(ref _currentViewTitle, value);
         }
 
-        [JsonIgnore]
-        public XamlRoot? XamlRoot { get; set; }
 
         public Unit? ActiveUnit => _activeUnitIndex >= 0 && _activeUnitIndex < _userUnits.Count
             ? _userUnits[_activeUnitIndex]

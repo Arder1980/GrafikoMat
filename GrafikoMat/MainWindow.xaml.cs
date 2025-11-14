@@ -106,6 +106,13 @@ namespace GrafikoMat
                 CalculateScaleFactor();
                 System.Diagnostics.Debug.WriteLine($"RootGrid.Loaded: DPI calculated, scale={_currentScaleFactor:F2}x");
 
+                // Ustaw XamlRoot dla DialogService
+                var dialogService = ServiceProvider.GetService<IDialogService>();
+                if (this.Content.XamlRoot != null)
+                {
+                    dialogService.SetXamlRoot(this.Content.XamlRoot);
+                }
+
                 ApplyTitleBarMenuStyling();
                 await InitializeApplicationAsync();
             };
