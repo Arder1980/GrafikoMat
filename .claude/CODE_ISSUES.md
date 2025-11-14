@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 12 | 14 | 26 |
+| 🔴 KRYTYCZNE | 11 | 15 | 26 |
 | 🟠 WYSOKIE | 41 | 1 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **115** | **15** | **130** |
+| **SUMA** | **114** | **16** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 12% (15/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 12% (16/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026
 
 ---
 
@@ -1024,47 +1024,6 @@ Sprawdź settings.json - nie powinien być czytelny.
 
 ---
 
-### 🔴 #026 - Hasła wyświetlane w UI
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Bezpieczeństwo
-**Plik:** `GrafikoMat/ViewModels/ManagementViewModel.cs:458`
-**Problem:** Hasło tymczasowe wyświetlane w komunikacie sukcesu
-
-**Rozwiązanie:**
-Zamiast pokazywać hasło, skopiuj do schowka:
-
-```csharp
-// ManagementViewModel.cs
-private async Task ResetPasswordAsync()
-{
-    // ...
-    var newPassword = await _supabaseService.ResetUserPasswordAsync(userId);
-
-    if (!string.IsNullOrEmpty(newPassword))
-    {
-        // Skopiuj do schowka
-        var dataPackage = new DataPackage();
-        dataPackage.SetText(newPassword);
-        Clipboard.SetContent(dataPackage);
-
-        await _orchestrator!.PerformLongRunningTaskAsync(
-            "Reset hasła",
-            Task.CompletedTask,
-            successMessage: "Hasło zostało zresetowane i skopiowane do schowka. Przekaż je użytkownikowi bezpiecznie."
-        );
-    }
-}
-```
-
-**Alternatywnie:** Pokaż dialog z możliwością ukrycia/pokazania hasła.
-
-**Weryfikacja:**
-Po resetowaniu hasła, komunikat nie powinien zawierać hasła, ale powinno być w schowku.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #026` do linii `---`
-
----
 
 
 ### 🔴 #129 - Typ Id (long vs Guid)
@@ -1868,7 +1827,21 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (15)
+## ✅ NAPRAWIONE PROBLEMY (16)
+
+### ✅ #026 - Hasła wyświetlane w UI
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Plik:** `GrafikoMat/ViewModels/ManagementViewModel.cs:462-465`
+**Co zrobiono:**
+- Zmieniono komunikat sukcesu z `"Nowe hasło startowe: {newPassword}"` na bezpieczny komunikat
+- Dodano kopiowanie hasła do schowka zamiast wyświetlania w UI
+- Użyto Windows.ApplicationModel.DataTransfer.Clipboard API
+- Nowy komunikat: "Hasło zostało zresetowane i skopiowane do schowka. Przekaż je użytkownikowi bezpiecznie."
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - hasło nie jest już wyświetlane w plain text w komunikatach
+
+---
 
 ### ✅ #016 - Null reference risks w DeclarationsViewModel
 **Data naprawy:** 2025-11-14

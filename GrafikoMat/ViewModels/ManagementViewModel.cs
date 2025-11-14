@@ -15,6 +15,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace GrafikoMat.ViewModels
 {
@@ -457,13 +458,18 @@ namespace GrafikoMat.ViewModels
                 {
                     await _doctorRepository.ResetPasswordAsync(doctorToResetId, newPassword);
                     await _doctorRepository.SetPasswordChangeFlagAsync(doctorToResetId, true);
+
+                    // Skopiuj hasło do schowka zamiast wyświetlać w komunikacie
+                    var dataPackage = new DataPackage();
+                    dataPackage.SetText(newPassword);
+                    Clipboard.SetContent(dataPackage);
                 },
                 verificationAsync: async () =>
                 {
                     await LoadInitialDataAsync();
                     return _allDoctorsMasterList.FirstOrDefault(d => d.Id == doctorToResetId)?.RequiresPasswordChange ?? false;
                 },
-                successMessage: $"Nowe hasło startowe: {newPassword}",
+                successMessage: "Hasło zostało zresetowane i skopiowane do schowka. Przekaż je użytkownikowi bezpiecznie.",
                 errorMessageTitle: "Błąd resetowania hasła"
             );
             EditorViewModel.SetNewGeneratedPassword(newPassword);
