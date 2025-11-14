@@ -229,8 +229,21 @@ namespace GrafikoMat.Services
         {
             if (Client is null || !IsAuthenticated)
                 throw new InvalidOperationException("Użytkownik nie jest zalogowany.");
+
             var attributes = new UserAttributes { Password = newPassword };
             await Client.Auth.Update(attributes);
+
+            // Wyczyść flagę requires_password_change
+            try
+            {
+                await Client.Functions.Invoke("clear-password-change-flag");
+                Debug.WriteLine("[SupabaseService] Flaga requires_password_change wyczyszczona");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SupabaseService] Nie udało się wyczyścić flagi: {ex.Message}");
+                // Nie przerywaj - hasło już zmienione, użytkownik może kontynuować
+            }
         }
     }
 }

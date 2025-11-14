@@ -78,6 +78,7 @@ namespace GrafikoMat
         private IAssignmentRepository? _assignmentRepository;
         private IDeclarationRepository? _declarationRepository;
         private ICoDutyNotificationRepository? _coDutyNotificationRepository;
+        private ISpecialDayRepository? _specialDayRepository;
         private CoDutyNotificationService? _coDutyNotificationService;
         private Guid? _currentUserId;  // ID zalogowanego użytkownika
 
@@ -645,6 +646,7 @@ namespace GrafikoMat
                     _assignmentRepository = new SupabaseAssignmentRepository(_supabaseService.Client);
                     _declarationRepository = new SupabaseDeclarationRepository(_supabaseService);
                     _coDutyNotificationRepository = new SupabaseCoDutyNotificationRepository(_supabaseService);
+                    _specialDayRepository = new SpecialDayRepository(_supabaseService.Client);
 
                     // Inicjalizuj serwis powiadomień
                     if (_coDutyNotificationRepository != null && _declarationRepository != null && _doctorRepository != null && _unitRepository != null)
@@ -843,7 +845,7 @@ namespace GrafikoMat
                 });
             };
 
-            _settingsView.Initialize(_unitRepository, _settingsService, _supabaseService, _appSettings);
+            _settingsView.Initialize(_unitRepository, _settingsService, _supabaseService, _appSettings, _specialDayRepository);
 
             if (!forceRefresh)
             {
@@ -1172,7 +1174,8 @@ namespace GrafikoMat
                 ViewModel.ActiveUnit.UseTwelveHourShiftsByDefault,
                 () => { ViewModel.RefreshDeclarationsForDashboard(); },
                 _declarationRepository,
-                ViewModel.ActiveUnit.Id
+                ViewModel.ActiveUnit.Id,
+                _specialDayRepository
              );
 
             declarationsVm.CurrentUnitIndex = ViewModel.CurrentUnitIndex;

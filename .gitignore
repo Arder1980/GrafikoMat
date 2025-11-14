@@ -362,3 +362,35 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+##########################################################
+# Supabase - Database credentials and backups
+##########################################################
+
+# CRITICAL: Supabase credentials - NIGDY nie commituj!
+supabase_config.bat
+
+# Database backups - zawierają potencjalnie wrażliwe dane
+backups/
+*.sql
+*.dump
+
+# Pliki tymczasowe bazy danych
+temp_*.sql
+temp_schema*.sql
+temp_*.txt
+
+# Supabase local development (jeśli używasz lokalnego stacku)
+.supabase/
+supabase/.temp/
+
+# Environment variables - mogą zawierać connection stringi
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# Database migration temporary files
+*_migration_temp.sql
+*_rollback_temp.sql

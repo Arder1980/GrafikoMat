@@ -19,6 +19,7 @@
             <common:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <common:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
             <common:BooleanToOpacityConverter x:Key="BooleanToOpacityConverter" />
+            <common:DateOnlyToDateTimeOffsetConverter x:Key="DateOnlyToDateTimeOffsetConverter" />
 
         </ResourceDictionary>
     </Application.Resources>

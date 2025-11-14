@@ -1,4 +1,5 @@
-﻿using System;
+﻿using GrafikoMat.Core.Data;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -6,6 +7,8 @@ namespace GrafikoMat.Common
 {
     public static class PolishHolidays
     {
+        // Cache dla dynamicznych dni specjalnych (per rok + unitId)
+        private static readonly Dictionary<(int year, Guid? unitId), List<SpecialDay>> _specialDaysCache = new();
         private static readonly Dictionary<(int Month, int Day), string> _fixedHolidays = new()
         {
             // Święta państwowe (wolne)
@@ -78,8 +81,46 @@ namespace GrafikoMat.Common
             return false;
         }
 
-        public static string? GetHolidayName(DateTime date)
+        /// <summary>
+        /// Ustawia cache dni specjalnych dla danego roku i jednostki.
+        /// Powinno być wywoływane przez DeclarationsViewModel przy ładowaniu danych.
+        /// </summary>
+        public static void SetSpecialDaysCache(int year, Guid? unitId, List<SpecialDay> specialDays)
         {
+            _specialDaysCache[(year, unitId)] = specialDays;
+        }
+
+        /// <summary>
+        /// Czyści cache dni specjalnych.
+        /// </summary>
+        public static void ClearSpecialDaysCache()
+        {
+            _specialDaysCache.Clear();
+        }
+
+        /// <summary>
+        /// Pobiera nazwę święta/dnia specjalnego dla danej daty.
+        /// Sprawdza najpierw dni specjalne z bazy (ferie, święta lokalne), potem stałe polskie święta.
+        /// </summary>
+        /// <param name="date">Data do sprawdzenia</param>
+        /// <param name="unitId">ID jednostki (opcjonalne - dla dni specjalnych per jednostka)</param>
+        /// <returns>Krótka nazwa (max 15 znaków) lub null</returns>
+        public static string? GetHolidayName(DateTime date, Guid? unitId = null)
+        {
+            // Sprawdź cache dni specjalnych (ferie, święta lokalne)
+            if (_specialDaysCache.TryGetValue((date.Year, unitId), out var specialDays))
+            {
+                var dateOnly = DateOnly.FromDateTime(date);
+                var specialDay = specialDays
+                    .Where(sd => sd.IsActiveOn(dateOnly))
+                    .OrderByDescending(sd => sd.UnitId.HasValue) // Priorytet: jednostkowe przed globalnymi
+                    .FirstOrDefault();
+
+                if (specialDay != null)
+                    return specialDay.Name;
+            }
+
+            // Sprawdź stałe święta polskie
             if (_fixedHolidays.TryGetValue((date.Month, date.Day), out var holidayName))
             {
                 return holidayName;
@@ -134,6 +175,28 @@ namespace GrafikoMat.Common
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Pobiera pełną nazwę święta/dnia specjalnego (dla tooltip).
+        /// </summary>
+        public static string? GetFullHolidayName(DateTime date, Guid? unitId = null)
+        {
+            // Sprawdź cache dni specjalnych (ferie, święta lokalne)
+            if (_specialDaysCache.TryGetValue((date.Year, unitId), out var specialDays))
+            {
+                var dateOnly = DateOnly.FromDateTime(date);
+                var specialDay = specialDays
+                    .Where(sd => sd.IsActiveOn(dateOnly))
+                    .OrderByDescending(sd => sd.UnitId.HasValue)
+                    .FirstOrDefault();
+
+                if (specialDay != null)
+                    return specialDay.FullName;
+            }
+
+            // Dla stałych świąt - zwróć krótką nazwę (nie mamy osobnej długiej)
+            return GetHolidayName(date, unitId);
         }
     }
 }

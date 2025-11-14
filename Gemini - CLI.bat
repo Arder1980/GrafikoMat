@@ -2,28 +2,27 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo Claude Code - Setup i Launcher
+echo Gemini CLI - Setup i Launcher
 echo ========================================
 echo.
-
 REM Sprawdz czy jestesmy w trybie setup czy launcher
 if "%1"=="--setup" goto :setup
 if "%1"=="--force-setup" goto :setup
 
-echo Sprawdzam status Claude...
-call claude --version >nul 2>&1
-set "claude_status=%errorlevel%"
-echo Claude errorlevel: %claude_status%
+echo Sprawdzam status Gemini...
+call gemini --version >nul 2>&1
+set "gemini_status=%errorlevel%"
+echo Gemini errorlevel: %gemini_status%
 
-if %claude_status% neq 0 (
+if %gemini_status% neq 0 (
     echo.
-    echo UWAGA: Claude nie jest zainstalowany!
+    echo UWAGA: Gemini CLI nie jest zainstalowany!
     echo.
     set /p install="Czy chcesz uruchomic instalator? (tak/nie): "
     if /i "!install!"=="tak" goto :setup
     if /i "!install!"=="t" goto :setup
     echo.
-    echo Anulowano. Aby uruchomic setup pozniej, uzyj: claude.bat --setup
+    echo Anulowano. Aby uruchomic setup pozniej, uzyj: Gemini_CLI.bat --setup
     pause
     exit /b
 )
@@ -36,7 +35,7 @@ echo Bash errorlevel: %bash_status%
 if %bash_status% neq 0 (
     echo.
     echo UWAGA: Git Bash nie jest dostepny!
-    echo Claude Code wymaga Git Bash do dzialania.
+    echo Gemini CLI ^(i jego zaleznosci^) wymaga Git Bash do dzialania.
     echo.
     set /p install="Czy chcesz uruchomic instalator? (tak/nie): "
     if /i "!install!"=="tak" goto :setup
@@ -54,13 +53,13 @@ goto :launcher
 :setup
 cls
 echo ========================================
-echo Claude Code - INSTALATOR
+echo Gemini CLI - INSTALATOR
 echo ========================================
 echo.
 echo Ten skrypt zainstaluje:
 echo  1. Node.js - jesli brak
 echo  2. Git for Windows - jesli brak
-echo  3. Claude Code CLI
+echo  3. Gemini CLI
 echo  4. Windows Terminal - opcjonalnie
 echo.
 pause
@@ -163,12 +162,12 @@ echo ========================================
 bash --version >nul 2>&1
 if %errorlevel% equ 0 (
     echo [OK] Git Bash jest dostepny
-    goto :check_claude
+    goto :check_gemini
 )
 
 if exist "C:\Program Files\Git\bin\bash.exe" (
     echo [UWAGA] Git Bash jest zainstalowany ale nie dziala
-    echo Problem: PATH jest uszkodzony.
+    echo Problem: PATH jest uskodzony.
     echo.
     pause
     exit /b
@@ -179,41 +178,41 @@ echo.
 pause
 exit /b
 
-REM === SPRAWDZANIE/INSTALACJA CLAUDE ===
-:check_claude
+REM === SPRAWDZANIE/INSTALACJA GEMINI ===
+:check_gemini
 echo.
 echo ========================================
-echo Krok 4/4: Instalacja Claude Code
+echo Krok 4/4: Instalacja Gemini CLI
 echo ========================================
 echo.
-echo Sprawdzam czy Claude jest zainstalowany...
+echo Sprawdzam czy Gemini CLI jest zainstalowany...
 
-call claude --version >nul 2>&1
-set "claude_result=%errorlevel%"
+call gemini --version >nul 2>&1
+set "gemini_result=%errorlevel%"
 
-echo Errorlevel: %claude_result%
+echo Errorlevel: %gemini_result%
 
-if %claude_result% equ 0 (
+if %gemini_result% equ 0 (
     echo.
-    echo [OK] Claude Code jest juz zainstalowany
-    call claude --version
+    echo [OK] Gemini CLI jest juz zainstalowany
+    call gemini --version
     echo.
     set /p update="Czy chcesz zaktualizowac? (tak/nie): "
-    if /i "!update!"=="tak" goto :install_claude
-    if /i "!update!"=="t" goto :install_claude
+    if /i "!update!"=="tak" goto :install_gemini
+    if /i "!update!"=="t" goto :install_gemini
     goto :post_setup
 )
 
 echo.
-echo [INFO] Claude Code NIE jest zainstalowany
+echo [INFO] Gemini CLI NIE jest zainstalowany
 echo Rozpoczynam instalacje...
 
-:install_claude
+:install_gemini
 echo.
-echo Instalowanie Claude Code przez npm...
+echo Instalowanie Gemini CLI przez npm...
 echo To moze potrwac 1-2 minuty...
 echo.
-call npm install -g @anthropic-ai/claude-code
+call npm install -g @google/gemini-cli
 
 set "install_result=%errorlevel%"
 echo.
@@ -228,7 +227,7 @@ if %install_result% neq 0 (
 )
 
 echo.
-echo [OK] Claude Code zainstalowany pomyslnie!
+echo [OK] Gemini CLI zainstalowany pomyslnie!
 
 :post_setup
 echo.
@@ -260,8 +259,8 @@ echo Co dalej:
 echo 1. Zamknij to okno
 echo 2. Otworz nowy terminal
 echo 3. Przejdz do folderu projektu
-echo 4. Uruchom: claude.bat
-echo 5. Zaloguj sie przez przegladarke
+echo 4. Uruchom: Gemini_CLI.bat
+echo 5. Zaloguj sie (jesli CLI o to poprosi)
 echo.
 pause
 exit /b
@@ -269,58 +268,56 @@ exit /b
 :launcher
 cls
 echo ========================================
-echo Claude - AI Coding Assistant
+echo Gemini - AI Coding Assistant
 echo ========================================
 echo.
 echo Folder projektu: %~dp0
 echo.
-echo  1. Uruchom Claude - standardowo
-echo  2. Uruchom Claude - autonomicznie
-echo  3. Debug MCP
+echo  1. Uruchom Gemini - standardowo
+echo  2. Uruchom Gemini - autonomicznie (Tryb -y)
+echo  3. Debug (Tryb -d)
 echo  4. Status instalacji
-echo  5. Wyloguj
-echo  6. Wyczysc cache
+echo  5. Zmien konto (Auth)
+echo  6. Wyczysc cache npm
 echo  7. Instalator
-echo  8. Wznow ostatnia konwersacje [--continue]
-echo  9. Wybierz konwersacje do wznowienia [--resume]
 echo  0. Wyjscie
 echo.
-set /p choice="Wybierz opcje (0-9): "
+set /p choice="Wybierz opcje (0-7): "
 
 cd /d "%~dp0"
 
 if "%choice%"=="1" (
     echo.
-    echo Uruchamiam Claude...
+    echo Uruchamiam Gemini...
     echo.
     echo ========================================
-    echo Claude - tryb standardowy
+    echo Gemini - tryb standardowy
     echo ========================================
     echo.
     cd /d "%~dp0"
-    cmd /k "claude"
+    cmd /k "gemini"
     goto :launcher
 )
 
 if "%choice%"=="2" (
     echo.
     echo ========================================
-    echo TRYB AUTONOMICZNY - bez potwierdzen!
+    echo TRYB AUTONOMICZNY (YOLO MODE)
     echo ========================================
     timeout /t 2 > nul
     cd /d "%~dp0"
-    cmd /k "claude --dangerously-skip-permissions"
+    cmd /k "gemini -y"
     goto :launcher
 )
 
 if "%choice%"=="3" (
     echo.
     echo ========================================
-    echo Claude - debug MCP
+    echo Gemini - debug
     echo ========================================
     echo.
     cd /d "%~dp0"
-    cmd /k "claude --mcp-debug"
+    cmd /k "gemini -d"
     goto :launcher
 )
 
@@ -330,7 +327,6 @@ if "%choice%"=="4" (
     echo STATUS INSTALACJI
     echo ========================================
     echo.
-    
     echo Node.js:
     node --version 2>nul || echo NIE dziala
     
@@ -347,8 +343,8 @@ if "%choice%"=="4" (
     bash --version 2>nul | findstr "version" || echo NIE dziala
     
     echo.
-    echo Claude:
-    claude --version 2>nul || echo NIE dziala
+    echo Gemini:
+    gemini --version 2>nul || echo NIE dziala
     
     echo.
     pause
@@ -357,7 +353,7 @@ if "%choice%"=="4" (
 
 if "%choice%"=="5" (
     echo.
-    claude --logout
+    gemini auth
     pause
     goto :launcher
 )
@@ -371,32 +367,6 @@ if "%choice%"=="6" (
 
 if "%choice%"=="7" (
     goto :setup
-)
-
-if "%choice%"=="8" (
-    echo.
-    echo ========================================
-    echo WZNOWIENIE OSTATNIEJ KONWERSACJI
-    echo ========================================
-    echo.
-    echo Przywracam caly kontekst poprzedniej sesji...
-    echo.
-    cd /d "%~dp0"
-    cmd /k "claude --continue"
-    goto :launcher
-)
-
-if "%choice%"=="9" (
-    echo.
-    echo ========================================
-    echo WYBOR KONWERSACJI DO WZNOWIENIA
-    echo ========================================
-    echo.
-    echo Uzyj strzalek do nawigacji, Enter aby wybrac
-    echo.
-    cd /d "%~dp0"
-    cmd /k "claude --resume"
-    goto :launcher
 )
 
 if "%choice%"=="0" (

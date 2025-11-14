@@ -47,6 +47,7 @@ namespace GrafikoMat.ViewModels
 
         // ✅ DODANE - repozytorium i ID jednostki
         private readonly IDeclarationRepository? _declarationRepository;
+        private readonly ISpecialDayRepository? _specialDayRepository;
         private readonly Guid? _currentUnitId;
 
         public int Year { get; }
@@ -99,7 +100,8 @@ namespace GrafikoMat.ViewModels
         public DeclarationsViewModel(
             int year, int monthIndex, List<DoctorProfile> doctors, int initialDoctorIndex,
             Dictionary<string, DoctorMonthDeclaration> sharedDeclarations, bool isAdmin,
-            bool use12hShifts, Action onSaveCallback, IDeclarationRepository? declarationRepository = null, Guid? unitId = null)
+            bool use12hShifts, Action onSaveCallback, IDeclarationRepository? declarationRepository = null,
+            Guid? unitId = null, ISpecialDayRepository? specialDayRepository = null)
         {
             Year = year;
             MonthIndex = monthIndex;
@@ -109,7 +111,11 @@ namespace GrafikoMat.ViewModels
             _use12hShiftsByDefault = use12hShifts;
             _currentUnitIndex = 0;
             _declarationRepository = declarationRepository;
+            _specialDayRepository = specialDayRepository;
             _currentUnitId = unitId;
+
+            // Załaduj dni specjalne asynchronicznie
+            _ = LoadSpecialDaysAsync();
 
             _monthLayout = new MonthLayout(year, monthIndex + 1, use12hShifts);
 
@@ -171,7 +177,7 @@ namespace GrafikoMat.ViewModels
                 var cell = new DayCell(i, date, date.Month == MonthIndex + 1,
                     date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday,
                     PolishHolidays.IsPublicHoliday(date),
-                    PolishHolidays.GetHolidayName(date));
+                    PolishHolidays.GetHolidayName(date, _currentUnitId));
 
                 if (cell.InMonth)
                 {
@@ -1250,6 +1256,27 @@ namespace GrafikoMat.ViewModels
                 SaveCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(HasUnsavedChanges));
                 System.Diagnostics.Debug.WriteLine($"[ViewModel.UpdateCoDuty] Zaktualizowano dzień {day} dla doctorId={doctorId}: partner={partnerId}, status={status}, slotPart={slotPart}");
+            }
+        }
+
+        /// <summary>
+        /// Ładuje dni specjalne z bazy danych i ustawia cache w PolishHolidays.
+        /// </summary>
+        private async Task LoadSpecialDaysAsync()
+        {
+            if (_specialDayRepository == null) return;
+
+            try
+            {
+                var specialDays = await _specialDayRepository.GetSpecialDaysForYearAsync(Year, _currentUnitId);
+                Common.PolishHolidays.SetSpecialDaysCache(Year, _currentUnitId, specialDays);
+
+                System.Diagnostics.Debug.WriteLine($"[DeclarationsViewModel] Loaded {specialDays.Count} special days for year {Year}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[DeclarationsViewModel] Error loading special days: {ex.Message}");
+                // Nie przerywaj inicjalizacji - kontynuuj bez dni specjalnych
             }
         }
 

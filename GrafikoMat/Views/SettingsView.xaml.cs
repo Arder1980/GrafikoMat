@@ -19,6 +19,7 @@ namespace GrafikoMat.Views
     public sealed partial class SettingsView : UserControl
     {
         private IUnitRepository? _unitRepository;
+        private ISpecialDayRepository? _specialDayRepository;
         private SettingsService? _settingsService;
         private SupabaseService? _supabaseService;
         private AppSettings? _appSettings;
@@ -36,6 +37,7 @@ namespace GrafikoMat.Views
     {
         new("Ustawienia Ogólne", "Globalne ustawienia aplikacji"),
         new("Zarządzanie Jednostkami", "Dodawanie i edycja szpitali oraz oddziałów."),
+        new("Kalendarz i Dni Wolne", "Ferie zimowe i inne dni specjalne wyświetlane w kalendarzu."),
         new("Priorytety Obliczeń Grafiku", "Ustalanie kolejności i wagi kryteriów optymalizacji."),
         new("Silnik Obliczeniowy", "Wybór algorytmu używanego do generowania grafików.")
     };
@@ -43,9 +45,10 @@ namespace GrafikoMat.Views
             // Na początku żadna pozycja nie jest zaznaczona
             // SettingsMenu.SelectedIndex = -1; // domyślnie już -1
         }
-        public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, SupabaseService supabaseService, AppSettings settings)
+        public void Initialize(IUnitRepository? unitRepository, SettingsService settingsService, SupabaseService supabaseService, AppSettings settings, ISpecialDayRepository? specialDayRepository = null)
         {
             _unitRepository = unitRepository;
+            _specialDayRepository = specialDayRepository;
             _settingsService = settingsService;
             _supabaseService = supabaseService;
             _appSettings = settings;
@@ -226,6 +229,22 @@ namespace GrafikoMat.Views
                     else
                     {
                         viewToLoad = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać jednostkami.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
+                    }
+                    break;
+                case "Kalendarz i Dni Wolne":
+                    if (_specialDayRepository != null)
+                    {
+                        var calendarViewModel = new CalendarSettingsViewModel(_specialDayRepository, _unitRepository);
+                        var calendarView = new CalendarSettingsView(calendarViewModel);
+                        calendarView.ActionsChanged += (actions) =>
+                        {
+                            ActionButtonsChanged?.Invoke(actions);
+                        };
+                        viewToLoad = calendarView;
+                    }
+                    else
+                    {
+                        viewToLoad = new TextBlock { Text = "Skonfiguruj połączenie z bazą danych, aby zarządzać kalendarzem.", VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
                     }
                     break;
                 case "Priorytety Obliczeń Grafiku":
