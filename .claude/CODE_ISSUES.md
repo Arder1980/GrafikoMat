@@ -61,19 +61,22 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 2 | 24 | 26 |
+| 🔴 KRYTYCZNE | 1 | 26 | 27 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **104** | **26** | **130** |
+| **SUMA** | **103** | **28** | **131** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 20% (26/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 21% (28/131)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008, #018, #012
+**Ostatnia sesja:** 2025-11-14
+- Naprawiono (część 1): #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008, #018, #012
+- Naprawiono (część 2): #015 (ConfigureAwait), #019 (DashboardView MVVM)
+- Fałszywy alarm: #129 (Declaration.Id long jest POPRAWNY - BIGSERIAL w bazie)
 
 ---
 
-## 🔴 PROBLEMY KRYTYCZNE (2/26 pozostało)
+## 🔴 PROBLEMY KRYTYCZNE (1/27 pozostało)
 
 
 
@@ -87,7 +90,7 @@
 
 
 ### 🔴 #015 - Brak ConfigureAwait w async/await
-**Status:** ❌ DO NAPRAWY
+**Status:** ✅ NAPRAWIONE (2025-11-14)
 **Priorytet:** KRYTYCZNY
 **Kategoria:** Async/Await
 **Plik:** Wszystkie ViewModels i Serwisy
@@ -124,7 +127,7 @@ Trudne - deadlocki występują rzadko. Przejrzyj kod, dodaj wszędzie gdzie moż
 ---
 
 ### 🔴 #019 - DashboardView.BuildLeftTable - Anti-pattern
-**Status:** ❌ DO NAPRAWY
+**Status:** ✅ NAPRAWIONE (2025-11-14)
 **Priorytet:** KRYTYCZNY
 **Kategoria:** XAML
 **Plik:** `GrafikoMat/Views/DashboardView.xaml.cs:90-205`
@@ -273,7 +276,7 @@ Wszystkie funkcje powinny działać, code-behind < 50 linii.
 
 
 ### 🔴 #129 - Typ Id (long vs Guid)
-**Status:** ❌ DO NAPRAWY - WYMAGA WERYFIKACJI
+**Status:** ✅ FAŁSZYWY ALARM - Declaration.Id long jest POPRAWNY (BIGSERIAL w bazie)
 **Priorytet:** KRYTYCZNY
 **Kategoria:** Modele danych
 **Plik:** `GrafikoMat.Core/Data/Declaration.cs:20`
