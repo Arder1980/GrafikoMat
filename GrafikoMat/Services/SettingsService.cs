@@ -129,7 +129,7 @@ namespace GrafikoMat.Services
                 return _currentSettings;
             }
 
-            await _settingsLock.WaitAsync();
+            await _settingsLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 // Double-check po uzyskaniu locka
@@ -142,7 +142,7 @@ namespace GrafikoMat.Services
                 {
                     if (File.Exists(_settingsPath))
                     {
-                        var fileBytes = await File.ReadAllBytesAsync(_settingsPath);
+                        var fileBytes = await File.ReadAllBytesAsync(_settingsPath).ConfigureAwait(false);
 
                         // Spróbuj najpierw odszyfrować (nowy format)
                         try
@@ -164,7 +164,7 @@ namespace GrafikoMat.Services
                             // Jeśli udało się odczytać stary format, zapisz ponownie w zaszyfrowanej formie
                             if (_currentSettings != null)
                             {
-                                await SaveSettingsInternalAsync(_currentSettings);
+                                await SaveSettingsInternalAsync(_currentSettings).ConfigureAwait(false);
                             }
                         }
                     }
@@ -192,11 +192,11 @@ namespace GrafikoMat.Services
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
-            await _settingsLock.WaitAsync();
+            await _settingsLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 _currentSettings = settings;
-                await SaveSettingsInternalAsync(settings);
+                await SaveSettingsInternalAsync(settings).ConfigureAwait(false);
             }
             finally
             {
@@ -219,7 +219,7 @@ namespace GrafikoMat.Services
                     DataProtectionScope.CurrentUser
                 );
 
-                await File.WriteAllBytesAsync(_settingsPath, encryptedBytes);
+                await File.WriteAllBytesAsync(_settingsPath, encryptedBytes).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
