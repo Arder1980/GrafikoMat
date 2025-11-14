@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 16 | 10 | 26 |
+| 🔴 KRYTYCZNE | 15 | 11 | 26 |
 | 🟠 WYSOKIE | 42 | 0 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **120** | **10** | **130** |
+| **SUMA** | **119** | **11** | **130** |
 
-**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 8% (10/130)
+**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 8% (11/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013
 
 ---
 
@@ -297,51 +297,6 @@ Kolory komórek powinny wyglądać identycznie jak przed zmianą.
 
 ---
 
-### 🔴 #013 - Async void w MainViewModel.Receive
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Async/Await
-**Plik:** `GrafikoMat/ViewModels/MainViewModel.cs:139-160`
-**Problem:** Fire-and-forget pattern - wyjątki są połykane
-
-**Rozwiązanie:**
-Dodać error handling:
-
-```csharp
-public void Receive(UnitDataChangedMessage message)
-{
-    _ = Task.Run(async () =>
-    {
-        try
-        {
-            await App.MainRoot?.DispatcherQueue?.EnqueueAsync(async () =>
-            {
-                await LoadDataForActiveUnitAsync();
-            });
-        }
-        catch (Exception ex)
-        {
-            // Logowanie błędu
-            Debug.WriteLine($"Error in Receive: {ex.Message}");
-
-            // Opcjonalnie: pokazać użytkownikowi
-            await App.MainRoot?.DispatcherQueue?.EnqueueAsync(async () =>
-            {
-                // Pokazać dialog z błędem
-            });
-        }
-    });
-}
-```
-
-**UWAGA:** `Receive()` NIE MOŻE być `async Task` - constraint interfejsu `IRecipient<T>`.
-
-**Weryfikacja:**
-Symuluj błąd w LoadDataForActiveUnitAsync - powinien być zalogowany.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #013` do linii `---`
-
----
 
 ### 🔴 #014 - Fire-and-forget w CalendarSettingsViewModel
 **Status:** ❌ DO NAPRAWY
@@ -2095,7 +2050,21 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (10)
+## ✅ NAPRAWIONE PROBLEMY (11)
+
+### ✅ #013 - Async void w MainViewModel.Receive
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Plik:** `GrafikoMat/ViewModels/MainViewModel.cs`
+**Co zrobiono:**
+- Dodano try-catch do `Receive(SettingsHaveChangedMessage)`
+- Oba miejsca Receive() mają teraz error handling z Task.Run + try-catch
+- Wyjątki są logowane do Debug.WriteLine zamiast być połykane
+- Fire-and-forget pattern jest bezpieczny
+**Weryfikacja:** Projekt kompiluje się bez błędów
+**Status:** ✅ Gotowe - wyjątki w Receive() są teraz obsługiwane
+
+---
 
 ### ✅ #010 - Race condition w ServiceProvider.Register
 **Data naprawy:** 2025-11-14

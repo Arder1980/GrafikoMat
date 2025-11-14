@@ -129,10 +129,20 @@ namespace GrafikoMat.ViewModels
 
         public void Receive(SettingsHaveChangedMessage message)
         {
-            if (App.MainRoot?.DispatcherQueue != null)
+            _ = Task.Run(async () =>
             {
-                _ = App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
-            }
+                try
+                {
+                    if (App.MainRoot?.DispatcherQueue != null)
+                    {
+                        await App.MainRoot.DispatcherQueue.EnqueueAsync(UpdateFooterFromSettingsAsync);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainViewModel] Receive(SettingsHaveChangedMessage) failed: {ex.Message}");
+                }
+            });
         }
 
         public void Receive(UnitDataChangedMessage message)
