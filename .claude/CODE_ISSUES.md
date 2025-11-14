@@ -61,80 +61,28 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 3 | 23 | 26 |
+| 🔴 KRYTYCZNE | 2 | 24 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **105** | **25** | **130** |
+| **SUMA** | **104** | **26** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 19% (25/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 20% (26/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008, #018
-
----
-
-## 🔴 PROBLEMY KRYTYCZNE (3/26 pozostało)
-
-
-
-
-
-
-
-
-
-### 🔴 #012 - DayCell zawiera typy UI
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** MVVM
-**Plik:** `GrafikoMat/ViewModels/DeclarationsViewModel.cs:977-1003`
-**Problem:** `Brush`, `Thickness`, `Visibility` - typy Microsoft.UI.Xaml w ViewModelu
-
-**Rozwiązanie:**
-Użyć właściwości prostych typów + ValueConverter w XAML:
-
-```csharp
-// DayCell - zamiast:
-private Brush _effectiveBackground;
-public Brush EffectiveBackground { get; set; }
-
-// Użyj:
-private string _backgroundColor = "#FFFFFF";
-public string BackgroundColor
-{
-    get => _backgroundColor;
-    set => SetProperty(ref _backgroundColor, value);
-}
-
-// Lub enum:
-public enum CellBackgroundType { Normal, Holiday, Selected, Disabled }
-public CellBackgroundType BackgroundType { get; set; }
-```
-
-**W XAML dodaj converter:**
-```csharp
-// Converters/ColorStringToBrushConverter.cs
-public class ColorStringToBrushConverter : IValueConverter
-{
-    public object Convert(object value, ...)
-    {
-        if (value is string colorString)
-        {
-            return new SolidColorBrush(
-                Microsoft.UI.ColorHelper.FromArgb(...)
-            );
-        }
-        return new SolidColorBrush(Colors.Transparent);
-    }
-}
-```
-
-**Weryfikacja:**
-Kolory komórek powinny wyglądać identycznie jak przed zmianą.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #012` do linii `---`
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008, #018, #012
 
 ---
+
+## 🔴 PROBLEMY KRYTYCZNE (2/26 pozostało)
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1083,7 +1031,37 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (25)
+## ✅ NAPRAWIONE PROBLEMY (26)
+
+### ✅ #012 - DayCell zawiera typy UI
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** MVVM
+**Commit:** 0e8a705
+**Pliki:**
+- `GrafikoMat/Common/Converters.cs` (+44 linii - ColorStringToBrushConverter)
+- `GrafikoMat/ViewModels/DeclarationsViewModel.cs` (Brush → string)
+- `GrafikoMat/Views/DeclarationsView.xaml` (dodano convertery)
+- `GrafikoMat/Views/DeclarationsView.xaml.cs` (SolidColorBrush → hex stringi)
+- `GrafikoMat/App.xaml` (rejestracja convertera)
+
+**Co zrobiono:**
+1. Utworzono `ColorStringToBrushConverter` - konwersja hex string → SolidColorBrush
+2. Zmieniono właściwości w DayCell:
+   - `Brush EffectiveBackground` → `string EffectiveBackground` (#AARRGGBB)
+   - `Brush EffectiveBorderBrush` → `string EffectiveBorderBrush`
+   - `Brush DayNumberForeground` → `string DayNumberForeground`
+   - `Brush EffectiveHeaderBackground` → `string EffectiveHeaderBackground`
+   - `Visibility HolidayVisibility` → `bool HasHolidayName`
+3. Zaktualizowano wszystkie bindingi XAML z converterami
+4. Zamieniono wszystkie przypisania `new SolidColorBrush(Color.FromArgb(...))` na stringi hex
+
+**Wynik:**
+- DayCell nie zawiera już typów UI (Brush, Visibility)
+- Proper MVVM separation - typy View tylko w View
+- Kompilacja: 0 błędów
+
+---
 
 ### ✅ #018 - LoginView - BRAK MVVM
 **Data naprawy:** 2025-11-14
