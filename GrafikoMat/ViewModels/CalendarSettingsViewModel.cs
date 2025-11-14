@@ -6,6 +6,7 @@ using GrafikoMat.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -195,7 +196,17 @@ namespace GrafikoMat.ViewModels
             if (!_isInitializing)
             {
                 UpdateWinterDateLimits();
-                _ = LoadDataAsync();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await LoadDataAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[CalendarSettingsViewModel] OnSelectedWinterYearChanged -> LoadDataAsync failed: {ex.Message}");
+                    }
+                });
             }
         }
 
@@ -203,7 +214,17 @@ namespace GrafikoMat.ViewModels
         {
             if (!_isInitializing)
             {
-                _ = LoadDataAsync();
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await LoadDataAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[CalendarSettingsViewModel] OnSelectedUnitChanged -> LoadDataAsync failed: {ex.Message}");
+                    }
+                });
             }
         }
 
