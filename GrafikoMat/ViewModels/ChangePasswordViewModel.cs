@@ -1,6 +1,7 @@
 ﻿using GrafikoMat.Common;
 using GrafikoMat.Services;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 
@@ -8,6 +9,8 @@ namespace GrafikoMat.ViewModels
 {
     public class ChangePasswordViewModel : ObservableObject
     {
+        private const int MinPasswordLength = 12;
+
         private readonly SupabaseService _supabaseService;
         public event Action<string>? OnError;
         public event Action? OnSuccess;
@@ -60,12 +63,49 @@ namespace GrafikoMat.ViewModels
             return !string.IsNullOrEmpty(NewPassword) && !string.IsNullOrEmpty(ConfirmPassword);
         }
 
+        private bool ValidatePassword(string password, out string errorMessage)
+        {
+            if (password.Length < MinPasswordLength)
+            {
+                errorMessage = $"Hasło musi mieć co najmniej {MinPasswordLength} znaków.";
+                return false;
+            }
+
+            if (!password.Any(char.IsUpper))
+            {
+                errorMessage = "Hasło musi zawierać co najmniej jedną wielką literę.";
+                return false;
+            }
+
+            if (!password.Any(char.IsLower))
+            {
+                errorMessage = "Hasło musi zawierać co najmniej jedną małą literę.";
+                return false;
+            }
+
+            if (!password.Any(char.IsDigit))
+            {
+                errorMessage = "Hasło musi zawierać co najmniej jedną cyfrę.";
+                return false;
+            }
+
+            if (!password.Any(c => "!@#$%^&*()_+-=[]{}|;:,.<>?".Contains(c)))
+            {
+                errorMessage = "Hasło musi zawierać co najmniej jeden znak specjalny (!@#$%^&*()_+-=[]{}|;:,.<>?).";
+                return false;
+            }
+
+            errorMessage = string.Empty;
+            return true;
+        }
+
         private async Task SavePasswordAsync()
         {
             OnError?.Invoke(string.Empty);
-            if (NewPassword.Length < 8)
+
+            if (!ValidatePassword(NewPassword, out string validationError))
             {
-                OnError?.Invoke("Hasło musi mieć co najmniej 8 znaków.");
+                OnError?.Invoke(validationError);
                 return;
             }
 

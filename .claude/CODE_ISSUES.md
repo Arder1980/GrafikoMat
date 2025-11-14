@@ -62,14 +62,14 @@
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
 | 🔴 KRYTYCZNE | 13 | 13 | 26 |
-| 🟠 WYSOKIE | 42 | 0 | 42 |
+| 🟠 WYSOKIE | 41 | 1 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **117** | **13** | **130** |
+| **SUMA** | **116** | **14** | **130** |
 
-**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 10% (13/130)
+**Postęp:** ▰▱▱▱▱▱▱▱▱▱ 11% (14/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027
 
 ---
 
@@ -1143,69 +1143,8 @@ Zostaw `long` - jest OK!
 
 ---
 
-## 🟠 PROBLEMY WYSOKIE (42)
+## 🟠 PROBLEMY WYSOKIE (41)
 
-### 🟠 #027 - Weak password policy
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** WYSOKI
-**Kategoria:** Bezpieczeństwo
-**Plik:** `GrafikoMat/ViewModels/ChangePasswordViewModel.cs:66-70`
-**Problem:** Tylko 8 znaków wymagane, brak złożoności
-
-**Rozwiązanie:**
-```csharp
-private const int MinPasswordLength = 12;
-
-private bool ValidatePassword(string password, out string errorMessage)
-{
-    if (password.Length < MinPasswordLength)
-    {
-        errorMessage = $"Hasło musi mieć co najmniej {MinPasswordLength} znaków.";
-        return false;
-    }
-
-    if (!password.Any(char.IsUpper))
-    {
-        errorMessage = "Hasło musi zawierać co najmniej jedną wielką literę.";
-        return false;
-    }
-
-    if (!password.Any(char.IsLower))
-    {
-        errorMessage = "Hasło musi zawierać co najmniej jedną małą literę.";
-        return false;
-    }
-
-    if (!password.Any(char.IsDigit))
-    {
-        errorMessage = "Hasło musi zawierać co najmniej jedną cyfrę.";
-        return false;
-    }
-
-    if (!password.Any(c => "!@#$%^&*()_+-=[]{}|;:,.<>?".Contains(c)))
-    {
-        errorMessage = "Hasło musi zawierać co najmniej jeden znak specjalny.";
-        return false;
-    }
-
-    errorMessage = string.Empty;
-    return true;
-}
-
-// W ChangePasswordAsync:
-if (!ValidatePassword(NewPassword, out string error))
-{
-    OnError?.Invoke(error);
-    return;
-}
-```
-
-**Weryfikacja:**
-Spróbuj zmienić hasło na słabe - powinno odrzucić.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🟠 #027` do linii `---`
-
----
 
 ### 🟠 #028 - Brak walidacji DataAnnotations
 **Status:** ❌ DO NAPRAWY
@@ -1968,7 +1907,25 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (13)
+## ✅ NAPRAWIONE PROBLEMY (14)
+
+### ✅ #027 - Weak password policy
+**Data naprawy:** 2025-11-14
+**Priorytet:** WYSOKI
+**Plik:** `GrafikoMat/ViewModels/ChangePasswordViewModel.cs:66-100`
+**Co zrobiono:**
+- Zwiększono minimalną długość hasła z 8 do 12 znaków (MinPasswordLength = 12)
+- Dodano metodę ValidatePassword() sprawdzającą:
+  - Długość min. 12 znaków
+  - Co najmniej jedną wielką literę
+  - Co najmniej jedną małą literę
+  - Co najmniej jedną cyfrę
+  - Co najmniej jeden znak specjalny (!@#$%^&*()_+-=[]{}|;:,.<>?)
+- Wymieniono prostą walidację na kompleksową walidację złożoności hasła
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - silna polityka haseł wdrożona
+
+---
 
 ### ✅ #017 - Async void w ManagementViewModel.LoadEditorFor
 **Data naprawy:** 2025-11-14
