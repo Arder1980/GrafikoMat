@@ -61,19 +61,19 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 4 | 22 | 26 |
+| 🔴 KRYTYCZNE | 3 | 23 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **106** | **24** | **130** |
+| **SUMA** | **105** | **25** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 18% (24/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 19% (25/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008, #018
 
 ---
 
-## 🔴 PROBLEMY KRYTYCZNE (4/26 pozostało)
+## 🔴 PROBLEMY KRYTYCZNE (3/26 pozostało)
 
 
 
@@ -172,136 +172,6 @@ Trudne - deadlocki występują rzadko. Przejrzyj kod, dodaj wszędzie gdzie moż
 ---
 
 
-
-### 🔴 #018 - LoginView - BRAK MVVM
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** XAML / MVVM
-**Plik:** `GrafikoMat/Views/LoginView.xaml.cs:24-59`
-**Problem:** 115 linii logiki biznesowej w code-behind - całkowite naruszenie MVVM
-
-**Rozwiązanie:**
-**Krok 1:** Utworzyć LoginViewModel:
-
-```csharp
-// ViewModels/LoginViewModel.cs
-public partial class LoginViewModel : ObservableObject
-{
-    private readonly SupabaseService _supabaseService;
-
-    [ObservableProperty]
-    private string _email = "";
-
-    [ObservableProperty]
-    private string _password = "";
-
-    [ObservableProperty]
-    private string? _errorMessage;
-
-    [ObservableProperty]
-    private bool _isLoading;
-
-    public LoginViewModel(SupabaseService supabaseService)
-    {
-        _supabaseService = supabaseService;
-    }
-
-    [RelayCommand]
-    private async Task LoginAsync()
-    {
-        ErrorMessage = null;
-
-        if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Password))
-        {
-            ErrorMessage = "Adres e-mail i hasło są wymagane.";
-            return;
-        }
-
-        IsLoading = true;
-
-        try
-        {
-            if (_supabaseService.Client == null)
-            {
-                ErrorMessage = "Połączenie nie zostało zainicjowane.";
-                return;
-            }
-
-            var session = await _supabaseService.Client.Auth.SignIn(Email, Password);
-
-            if (session?.User == null)
-            {
-                ErrorMessage = "Nieprawidłowy email lub hasło.";
-                return;
-            }
-
-            await _supabaseService.SaveCurrentSessionAsync();
-
-            // Nawigacja - przez Messenger lub event
-            WeakReferenceMessenger.Default.Send(new LoginSuccessMessage());
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Błąd logowania: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-            Password = ""; // Wyczyść hasło
-        }
-    }
-}
-```
-
-**Krok 2:** Zmienić LoginView.xaml:
-```xaml
-<Page x:Class="GrafikoMat.Views.LoginView"
-      xmlns:vm="using:GrafikoMat.ViewModels">
-
-    <Page.DataContext>
-        <vm:LoginViewModel />
-    </Page.DataContext>
-
-    <StackPanel>
-        <TextBox Text="{x:Bind ViewModel.Email, Mode=TwoWay}"
-                 PlaceholderText="Adres e-mail" />
-
-        <PasswordBox Password="{x:Bind ViewModel.Password, Mode=TwoWay}"
-                     PlaceholderText="Hasło" />
-
-        <TextBlock Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
-                   Foreground="Red"
-                   Visibility="{x:Bind ViewModel.ErrorMessage, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
-
-        <Button Content="Zaloguj"
-                Command="{x:Bind ViewModel.LoginCommand}"
-                IsEnabled="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource InverseBooleanConverter}}" />
-
-        <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
-    </StackPanel>
-</Page>
-```
-
-**Krok 3:** LoginView.xaml.cs - TYLKO inicjalizacja:
-```csharp
-public sealed partial class LoginView : Page
-{
-    public LoginViewModel ViewModel { get; }
-
-    public LoginView()
-    {
-        this.InitializeComponent();
-        var app = (App)Application.Current;
-        ViewModel = app.Services.GetRequiredService<LoginViewModel>();
-    }
-}
-```
-
-**Weryfikacja:**
-1. Logowanie powinno działać identycznie
-2. Code-behind powinien mieć ~10 linii (tylko inicjalizacja)
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #018` do linii `---`
 
 ---
 
@@ -1213,7 +1083,43 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (24)
+## ✅ NAPRAWIONE PROBLEMY (25)
+
+### ✅ #018 - LoginView - BRAK MVVM
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** XAML / MVVM
+**Commit:** 9ed5a13
+**Pliki:**
+- `GrafikoMat/ViewModels/LoginViewModel.cs` (nowy, 128 linii)
+- `GrafikoMat/Views/LoginView.xaml`
+- `GrafikoMat/Views/LoginView.xaml.cs` (138 → 48 linii)
+- `GrafikoMat/Common/Converters.cs`
+- `GrafikoMat/App.xaml`
+
+**Co zrobiono:**
+- Utworzono ViewModels/LoginViewModel.cs z pełną logiką biznesową:
+  * ObservableProperty: Email, Password, ErrorMessage, IsLoading
+  * Rate limiting (3 próby, 30s blokada) przeniesione z View
+  * RelayCommand: LoginCommand, CancelCommand, ForgotPasswordCommand
+  * Events: LoginSuccess, CancelRequested (kompatybilność z MainWindow)
+- Utworzono Common/StringNotEmptyToBoolConverter.cs (string → bool dla IsOpen binding)
+- Zaktualizowano Views/LoginView.xaml:
+  * x:Bind do ViewModel.Email, ViewModel.Password
+  * Command bindings zamiast Click handlers
+  * InfoBar z bindingiem ErrorMessage i IsOpen przez converter
+  * IsEnabled przycisku z InverseBoolConverter (disabled podczas ładowania)
+- Zaktualizowano Views/LoginView.xaml.cs:
+  * Usunięto 90 linii logiki biznesowej (138 → 48 linii, 65% redukcja)
+  * Pozostawiono tylko PasswordBox.KeyDown dla Enter key
+  * Event proxy dla LoginSuccess i CancelRequested
+- Zaktualizowano App.xaml:
+  * Dodano InverseBoolConverter i StringNotEmptyToBoolConverter do resources
+
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - MVVM separation restored, 65% redukcja code-behind, logika w testownym ViewModel
+
+---
 
 ### ✅ #008 - ServiceProvider = Anti-Pattern
 **Data naprawy:** 2025-11-14
