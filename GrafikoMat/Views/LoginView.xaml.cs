@@ -11,6 +11,10 @@ namespace GrafikoMat.Views
     public sealed partial class LoginView : UserControl
     {
         private readonly SupabaseService _supabaseService;
+        private int _failedAttempts = 0;
+        private DateTime? _lockoutUntil = null;
+        private const int MaxFailedAttempts = 3;
+        private const int LockoutDurationSeconds = 30;
 
         public event Action? LoginSuccess;
         public event Action? CancelRequested;
@@ -24,6 +28,24 @@ namespace GrafikoMat.Views
         private async void LoginButton_Click(object sender, RoutedEventArgs e)
         {
             ShowError(null); // Ukryj poprzedni błąd
+
+            // Sprawdź czy konto jest zablokowane
+            if (_lockoutUntil.HasValue)
+            {
+                if (DateTime.Now < _lockoutUntil.Value)
+                {
+                    var remainingSeconds = (int)(_lockoutUntil.Value - DateTime.Now).TotalSeconds;
+                    ShowError($"Zbyt wiele nieudanych prób logowania. Spróbuj ponownie za {remainingSeconds} sekund.");
+                    return;
+                }
+                else
+                {
+                    // Blokada wygasła - resetuj
+                    _lockoutUntil = null;
+                    _failedAttempts = 0;
+                }
+            }
+
             var email = EmailTextBox.Text;
             var password = PasswordBox.Password;
 
@@ -44,6 +66,10 @@ namespace GrafikoMat.Views
                 var session = await _supabaseService.Client.Auth.SignIn(email, password);
                 if (session?.User != null)
                 {
+                    // Sukces - resetuj licznik nieudanych prób
+                    _failedAttempts = 0;
+                    _lockoutUntil = null;
+
                     // ZAPISZ sesję do LocalFolder\supabase_session.json
                     await _supabaseService.SaveCurrentSessionAsync();
 
@@ -54,7 +80,19 @@ namespace GrafikoMat.Views
             }
             catch (Exception)
             {
-                ShowError("Logowanie nie powiodło się. Sprawdź dane i spróbuj ponownie.");
+                // Nieudana próba logowania
+                _failedAttempts++;
+
+                if (_failedAttempts >= MaxFailedAttempts)
+                {
+                    _lockoutUntil = DateTime.Now.AddSeconds(LockoutDurationSeconds);
+                    ShowError($"Zbyt wiele nieudanych prób logowania. Konto zablokowane na {LockoutDurationSeconds} sekund.");
+                }
+                else
+                {
+                    var remainingAttempts = MaxFailedAttempts - _failedAttempts;
+                    ShowError($"Logowanie nie powiodło się. Pozostało prób: {remainingAttempts}");
+                }
             }
         }
 

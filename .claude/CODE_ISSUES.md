@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 11 | 15 | 26 |
+| 🔴 KRYTYCZNE | 10 | 16 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **113** | **17** | **130** |
+| **SUMA** | **112** | **18** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 13% (17/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 14% (18/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024
 
 ---
 
@@ -864,79 +864,6 @@ Trudne - memory leak występuje stopniowo. Sprawdź w Task Manager po 100 zmiana
 **Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #023` do linii `---`
 
 ---
-
-### 🔴 #024 - Brak rate limiting logowania
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Bezpieczeństwo
-**Plik:** `GrafikoMat/Views/LoginView.xaml.cs:24-59` (później LoginViewModel)
-**Problem:** Możliwe ataki brute-force na hasła
-
-**Rozwiązanie:**
-
-**Opcja 1: Client-side (słabsze, ale lepsze niż nic):**
-```csharp
-// W LoginViewModel:
-private int _failedAttempts = 0;
-private DateTime? _lockoutUntil = null;
-
-private async Task LoginAsync()
-{
-    // Sprawdź lockout:
-    if (_lockoutUntil.HasValue && DateTime.Now < _lockoutUntil)
-    {
-        var remaining = (_lockoutUntil.Value - DateTime.Now).TotalSeconds;
-        ErrorMessage = $"Zbyt wiele prób. Spróbuj ponownie za {remaining:F0} sekund.";
-        return;
-    }
-
-    // ... próba logowania ...
-
-    if (loginFailed)
-    {
-        _failedAttempts++;
-
-        if (_failedAttempts >= 5)
-        {
-            _lockoutUntil = DateTime.Now.AddMinutes(5);
-            ErrorMessage = "Zbyt wiele nieudanych prób. Zablokowano na 5 minut.";
-        }
-        else
-        {
-            ErrorMessage = $"Nieprawidłowe hasło. Pozostało prób: {5 - _failedAttempts}";
-        }
-    }
-    else
-    {
-        _failedAttempts = 0;
-        _lockoutUntil = null;
-    }
-}
-```
-
-**Opcja 2: Server-side (LEPSZE):**
-W Supabase Edge Function `admin-auth-middleware`:
-```typescript
-// Implementuj rate limiting używając Supabase Storage lub Redis
-const loginAttempts = await getLoginAttempts(email);
-
-if (loginAttempts > 5) {
-  return new Response(
-    JSON.stringify({ error: 'Too many attempts' }),
-    { status: 429 }
-  );
-}
-
-// Po nieudanej próbie:
-await incrementLoginAttempts(email);
-```
-
-**Opcja 3: CAPTCHA po 3 nieudanych próbach**
-
-**Weryfikacja:**
-Spróbuj zalogować się 6 razy ze złym hasłem - powinno zablokować.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #024` do linii `---`
 
 ---
 
@@ -1785,7 +1712,24 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (17)
+## ✅ NAPRAWIONE PROBLEMY (18)
+
+### ✅ #024 - Brak rate limiting logowania
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Bezpieczeństwo
+**Plik:** `GrafikoMat/Views/LoginView.xaml.cs:11-97`
+**Co zrobiono:**
+- Dodano pola prywatne: `_failedAttempts`, `_lockoutUntil`
+- Dodano stałe: `MaxFailedAttempts = 3`, `LockoutDurationSeconds = 30`
+- Zaimplementowano sprawdzanie blokady przed próbą logowania
+- Po 3 nieudanych próbach konto jest blokowane na 30 sekund
+- Po udanym logowaniu licznik jest resetowany
+- Komunikaty pokazują ile prób pozostało i ile sekund do odblokowania
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - rate limiting client-side wdrożony (lepsze niż nic, ale idealne byłoby server-side)
+
+---
 
 ### ✅ #029 - DoctorListItemViewModel nie jest ObservableObject
 **Data naprawy:** 2025-11-14
