@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 10 | 16 | 26 |
+| 🔴 KRYTYCZNE | 9 | 17 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **112** | **18** | **130** |
+| **SUMA** | **111** | **19** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 14% (18/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 15% (19/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025
 
 ---
 
@@ -867,88 +867,6 @@ Trudne - memory leak występuje stopniowo. Sprawdź w Task Manager po 100 zmiana
 
 ---
 
-### 🔴 #025 - Connection string w plain text
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Bezpieczeństwo
-**Plik:** `GrafikoMat/Services/SettingsService.cs` (settings.json)
-**Problem:** SupabaseUrl i SupabaseAnonKey w plain text w settings.json
-
-**Rozwiązanie:**
-
-**UWAGA:** Anon Key jest PUBLIC (można go eksponować), ale lepiej nie trzymać w plain text.
-
-**Opcja 1: Szyfrowanie (podobne do #001):**
-```csharp
-// SettingsService.cs
-private async Task SaveSettingsAsync(AppSettings settings)
-{
-    var json = JsonSerializer.Serialize(settings, _serializerOptions);
-    var jsonBytes = Encoding.UTF8.GetBytes(json);
-
-    // Szyfruj używając DPAPI
-    var encrypted = ProtectedData.Protect(
-        jsonBytes,
-        null,
-        DataProtectionScope.CurrentUser
-    );
-
-    await File.WriteAllBytesAsync(_settingsPath, encrypted);
-}
-
-private async Task<AppSettings> LoadSettingsAsync()
-{
-    if (!File.Exists(_settingsPath))
-        return GetDefaultSettings();
-
-    var encrypted = await File.ReadAllBytesAsync(_settingsPath);
-
-    try
-    {
-        var jsonBytes = ProtectedData.Unprotect(
-            encrypted,
-            null,
-            DataProtectionScope.CurrentUser
-        );
-
-        var json = Encoding.UTF8.GetString(jsonBytes);
-        return JsonSerializer.Deserialize<AppSettings>(json, _serializerOptions)
-            ?? GetDefaultSettings();
-    }
-    catch
-    {
-        // Jeśli deszyfrowanie failed (stary format?), spróbuj plain text
-        var json = await File.ReadAllTextAsync(_settingsPath);
-        return JsonSerializer.Deserialize<AppSettings>(json, _serializerOptions)
-            ?? GetDefaultSettings();
-    }
-}
-```
-
-**Opcja 2: Windows Credential Manager (LEPSZE dla credentials):**
-```csharp
-// Używając CredentialManagement NuGet
-var cred = new Credential
-{
-    Target = "GrafikoMat_SupabaseAnonKey",
-    Username = "GrafikoMat",
-    Password = settings.SupabaseAnonKey,
-    Type = CredentialType.Generic,
-    PersistanceType = PersistanceType.LocalComputer
-};
-cred.Save();
-
-// Odczyt:
-var cred = new Credential { Target = "GrafikoMat_SupabaseAnonKey" };
-cred.Load();
-var anonKey = cred.Password;
-```
-
-**Weryfikacja:**
-Sprawdź settings.json - nie powinien być czytelny.
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #025` do linii `---`
-
 ---
 
 
@@ -1712,7 +1630,24 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (18)
+## ✅ NAPRAWIONE PROBLEMY (19)
+
+### ✅ #025 - Connection string w plain text
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Bezpieczeństwo
+**Plik:** `GrafikoMat/Services/SettingsService.cs`
+**Co zrobiono:**
+- Dodano using System.Security.Cryptography i System.Text
+- W LoadSettingsAsync: odczyt jako bytes, próba odszyfrowania DPAPI, fallback do plain text (stary format)
+- Jeśli odczytano stary format - automatyczne ponowne zapisanie w zaszyfrowanej formie
+- Utworzono SaveSettingsInternalAsync z szyfrowaniem DPAPI (DataProtectionScope.CurrentUser)
+- SaveSettingsAsync teraz wywołuje SaveSettingsInternalAsync
+- settings.json jest teraz szyfrowany i nieczytelny dla zwykłego użytkownika
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors)
+**Status:** ✅ Gotowe - settings.json (zawierający SupabaseUrl i SupabaseAnonKey) jest teraz szyfrowany
+
+---
 
 ### ✅ #024 - Brak rate limiting logowania
 **Data naprawy:** 2025-11-14

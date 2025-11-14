@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -140,8 +142,31 @@ namespace GrafikoMat.Services
                 {
                     if (File.Exists(_settingsPath))
                     {
-                        var json = await File.ReadAllTextAsync(_settingsPath);
-                        _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
+                        var fileBytes = await File.ReadAllBytesAsync(_settingsPath);
+
+                        // Spróbuj najpierw odszyfrować (nowy format)
+                        try
+                        {
+                            var decryptedBytes = ProtectedData.Unprotect(
+                                fileBytes,
+                                null,
+                                DataProtectionScope.CurrentUser
+                            );
+                            var json = Encoding.UTF8.GetString(decryptedBytes);
+                            _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
+                        }
+                        catch
+                        {
+                            // Jeśli deszyfrowanie nie udało się, spróbuj jako plain text (stary format)
+                            var json = Encoding.UTF8.GetString(fileBytes);
+                            _currentSettings = JsonSerializer.Deserialize<AppSettings>(json);
+
+                            // Jeśli udało się odczytać stary format, zapisz ponownie w zaszyfrowanej formie
+                            if (_currentSettings != null)
+                            {
+                                await SaveSettingsInternalAsync(_currentSettings);
+                            }
+                        }
                     }
                 }
                 catch (Exception)
@@ -171,22 +196,36 @@ namespace GrafikoMat.Services
             try
             {
                 _currentSettings = settings;
-                try
-                {
-                    var options = new JsonSerializerOptions { WriteIndented = true };
-                    var json = JsonSerializer.Serialize(settings, options);
-                    await File.WriteAllTextAsync(_settingsPath, json);
-                }
-                catch (Exception ex)
-                {
-                    // Logowanie błędu zapisu
-                    System.Diagnostics.Debug.WriteLine($"[SettingsService] SaveSettingsAsync failed: {ex.Message}");
-                    throw; // Propaguj wyjątek aby wywołujący mógł zareagować
-                }
+                await SaveSettingsInternalAsync(settings);
             }
             finally
             {
                 _settingsLock.Release();
+            }
+        }
+
+        private async Task SaveSettingsInternalAsync(AppSettings settings)
+        {
+            try
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                var json = JsonSerializer.Serialize(settings, options);
+                var jsonBytes = Encoding.UTF8.GetBytes(json);
+
+                // Szyfruj używając DPAPI
+                var encryptedBytes = ProtectedData.Protect(
+                    jsonBytes,
+                    null,
+                    DataProtectionScope.CurrentUser
+                );
+
+                await File.WriteAllBytesAsync(_settingsPath, encryptedBytes);
+            }
+            catch (Exception ex)
+            {
+                // Logowanie błędu zapisu
+                System.Diagnostics.Debug.WriteLine($"[SettingsService] SaveSettingsInternalAsync failed: {ex.Message}");
+                throw; // Propaguj wyjątek aby wywołujący mógł zareagować
             }
         }
 
