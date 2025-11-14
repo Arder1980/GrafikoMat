@@ -61,119 +61,27 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 5 | 21 | 26 |
+| 🔴 KRYTYCZNE | 4 | 22 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **107** | **23** | **130** |
+| **SUMA** | **106** | **24** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 18% (23/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 18% (24/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011
-
----
-
-## 🔴 PROBLEMY KRYTYCZNE (26)
-
-
-
-
-
-
-
-
-### 🔴 #008 - ServiceProvider = Anti-Pattern
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Architektura
-**Plik:** `GrafikoMat/Services/ServiceProvider.cs`
-**Problemy:**
-- Service Locator ukrywa zależności (trudne testowanie)
-- Dictionary nie jest thread-safe
-- Brak lifecycle management (wszystko singleton)
-- Brak IDisposable
-
-**Rozwiązanie:**
-Zastąpić **Microsoft.Extensions.DependencyInjection**:
-
-**Krok 1:** Dodaj NuGet:
-```
-Microsoft.Extensions.DependencyInjection
-Microsoft.Extensions.DependencyInjection.Abstractions
-```
-
-**Krok 2:** Zmień `App.xaml.cs`:
-```csharp
-public partial class App : Application
-{
-    public IServiceProvider Services { get; }
-
-    public App()
-    {
-        Services = ConfigureServices();
-        this.InitializeComponent();
-    }
-
-    private IServiceProvider ConfigureServices()
-    {
-        var services = new ServiceCollection();
-
-        // Singletons
-        services.AddSingleton<SupabaseService>();
-        services.AddSingleton<SettingsService>();
-        services.AddSingleton<ThemeManagerService>();
-        services.AddSingleton<INavigationService, NavigationService>();
-        services.AddSingleton(WeakReferenceMessenger.Default);
-        services.AddSingleton<IUxActionOrchestrator, UxActionOrchestrator>();
-
-        // Repositories
-        services.AddSingleton<IDoctorRepository, SupabaseDoctorRepository>();
-        services.AddSingleton<IUnitRepository, SupabaseUnitRepository>();
-        services.AddSingleton<IAssignmentRepository, SupabaseAssignmentRepository>();
-        services.AddSingleton<IDeclarationRepository, SupabaseDeclarationRepository>();
-        services.AddSingleton<ICoDutyNotificationRepository, SupabaseCoDutyNotificationRepository>();
-        services.AddSingleton<ISpecialDayRepository, SpecialDayRepository>();
-
-        // ViewModels
-        services.AddTransient<MainViewModel>();
-        services.AddTransient<ManagementViewModel>();
-        services.AddTransient<ChangePasswordViewModel>();
-        // itd.
-
-        return services.BuildServiceProvider();
-    }
-}
-```
-
-**Krok 3:** Zmień MainWindow.xaml.cs - constructor injection:
-```csharp
-public MainWindow()
-{
-    this.InitializeComponent();
-
-    // Pobierz z DI
-    var app = (App)Application.Current;
-    ViewModel = app.Services.GetRequiredService<MainViewModel>();
-    _settingsService = app.Services.GetRequiredService<SettingsService>();
-    _supabaseService = app.Services.GetRequiredService<SupabaseService>();
-    // itd.
-}
-```
-
-**Krok 4:** USUŃ `ServiceProvider.cs`
-
-**Weryfikacja:**
-1. Rebuild projektu
-2. Uruchom aplikację - wszystko powinno działać
-3. Sprawdź czy serwisy są properly initialized
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #008` do linii `---`
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021, #022, #023, #011, #008
 
 ---
 
+## 🔴 PROBLEMY KRYTYCZNE (4/26 pozostało)
 
 
----
+
+
+
+
+
+
 
 ### 🔴 #012 - DayCell zawiera typy UI
 **Status:** ❌ DO NAPRAWY
@@ -1305,7 +1213,47 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (23)
+## ✅ NAPRAWIONE PROBLEMY (24)
+
+### ✅ #008 - ServiceProvider = Anti-Pattern
+**Data naprawy:** 2025-11-14
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Architektura
+**Commit:** 3eaaa45
+**Pliki:**
+- `GrafikoMat/App.xaml.cs`
+- `GrafikoMat/MainWindow.xaml.cs`
+- `GrafikoMat/ViewModels/EngineSettingsViewModel.cs`
+- `GrafikoMat/ViewModels/GeneralSettingsViewModel.cs`
+- `GrafikoMat/ViewModels/ManagementViewModel.cs`
+- `GrafikoMat/ViewModels/PrioritiesSettingsViewModel.cs`
+- `GrafikoMat/Views/ManagementView.xaml.cs`
+- `GrafikoMat/Views/Settings/EngineSettingsView.xaml.cs`
+- `GrafikoMat/Views/Settings/GeneralSettingsView.xaml.cs`
+- `GrafikoMat/Views/Settings/ConnectionSettingsView.xaml.cs`
+- `GrafikoMat/Views/Settings/UnitsSettingsView.xaml.cs`
+- `GrafikoMat/Views/SettingsView.xaml.cs`
+- `GrafikoMat/Services/ServiceProvider.cs` (usunięty)
+- `GrafikoMat/GrafikoMat.WinUI.csproj`
+
+**Co zrobiono:**
+- Dodano pakiet NuGet: Microsoft.Extensions.DependencyInjection 10.0.0
+- App.xaml.cs: Dodano właściwość IServiceProvider Services i metodę ConfigureServices()
+- Zarejestrowano wszystkie serwisy jako Singleton: IDialogService, IUxActionOrchestrator, ThemeManagerService, WeakReferenceMessenger
+- MainWindow.xaml.cs: Pobiera DialogService z DI zamiast ServiceProvider
+- Zaktualizowano wszystkie ViewModels (EngineSettings, GeneralSettings, Management, Priorities):
+  * Dodano IUxActionOrchestrator jako parametr konstruktora
+  * Usunięto wywołania ServiceProvider.GetService<>()
+- Zaktualizowano wszystkie Views (Connection, Units, Engine, General, Management, Settings):
+  * Pobierają IUxActionOrchestrator z DI przy tworzeniu ViewModels
+  * Usunięto zależności od statycznego ServiceProvider
+- Usunięto przestarzały plik Services/ServiceProvider.cs
+- 14 plików zmienionych: +51 wstawień, -58 usunięć
+
+**Weryfikacja:** Projekt kompiluje się bez błędów (0 errors, 90 warnings MVVMTK0045)
+**Status:** ✅ Gotowe - Service Locator zastąpiony prawdziwym Dependency Injection
+
+---
 
 ### ✅ #011 - XamlRoot w MainViewModel
 **Data naprawy:** 2025-11-14
