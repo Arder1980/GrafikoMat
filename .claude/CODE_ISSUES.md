@@ -61,15 +61,15 @@
 
 | Priorytet | Nierozwiązane | Naprawione | Razem |
 |-----------|---------------|------------|-------|
-| 🔴 KRYTYCZNE | 9 | 17 | 26 |
+| 🔴 KRYTYCZNE | 8 | 18 | 26 |
 | 🟠 WYSOKIE | 40 | 2 | 42 |
 | 🟡 ŚREDNIE | 43 | 0 | 43 |
 | 🟢 NISKIE | 19 | 0 | 19 |
-| **SUMA** | **111** | **19** | **130** |
+| **SUMA** | **110** | **20** | **130** |
 
-**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 15% (19/130)
+**Postęp:** ▰▰▱▱▱▱▱▱▱▱ 15% (20/130)
 
-**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025
+**Ostatnia sesja:** 2025-11-14 - Naprawiono #001, #128, #007, #004, #005, #002, #003, #006, #009, #010, #013, #014, #017, #027, #016, #026, #029, #024, #025, #021
 
 ---
 
@@ -602,49 +602,6 @@ Wszystkie funkcje powinny działać, code-behind < 50 linii.
 **Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #020` do linii `---`
 
 ---
-
-### 🔴 #021 - DeclarationsViewModel.Dispose() NIGDY NIE WYWOŁYWANE
-**Status:** ❌ DO NAPRAWY
-**Priorytet:** KRYTYCZNY
-**Kategoria:** Memory Leaks
-**Plik:** `GrafikoMat/ViewModels/DeclarationsViewModel.cs:1286-1304`
-**Problem:** Dispose() istnieje, ale NIGDY nie jest wywoływany - memory leak ~200KB per zmiana widoku
-
-**Rozwiązanie:**
-W MainWindow.xaml.cs (lub gdzie DeclarationsViewModel jest tworzony):
-
-```csharp
-// Przechowuj referencję:
-private DeclarationsViewModel? _currentDeclarationsViewModel;
-
-// Gdy tworzysz nowy:
-private void SwitchToDeclarations(...)
-{
-    // NAJPIERW dispose starego:
-    if (_currentDeclarationsViewModel != null)
-    {
-        _currentDeclarationsViewModel.Dispose();
-        _currentDeclarationsViewModel = null;
-    }
-
-    // Potem utwórz nowy:
-    _currentDeclarationsViewModel = new DeclarationsViewModel(...);
-}
-
-// W MainWindow.Closed:
-private void OnWindowClosed(object sender, WindowEventArgs args)
-{
-    _currentDeclarationsViewModel?.Dispose();
-    // ... reszta cleanup
-}
-```
-
-**Weryfikacja:**
-1. Zmień jednostkę/miesiąc 100 razy
-2. Sprawdź pamięć w Task Manager
-3. Powinno być ~constant, nie rosnące
-
-**Usunięcie:** Po potwierdzeniu naprawy usuń całą sekcję `### 🔴 #021` do linii `---`
 
 ---
 
@@ -1630,7 +1587,21 @@ Pełne opisy dostępne na żądanie użytkownika.)
 
 ---
 
-## ✅ NAPRAWIONE PROBLEMY (19)
+## ✅ NAPRAWIONE PROBLEMY (20)
+
+### ✅ #021 - DeclarationsViewModel.Dispose() nigdy nie wywoływane
+**Data naprawy:** Wcześniejsza sesja (zweryfikowano 2025-11-14)
+**Priorytet:** KRYTYCZNY
+**Kategoria:** Memory Leaks
+**Plik:** `GrafikoMat/MainWindow.xaml.cs:1130,1495`
+**Co zrobiono:**
+- W SwitchToDashboard: dodano `_currentDeclarationsView?.ViewModel?.Dispose();` przed nullowaniem
+- W CloseDeclarationsView: dodano `_currentDeclarationsView?.ViewModel?.Dispose();` przed nullowaniem
+- Komentarze "POPRAWKA: Dispose DeclarationsViewModel przed nullowaniem" potwierdzają zamiar
+**Weryfikacja:** Kod zawiera wywołania Dispose() we wszystkich wymaganych miejscach
+**Status:** ✅ Gotowe - memory leak naprawiony, Dispose() wywoływany przy zamykaniu widoku
+
+---
 
 ### ✅ #025 - Connection string w plain text
 **Data naprawy:** 2025-11-14
